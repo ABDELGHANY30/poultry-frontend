@@ -1,0 +1,80 @@
+{
+  "APP":  { "NAME": "Smart Poultry Assistant", "TAGLINE": "AI-Powered Farm Management" },
+  "NAV":  { "DASHBOARD":"Dashboard","AI":"AI Assistant","FLOCKS":"My Flocks","ALERTS":"Alerts","LIBRARY":"Library","ADMIN":"Admin" ,"UPGRADE_PRO":"UPGRADE_PRO"},
+
+  "DASHBOARD": { "WELCOME":"Welcome", "SUBTITLE":"Here's your farm summary for today" },
+  "DASH": {
+    "FLOCKS":    "Flock Health Overview",
+    "ALERTS":    "Active Alerts",
+    "NO_FLOCKS": "No flocks yet",
+    "NO_ALERTS": "No active alerts — your farm is healthy!",
+    "AI_TITLE":  "AI Poultry Assistant",
+    "AI_SUB":    "Ask about diseases, vaccines, feeding, and temperature"
+  },
+
+  "STATS": { "BIRDS":"Total Birds","MORTALITY":"Total Mortality","FLOCKS":"Active Flocks","ALERTS":"Active Alerts" },
+
+  "AI": {
+    "TITLE":         "AI Poultry Assistant",
+    "SUBTITLE":      "Ask me anything about poultry farming",
+    "PLACEHOLDER":   "Type your question here...",
+    "TRY_ASKING":    "Try asking:",
+    "DISCLAIMER":    "AI answers are for guidance only. Consult a veterinarian for serious issues.",
+    "QUICK_VACCINE": "Vaccination schedule",
+    "QUICK_TEMP":    "Temperature management",
+    "QUICK_DISEASE": "Poultry diseases",
+    "QUICK_FEED":    "Feeding program"
+  },
+
+  "FLOCK": {
+    "TITLE":"My Flocks","TOTAL":"flocks","ADD":"Add Flock","NAME":"Flock Name","NAME_PH":"e.g. Batch A",
+    "TYPE":"Type","BROILER":"Broiler","LAYER":"Layer","COUNT":"Initial Bird Count","START_DATE":"Start Date",
+    "DAY":"Day","BIRDS":"birds","MORTALITY":"Mortality","START":"Start Date","ACTIVE":"Active","CLOSED":"Closed",
+    "PROGRESS":"Progress","HEALTH":"Health Score","WEIGHT_HIST":"Weight History","VACC_SCHED":"Vaccination Schedule",
+    "ADD_RECORD":"Add Daily Record","EMPTY_TITLE":"No flocks yet","EMPTY_SUB":"Add your first flock to start tracking","breed":"breed","cobb":"cobb","ross":"ross","hyper":"hyper"
+  },
+
+  "RECORD": { "MORTALITY":"Mortality","FEED":"Feed (kg)","TEMP":"Temperature (°C)","WEIGHT":"Avg Weight (kg)","NOTES":"Notes","SAVED":"Record saved successfully!" },
+
+  "KPI": { "FCR":"Feed Conv. Ratio","MORTALITY":"Mortality Rate","DAILY_GAIN":"Daily Gain","TOTAL_FEED":"Total Feed","TOTAL_DEAD":"Total Dead","PROJ_SLAUGHTER":"Proj. Slaughter" },
+
+  "ALERTS": {
+    "TITLE":"Smart Alerts","ACTIVE_COUNT":"active alerts","RESOLVE":"Resolve","RESOLVED":"Resolved",
+    "NONE_ACTIVE":"No active alerts ✅","NONE":"No alerts found",
+    "P":{"CRITICAL":"Critical","HIGH":"High","MEDIUM":"Medium","LOW":"Low"},
+    "S":{"CRITICAL":"Critical","HIGH":"High Priority","VACCINES":"Vaccines","TEMP":"Temperature"}
+  },
+
+  "all":"All","active":"Active","resolved":"Resolved",
+
+  "LIB": {
+    "TITLE":"Knowledge Library","SUBTITLE":"Educational guides for poultry farmers",
+    "SEARCH_PH":"Search articles...","ALL":"All","BROILER":"Broiler Mgmt","DISEASE":"Diseases",
+    "VACCINE":"Vaccination","FEEDING":"Feeding","HYGIENE":"Hygiene","RESULTS":"results found",
+    "NO_RESULTS":"No results found","CLEAR":"Clear filters","BACK":"Back to Library","ASK_AI":"Ask AI Assistant"
+  },
+
+  "ADMIN": {
+    "TITLE":"Admin Panel","SUBTITLE":"Manage platform and monitor usage","INSIGHTS":"Platform Insights",
+    "USERS":"Users","TOTAL_USERS":"users","USER":"User","ROLE":"Role","FLOCKS":"Flocks","JOINED":"Joined",
+    "ADD_ARTICLE":"Add New Article","TITLE_EN":"Title (English)","TITLE_AR":"Title (Arabic)",
+    "CATEGORY":"Category","TAGS":"Tags","CONTENT_EN":"Content (English)","CONTENT_AR":"Content (Arabic)",
+    "PUBLISH":"Publish Article","PUBLISHED":"Article published successfully!",
+    "RAG_NOTE":"Will be auto-embedded into the AI knowledge base",
+    "AI_LOGS":"AI Query Logs",
+    "S":{"USERS":"Users","FLOCKS":"Active Flocks","AI_TODAY":"AI Queries Today","ARTICLES":"Articles","ALERTS":"Active Alerts","VACC":"Vaccines Due"},
+    "I":{"TOP_Q":"Most asked topic","SAT":"AI satisfaction rate","LANG":"Most used language","UNANSWERED":"Unanswered queries"}
+  },
+
+  "AUTH": {
+    "LOGIN_TITLE":"Welcome Back","LOGIN_SUB":"Sign in to manage your farm",
+    "REG_TITLE":"Create Account","REG_SUB":"Join the poultry farming community",
+    "EMAIL":"Email","PASSWORD":"Password","NAME":"Full Name","LANGUAGE":"Preferred Language",
+    "LOGIN_BTN":"Sign In","SIGNING_IN":"Signing in...","REG_BTN":"Create Account",
+    "DEV_LOGIN":"Dev Login (skip auth)",
+    "NO_ACCOUNT":"Don't have an account?","REGISTER_LINK":"Register",
+    "HAS_ACCOUNT":"Already have an account?","LOGIN_LINK":"Sign In"
+  },
+
+  "COMMON": { "SAVE":"Save","SAVING":"Saving...","CANCEL":"Cancel","BACK":"Back","VIEW_ALL":"View All","VIEW_DETAILS":"View Details" }
+}
