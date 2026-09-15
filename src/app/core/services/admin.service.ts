@@ -124,6 +124,16 @@ export interface ArticlePayload {
   contentAr: string;
 }
 
+// 🕳️ فجوات المعرفة — أسئلة قال النظام صراحة إنه معندوش معلومة كافية عنها
+export interface KnowledgeGap {
+  id: string;
+  question: string;
+  answer_given: string;
+  language: string;
+  status: 'open' | 'resolved';
+  created_at: string;
+}
+
 // 💰 أنواع بيانات الأسعار الجديدة
 export interface PriceItem {
   label: string;
@@ -181,5 +191,15 @@ export class AdminService {
   // 8. تخفيض حساب مستخدم
   downgradeUser(userId: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/users/${userId}/downgrade`, {});
+  }
+
+  // 9. جلب فجوات المعرفة (status: 'open' أو 'resolved')
+  getKnowledgeGaps(status: 'open' | 'resolved' = 'open'): Observable<KnowledgeGap[]> {
+    return this.http.get<KnowledgeGap[]>(`${this.baseUrl}/knowledge-gaps/`, { params: { status } });
+  }
+
+  // 10. تأكيد إن الفجوة اتحلت (بعد ما تضيف إجابتها لقاعدة المعرفة يدوياً)
+  resolveKnowledgeGap(gapId: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/knowledge-gaps/${gapId}/resolve`, {});
   }
 }

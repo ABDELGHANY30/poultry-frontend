@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, AfterViewChecked, AfterViewInit, OnDestroy, inject, signal, computed,
+  Component, OnInit, AfterViewChecked, inject, signal, computed,
   ViewChild, ElementRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -61,16 +61,26 @@ const SUGGESTIONS_AR = [
     <div class="rounded-3xl text-white px-3 py-2 mb-3 flex items-center gap-3"
          style="background:linear-gradient(135deg,#0f2d1a 0%,#2d9e5f 100%)">
       <div class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-2xl flex-shrink-0">🤖</div>
-      <div class="flex-1">
+      <div class="flex-1 min-w-0">
         <h1 class="text-base font-black"> مساعد الدواجن الذكي</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
-          <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-          <p class="text-white/70 text-xs">متصل • خبير دواجن مصري</p>
-          <span *ngIf="activeFlockName()" class="text-white/50 text-xs">•</span>
-          <p *ngIf="activeFlockName()" class="text-white/70 text-xs">🐔 {{ activeFlockName() }}</p>
+          <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></span>
+          <p class="text-white/70 text-xs flex-shrink-0">متصل</p>
         </div>
       </div>
-      <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-2 py-1 rounded-xl">⭐ PRO</div>
+      <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-2 py-1 rounded-xl flex-shrink-0">⭐ PRO</div>
+    </div>
+
+    <!-- Flock Selector — اختياري بالكامل، المستخدم هو اللي بيقرر لو عايز
+         إجابات مبنية على قطيع معين ولا إجابة عامة -->
+    <div *ngIf="allFlocks().length > 0" class="mb-3">
+      <select
+        class="w-full text-sm font-bold rounded-xl px-3 py-2 bg-white border-2 border-gray-200 text-gray-700"
+        [ngModel]="activeFlockId()"
+        (ngModelChange)="onFlockSelected($event)">
+        <option [ngValue]="null">💬 سؤال عام (من غير قطيع محدد)</option>
+        <option *ngFor="let f of allFlocks()" [ngValue]="f.id">🐔 {{ f.name }}</option>
+      </select>
     </div>
 
     <!-- Proactive Alerts Banner -->
@@ -109,14 +119,10 @@ const SUGGESTIONS_AR = [
       </div>
 
       <!-- Messages -->
-      <div #msgContainer class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col"
-           (click)="onContentClick($event)"
-           (wheel)="onUserScrollGesture()"
-           (touchmove)="onUserScrollGesture()"
-           (keydown)="onUserScrollGesture()">
+      <div #msgContainer class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col" (click)="onContentClick($event)">
         <div class="flex-1"></div>
         <div class="flex flex-col gap-3">
-        <div *ngFor="let msg of messages(); trackBy: trackByMsgId"
+        <div *ngFor="let msg of messages()"
              class="flex gap-2"
              [class.flex-row-reverse]="msg.role === 'user'">
 
@@ -247,14 +253,6 @@ const SUGGESTIONS_AR = [
           </div>
         </div>
         </div>
-        <!-- عنصر شفاف آخر حاجة في الليستة — بنستخدمه كـ "مؤشر" نعرف بيه هل
-             إحنا واقفين آخر المحادثة ولا لأ، ونعمل عليه scrollIntoView.
-             الطريقة دي شغالة صح حتى لو صندوق الرسائل مش هو اللي بيعمل
-             scroll فعلياً (لو مثلاً في مشكلة في الـ CSS وaللي بيتحرك هو
-             الصفحة كلها بدل الصندوق الداخلي) — لأن المتصفح بيدور لوحده على
-             أقرب عنصر قابل للـ scroll ويحركه، بعكس التلاعب اليدوي في scrollTop
-             اللي بيفترض إن الصندوق ده هو الصح -->
-        <div #scrollAnchor style="height:1px;"></div>
       </div>
 
       <!-- Image Preview -->
@@ -352,13 +350,12 @@ const SUGGESTIONS_AR = [
   </div>
   `,
 })
-export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterViewInit, OnDestroy {
+export class AiAssistantComponent implements OnInit, AfterViewChecked {
   private http = inject(HttpClient);
   private sanitizer = inject(DomSanitizer);
   private flockService = inject(FlockService);
 
   @ViewChild('msgContainer') private cont!: ElementRef<HTMLDivElement>;
-  @ViewChild('scrollAnchor') private anchor!: ElementRef<HTMLDivElement>;
 
   input = '';
   loading = signal(false);
@@ -376,11 +373,6 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
   private arabicVoice: SpeechSynthesisVoice | null = null;
   private voicesLoaded = false;
   private needsScroll = false;
-  private forceScroll = false;
-  // بيفضل true طول ما المستخدم واقف في آخر الشات (يعني السكرول يتابع الرد
-  // تلقائي زي شاشات الشات المعروفة)؛ يبقى false لو هو طلع لفوق يقرا رسائل
-  // قديمة — وقتها منوقفوش السكرول عليه رغماً عنه
-  private isAtBottom = true;
   private conversationHistory: {role: string, content: string}[] = [];
 
   suggestions = SUGGESTIONS_AR;
@@ -449,15 +441,22 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
     });
   }
 
-  /** يجيب آخر قطيع نشط للمستخدم عشان يتبعت مع كل سؤال، ويظهر اسمه في الهيدر */
+  /** بيتنادى لما المستخدم يختار قطيع من القايمة، أو "سؤال عام" (null) */
+  onFlockSelected(flockId: string | null) {
+    this.activeFlockId.set(flockId);
+    const flock = this.allFlocks().find(f => f.id === flockId);
+    this.activeFlockName.set(flock?.name ?? null);
+  }
+
+  /** كل قطعان المستخدم — بيظهروا في selector يختار منه المستخدم صراحة، مفيش اختيار تلقائي */
+  allFlocks = signal<{ id: string; name: string }[]>([]);
+
   loadActiveFlock() {
     this.flockService.getFlocks().subscribe({
       next: (flocks: any[]) => {
-        const active = (flocks || []).find(f => f.status === 'active') || flocks?.[0] || null;
-        if (active) {
-          this.activeFlockId.set(active.id);
-          this.activeFlockName.set(active.name);
-        }
+        this.allFlocks.set((flocks || []).filter(f => !f.status || f.status === 'active'));
+        // ⚠️ من غير أي اختيار تلقائي — activeFlockId بيفضل null لحد ما
+        // المستخدم يختار بنفسه من الـ selector، فالإجابات تبقى عامة افتراضياً
       },
       error: () => { /* مفيش قطعان لسه أو حصل خطأ — نكمل من غير سياق قطيع */ }
     });
@@ -486,10 +485,6 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
           }
           this.messages.set(restored);
           this.conversationHistory = this.conversationHistory.slice(-10);
-          // أول ما الصفحة تفتح، لازم نظهر آخر حاجة في المحادثة (زي واتساب/شات
-          // جي بي تي) مش أول حاجة — يبقى فرض السكرول لتحت هنا ضروري
-          this.isAtBottom = true;
-          this.forceScroll = true;
           this.needsScroll = true;
         } else {
           this.showWelcomeMessage();
@@ -514,42 +509,8 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
   }
 
   ngAfterViewChecked() {
-    if (this.needsScroll) {
-      this.scrollBottom(this.forceScroll);
-      this.needsScroll = false;
-      this.forceScroll = false;
-    }
+    if (this.needsScroll) { this.scrollBottom(); this.needsScroll = false; }
   }
-
-  ngAfterViewInit() {
-    // مفيش لازمة لـ IntersectionObserver هنا — لو استخدمناه هيفهم غلط إن
-    // المستخدم "طلع لفوق" في كل مرة رد المساعد نفسه بيكبر وبيدفع العلامة
-    // برا الشاشة، مع إن ده نمو طبيعي للمحتوى مش تحرك من المستخدم. فبدل كده
-    // بنسمع بس للحركات الحقيقية بإيد المستخدم (wheel/touch/كيبورد) عشان
-    // نعرف فعلاً هل هو طلع يقرا حاجة قديمة ولا لأ.
-  }
-
-  ngOnDestroy() {}
-
-  private pendingGestureCheck = false;
-
-  /** بينادى بس لما المستخدم يحرك السكرول فعلياً بإيده (مش لما المحتوى يكبر
-   *  لوحده). بنسيب فريم واحد للمتصفح يخلص الحركة، وبعدين نتأكد هو واقف فين */
-  onUserScrollGesture() {
-    if (this.pendingGestureCheck) return;
-    this.pendingGestureCheck = true;
-    requestAnimationFrame(() => {
-      this.pendingGestureCheck = false;
-      try {
-        // بنستخدم موقع العلامة بالنسبة للشاشة (مش scrollTop) عشان الحساب
-        // يفضل صح أياً كان العنصر اللي بيتحرك فعلياً وقت السكرول
-        const rect = this.anchor.nativeElement.getBoundingClientRect();
-        this.isAtBottom = rect.top <= window.innerHeight + 80;
-      } catch {}
-    });
-  }
-
-  trackByMsgId(_index: number, msg: Message) { return msg.id; }
 
   onEnter(e: any) { if (!e.shiftKey) { e.preventDefault(); this.send(); } }
 
@@ -840,10 +801,6 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
     }]);
 
     this.loading.set(true);
-    // المستخدم لسه بعت سؤال بنفسه، يبقى لازم ننزله لآخر الشات إجباري حتى لو
-    // كان طالع لفوق يقرا قبل كده
-    this.isAtBottom = true;
-    this.forceScroll = true;
     this.needsScroll = true;
 
     // احفظ في الـ history
@@ -1146,16 +1103,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked, AfterView
     return out.join('\n');
   }
 
-  /**
-   * لو force=true (لما المستخدم يبعت سؤال) بننزل لآخر الشات على طول.
-   * لو مش force (أثناء الـ streaming العادي)، منزلش إلا لو المستخدم أصلاً
-   * واقف في آخر الشات — عشان لو طلع لفوق يقرا رسايل قديمة منقطعش عليه
-   * ونجيبوش رغماً عنه لتحت مع كل token جديد.
-   */
-  private scrollBottom(force = false) {
-    if (!force && !this.isAtBottom) return;
-    try {
-      this.anchor.nativeElement.scrollIntoView({ block: 'end', behavior: 'auto', inline: 'nearest' });
-    } catch {}
+  private scrollBottom() {
+    try { this.cont.nativeElement.scrollTop = this.cont.nativeElement.scrollHeight; } catch {}
   }
 }

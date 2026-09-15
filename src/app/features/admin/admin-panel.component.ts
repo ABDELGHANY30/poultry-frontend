@@ -2,9 +2,9 @@ import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { AdminService, AdminUser, AiLog, AdminStats, ArticlePayload, PriceStoreData } from '../../core/services/admin.service';
+import { AdminService, AdminUser, AiLog, AdminStats, ArticlePayload, PriceStoreData, KnowledgeGap } from '../../core/services/admin.service';
 
-type Tab = 'stats' | 'prices' | 'users' | 'content' | 'logs';
+type Tab = 'stats' | 'prices' | 'users' | 'content' | 'logs' | 'gaps';
 
 @Component({
   selector: 'app-admin-panel',
@@ -198,6 +198,51 @@ type Tab = 'stats' | 'prices' | 'users' | 'content' | 'logs';
         </div>
       </div>
 
+      <!-- ══ KNOWLEDGE GAPS ══ -->
+      <div *ngIf="tab() === 'gaps'" class="animate-in">
+        <div class="card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h2 class="section-title mb-0">🕳️ فجوات المعرفة</h2>
+              <p class="text-xs text-[var(--c-muted)]">
+                أسئلة قال النظام صراحة إنه معندوش معلومة كافية عنها — راجعها وضيف الإجابة الموثوقة
+                لقاعدة المعرفة، وبعدين اضغط "تم الحل"
+              </p>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm" [class.btn-primary]="gapsFilter() === 'open'" [class.btn-ghost]="gapsFilter() !== 'open'"
+                      (click)="setGapsFilter('open')">🔴 مفتوحة ({{ gaps().length }})</button>
+              <button class="btn btn-sm" [class.btn-primary]="gapsFilter() === 'resolved'" [class.btn-ghost]="gapsFilter() !== 'resolved'"
+                      (click)="setGapsFilter('resolved')">✅ اتحلت</button>
+            </div>
+          </div>
+
+          <div *ngIf="!gaps().length" class="text-center py-10 text-[var(--c-muted)] text-sm">
+            {{ gapsFilter() === 'open' ? 'مفيش فجوات معرفة مفتوحة دلوقتي 🎉' : 'مفيش فجوات محلولة لسه' }}
+          </div>
+
+          <div class="space-y-3">
+            <div *ngFor="let gap of gaps()" class="p-3 rounded-xl border border-gray-100 bg-gray-50/50">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-bold text-gray-500 mb-1">
+                    {{ gap.created_at | date:'medium' }} · {{ gap.language === 'ar' ? '🇪🇬 عربي' : '🇬🇧 English' }}
+                  </p>
+                  <p class="text-sm font-bold text-gray-800 mb-1">❓ {{ gap.question }}</p>
+                  <p class="text-xs text-gray-500 italic">{{ gap.answer_given }}</p>
+                </div>
+                <button *ngIf="gap.status === 'open'" class="btn btn-sm btn-success flex-shrink-0"
+                        [disabled]="resolvingId() === gap.id"
+                        (click)="resolveGap(gap.id)">
+                  <span *ngIf="resolvingId() === gap.id" class="loading loading-spinner loading-xs"></span>
+                  ✓ تم الحل
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </div>
@@ -225,6 +270,11 @@ export class AdminPanelComponent implements OnInit {
   logs = signal<AiLog[]>([]);
   priceData = signal<PriceStoreData>({ items: {}, last_updated: null });
 
+  // 🕳️ فجوات المعرفة
+  gaps = signal<KnowledgeGap[]>([]);
+  gapsFilter = signal<'open' | 'resolved'>('open');
+  resolvingId = signal<string | null>(null);
+
   newArt: ArticlePayload = { titleEn: '', titleAr: '', category: 'broiler', tags: '', contentEn: '', contentAr: '' };
 
   readonly TABS = [
@@ -233,6 +283,7 @@ export class AdminPanelComponent implements OnInit {
     { key: 'users' as Tab, icon: '👥', label: 'المستخدمين' },
     { key: 'content' as Tab, icon: '📝', label: 'المقالات' },
     { key: 'logs' as Tab, icon: '🤖', label: 'سجلات الذكاء' },
+    { key: 'gaps' as Tab, icon: '🕳️', label: 'فجوات المعرفة' },
   ];
 
   computedStats = computed(() => [
@@ -255,6 +306,34 @@ export class AdminPanelComponent implements OnInit {
   ngOnInit() {
     this.loadAdminData();
     this.loadPrices();
+    this.loadGaps();
+  }
+
+  loadGaps() {
+    this.adminService.getKnowledgeGaps(this.gapsFilter()).subscribe({
+      next: (data) => this.gaps.set(data),
+      error: (err) => console.error('خطأ في جلب فجوات المعرفة:', err)
+    });
+  }
+
+  setGapsFilter(filter: 'open' | 'resolved') {
+    this.gapsFilter.set(filter);
+    this.loadGaps();
+  }
+
+  resolveGap(gapId: string) {
+    this.resolvingId.set(gapId);
+    this.adminService.resolveKnowledgeGap(gapId).subscribe({
+      next: () => {
+        this.resolvingId.set(null);
+        // نشيلها من القايمة الحالية (لأنها بقت resolved، والفلتر الحالي open)
+        this.gaps.update(list => list.filter(g => g.id !== gapId));
+      },
+      error: (err) => {
+        console.error('خطأ أثناء تأكيد الحل:', err);
+        this.resolvingId.set(null);
+      }
+    });
   }
 
   loadAdminData() {
