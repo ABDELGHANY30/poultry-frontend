@@ -58,17 +58,15 @@ const SUGGESTIONS_AR = [
   <div class="flex flex-col h-full min-h-0">
 
     <!-- Header -->
-    <div class="rounded-3xl text-white px-3 py-2 mb-3 flex items-center gap-3"
-         style="background:linear-gradient(135deg,#0f2d1a 0%,#2d9e5f 100%)">
-      <div class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-2xl flex-shrink-0">🤖</div>
+    <div class="border-b border-gray-200 px-4 py-3 mb-3 flex items-center gap-3">
       <div class="flex-1 min-w-0">
-        <h1 class="text-base font-black"> مساعد الدواجن الذكي</h1>
+        <h1 class="text-base font-semibold text-gray-900">مساعد الدواجن</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
-          <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></span>
-          <p class="text-white/70 text-xs flex-shrink-0">متصل</p>
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+          <p class="text-gray-400 text-xs flex-shrink-0">متصل</p>
         </div>
       </div>
-      <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-2 py-1 rounded-xl flex-shrink-0">⭐ PRO</div>
+      <div *ngIf="isPro()" class="text-amber-700 bg-amber-50 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0">Pro</div>
     </div>
 
     <!-- Flock Selector — اختياري بالكامل، المستخدم هو اللي بيقرر لو عايز
@@ -110,9 +108,9 @@ const SUGGESTIONS_AR = [
         <div class="flex flex-wrap gap-1.5">
           <button *ngFor="let s of suggestions"
                   (click)="send(s)"
-                  class="text-xs font-semibold px-3 py-1.5 rounded-full bg-white border border-green-200
-                         text-green-700 hover:bg-green-600 hover:text-white hover:border-green-600
-                         transition-all cursor-pointer shadow-sm">
+                  class="text-xs font-medium px-3 py-1.5 rounded-full bg-white border border-gray-200
+                         text-gray-600 hover:bg-gray-50 hover:border-gray-300
+                         transition-colors cursor-pointer">
             {{ s }}
           </button>
         </div>
@@ -126,23 +124,11 @@ const SUGGESTIONS_AR = [
              class="flex gap-2"
              [class.flex-row-reverse]="msg.role === 'user'">
 
-          <!-- Avatar -->
-          <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 mt-0.5"
-               [class.bg-green-100]="msg.role === 'assistant'"
-               [class.bg-gray-100]="msg.role === 'user'">
-            {{ msg.role === 'assistant' ? '🤖' : '👨‍🌾' }}
-          </div>
-
           <!-- Bubble -->
-          <div class="max-w-[80%]">
-            <div class="rounded-2xl px-4 py-3"
-                 [class.bg-green-600]="msg.role === 'user'"
-                 [class.text-white]="msg.role === 'user'"
-                 [class.rounded-br-sm]="msg.role === 'user'"
-                 [class.bg-gray-50]="msg.role === 'assistant'"
-                 [class.border]="msg.role === 'assistant'"
-                 [class.border-gray-100]="msg.role === 'assistant'"
-                 [class.rounded-bl-sm]="msg.role === 'assistant'">
+          <div [class]="msg.role === 'user' ? 'max-w-[80%]' : 'max-w-[85%]'">
+            <div [class]="msg.role === 'user'
+                    ? 'rounded-2xl rounded-br-md px-4 py-3 bg-gray-100 text-gray-900'
+                    : 'px-1 py-1'">
 
               <!-- Image preview -->
               <img *ngIf="msg.imagePreview" [src]="msg.imagePreview"
@@ -150,49 +136,50 @@ const SUGGESTIONS_AR = [
 
               <!-- Typing indicator -->
               <div *ngIf="msg.loading && !msg.content" class="flex gap-1 items-center h-5 px-1">
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
-                <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style="animation-delay:300ms"></span>
               </div>
 
               <!-- Status message (searching...) -->
               <p *ngIf="msg.loading && msg.content && msg.streaming"
                  class="text-xs text-gray-400 italic flex items-center gap-1">
-                <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full animate-pulse"></span>
                 {{ msg.content }}
               </p>
 
               <!-- Content -->
               <div *ngIf="!msg.loading || (msg.content && !msg.streaming)"
                    class="text-sm leading-relaxed"
+                   [class.text-gray-800]="msg.role === 'assistant'"
                    [innerHTML]="renderMarkdown(msg.content, msg.streaming)">
               </div>
 
               <!-- Cursor while streaming -->
               <span *ngIf="msg.streaming && msg.content && !msg.loading"
-                    class="inline-block w-0.5 h-4 bg-green-500 animate-pulse ml-0.5 align-middle"></span>
+                    class="inline-block w-0.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-middle"></span>
 
               <!-- Timestamp -->
-              <p class="text-xs mt-1.5 opacity-40 text-end">
+              <p class="text-xs mt-1.5 text-gray-400 text-end">
                 {{ msg.timestamp | date:'HH:mm' }}
               </p>
             </div>
 
             <!-- Confidence badge (لو المعلومة المرجعية ضعيفة أو متوسطة) -->
             <div *ngIf="msg.confidence === 'low' && !msg.streaming"
-                 class="mt-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-2.5 py-1 inline-flex items-center gap-1">
+                 class="mt-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
               ⚠️ معلومات محدودة — استشر طبيب بيطري للتأكد
             </div>
             <div *ngIf="msg.confidence === 'medium' && !msg.streaming"
-                 class="mt-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1 inline-flex items-center gap-1">
-              🔶 دقة متوسطة
+                 class="mt-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1 inline-flex items-center gap-1">
+              دقة متوسطة
             </div>
 
             <!-- Sources -->
             <div *ngIf="msg.sources?.length && !msg.streaming" class="mt-1.5 flex flex-wrap gap-1">
               <span *ngFor="let s of msg.sources?.slice(0,3)"
-                    class="text-xs bg-green-50 text-green-600 border border-green-100 px-2 py-0.5 rounded-full">
-                📚 {{ s.title }}
+                    class="text-xs bg-gray-50 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+                {{ s.title }}
               </span>
             </div>
 
@@ -201,23 +188,23 @@ const SUGGESTIONS_AR = [
                  class="flex items-center gap-1.5 mt-1.5">
               <button (click)="sendFeedback(msg, true)"
                       class="text-xs w-7 h-7 rounded-lg flex items-center justify-center transition"
-                      [class.text-green-500]="msg.feedback === 'up'"
-                      [class.bg-green-50]="msg.feedback === 'up'"
+                      [class.text-emerald-600]="msg.feedback === 'up'"
+                      [class.bg-emerald-50]="msg.feedback === 'up'"
                       [class.text-gray-300]="msg.feedback !== 'up'"
                       [class.hover:bg-gray-100]="msg.feedback !== 'up'">👍</button>
               <button (click)="sendFeedback(msg, false)"
                       class="text-xs w-7 h-7 rounded-lg flex items-center justify-center transition"
-                      [class.text-red-400]="msg.feedback === 'down'"
+                      [class.text-red-500]="msg.feedback === 'down'"
                       [class.bg-red-50]="msg.feedback === 'down'"
                       [class.text-gray-300]="msg.feedback !== 'down'"
                       [class.hover:bg-gray-100]="msg.feedback !== 'down'">👎</button>
               <span class="w-px h-3 bg-gray-200 mx-0.5"></span>
               <button (click)="copyText(msg)"
-                      class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition"
+                      class="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition"
                       [class.text-gray-400]="!msg.copied"
                       [class.hover:bg-gray-100]="!msg.copied"
-                      [class.bg-green-50]="msg.copied"
-                      [class.text-green-600]="msg.copied">
+                      [class.bg-emerald-50]="msg.copied"
+                      [class.text-emerald-600]="msg.copied">
                 {{ msg.copied ? '✅ اتنسخ' : '📋 نسخ' }}
               </button>
               <button (click)="shareText(msg)"
@@ -244,10 +231,10 @@ const SUGGESTIONS_AR = [
             <div *ngIf="msg.suggestions?.length && !msg.streaming" class="mt-2 flex flex-wrap gap-1.5">
               <button *ngFor="let s of msg.suggestions"
                       (click)="send(s)"
-                      class="text-xs font-semibold px-2.5 py-1 rounded-full bg-white border border-green-200
-                             text-green-700 hover:bg-green-600 hover:text-white hover:border-green-600
-                             transition-all shadow-sm">
-                {{ s }} ↩
+                      class="text-xs font-medium px-2.5 py-1 rounded-full bg-white border border-gray-200
+                             text-gray-600 hover:bg-gray-50 hover:border-gray-300
+                             transition-colors">
+                {{ s }}
               </button>
             </div>
           </div>
@@ -269,7 +256,7 @@ const SUGGESTIONS_AR = [
       <!-- Input -->
       <div class="border-t border-gray-100 p-3 bg-white">
         <div class="flex items-end gap-1 bg-gray-50 border border-gray-200 rounded-[1.75rem] px-2 py-1.5
-                    focus-within:border-green-300 focus-within:bg-white transition-colors"
+                    focus-within:border-gray-300 focus-within:bg-white transition-colors"
              style="transform: translateZ(0);">
 
           <!-- Image button (Pro only) -->
@@ -311,7 +298,7 @@ const SUGGESTIONS_AR = [
           </textarea>
 
           <button class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white transition"
-                  style="background:#2d9e5f"
+                  style="background:#2A2A28"
                   [class.opacity-40]="(!input.trim() && !selectedImagePreview()) || loading()"
                   [disabled]="(!input.trim() && !selectedImagePreview()) || loading()"
                   (click)="send()">
@@ -497,7 +484,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
   private showWelcomeMessage() {
     this.messages.set([{
       id: uid(), role: 'assistant', timestamp: new Date(),
-      content: 'مرحباً! أنا مساعدك المتخصص في تربية الدواجن 🐔\n\nيمكنني مساعدتك في:\n• **الأمراض والعلاج** 🦠\n• **التغذية والفيتامينات** 🌾\n• **التحصينات والجرعات** 💉\n• **إدارة المزرعة** 🏗️\n\nاسأل بحرية!',
+      content: 'أهلاً، أنا مساعدك في تربية الدواجن.\n\nممكن أساعدك في الأمراض والعلاج، التغذية، التحصينات والجرعات، وإدارة المزرعة بشكل عام. اسأل عن أي حاجة.',
     }]);
   }
 
