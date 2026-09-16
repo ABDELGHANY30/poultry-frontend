@@ -293,7 +293,7 @@ const SUGGESTIONS_AR = [
             [disabled]="loading()"
             rows="1"
             dir="rtl"
-            class="flex-1 bg-transparent border-0 px-2 py-2 text-sm resize-none max-h-28 focus:outline-none focus:ring-0"
+            class="flex-1 bg-transparent border-0 px-2 py-2 text-sm text-gray-900 placeholder:text-gray-400 resize-none max-h-28 focus:outline-none focus:ring-0"
             style="min-height:36px; transform: translateZ(0); -webkit-transform: translateZ(0); backface-visibility: hidden;">
           </textarea>
 
