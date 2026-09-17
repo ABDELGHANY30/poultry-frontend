@@ -118,7 +118,6 @@ const SUGGESTIONS_AR = [
 
       <!-- Messages -->
       <div #msgContainer class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col" (click)="onContentClick($event)">
-        <div class="flex-1"></div>
         <div class="flex flex-col gap-3">
         <div *ngFor="let msg of messages()"
              class="flex gap-2"
