@@ -102,10 +102,13 @@ const SUGGESTIONS_AR = [
     <!-- Chat Window -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
-      <!-- Suggestions -->
-      <div *ngIf="messages().length <= 1" class="p-3 border-b border-gray-50 bg-green-50/50">
-        <p class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">اسأل مثلاً:</p>
-        <div class="flex flex-wrap gap-1.5">
+      <!-- Empty state — شاشة "شات جديد" متمركزة، بتختفي بمجرد أول رسالة حقيقية -->
+      <div *ngIf="messages().length <= 1" class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 text-center">
+        <h2 class="text-lg font-semibold text-gray-800 mb-1">مساعد الدواجن</h2>
+        <p class="text-sm text-gray-400 mb-6 max-w-xs">
+          اسأل عن الأمراض والعلاج، التغذية، التحصينات، أو إدارة المزرعة بشكل عام
+        </p>
+        <div class="flex flex-wrap justify-center gap-1.5 max-w-md">
           <button *ngFor="let s of suggestions"
                   (click)="send(s)"
                   class="text-xs font-medium px-3 py-1.5 rounded-full bg-white border border-gray-200
@@ -116,8 +119,8 @@ const SUGGESTIONS_AR = [
         </div>
       </div>
 
-      <!-- Messages -->
-      <div #msgContainer class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col" (click)="onContentClick($event)">
+      <!-- Messages — بتظهر بس بعد أول رسالة حقيقية من المستخدم -->
+      <div *ngIf="messages().length > 1" #msgContainer class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col" (click)="onContentClick($event)">
         <div class="flex flex-col gap-3">
         <div *ngFor="let msg of messages()"
              class="flex gap-2"
