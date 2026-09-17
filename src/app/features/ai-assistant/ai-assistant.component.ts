@@ -256,7 +256,7 @@ const SUGGESTIONS_AR = [
       </div>
 
       <!-- Input -->
-      <div class="border-t border-gray-100 p-3 bg-white">
+      <div class="border-t border-gray-100 p-3 bg-transparent">
         <div class="flex items-end gap-1 bg-gray-50 border border-gray-200 rounded-[1.75rem] px-2 py-1.5
                     focus-within:border-gray-300 focus-within:bg-white transition-colors"
              style="transform: translateZ(0);">
