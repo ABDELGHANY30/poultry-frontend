@@ -338,6 +338,10 @@ export const routes: Routes = [
         path: 'learning',
         loadComponent: () =>
           import('./features/learning/learning.component').then(m => m.LearningComponent),
+      },{
+        path: 'verify',
+        loadComponent: () =>
+          import('./features/verify-identity.component.ts/verify-identity.component').then(m => m.VerifyIdentityComponent),
       },
       { path: 'subscription', component: SubscriptionComponent },
 
