@@ -339,10 +339,10 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/learning/learning.component').then(m => m.LearningComponent),
       },{
-        path: 'verify',
-        loadComponent: () =>
-          import('./features/verify-identity.component.ts/verify-identity.component').then(m => m.VerifyIdentityComponent),
-      },
+  path: 'verify',
+  loadComponent: () =>
+    import('./features/verify-identity/verify-identity.component').then(m => m.VerifyIdentityComponent),
+},
       { path: 'subscription', component: SubscriptionComponent },
 
       // ⚠️ محمية بـ proGuard — مشتركي Pro فقط، وإلا يتحول لـ /subscription
