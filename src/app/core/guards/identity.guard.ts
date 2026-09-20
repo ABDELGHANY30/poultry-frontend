@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { environment } from '../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
+import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
 import { map, catchError, of } from 'rxjs';
 
 /**
