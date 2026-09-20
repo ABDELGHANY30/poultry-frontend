@@ -196,7 +196,7 @@ export class LayoutComponent implements OnInit {
     { path: '/market-hub', icon: '🛒', key: 'NAV.MARKETPLACE' },
     { path: '/learning', icon: '📚', key: 'NAV.LEARNING' },
     { path: '/calculator', icon: '🏗️', key: 'NAV.calc' },
-    { path: '/verity', icon: '🏗️', key: 'NAV.calc' },
+    { path: '/verify', icon: '🏗️', key: 'NAV.calc' },
     { path: '/subscription', icon: '⭐', key: 'NAV.UPGRADE_PRO' },
 
   ];
