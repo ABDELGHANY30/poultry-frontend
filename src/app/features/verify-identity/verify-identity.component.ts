@@ -127,33 +127,37 @@ export class VerifyIdentityComponent implements OnInit {
     return /^\d{14}$/.test(this.form.national_id) && !!this.frontFile && !!this.backFile;
   }
 
-  submit() {
-    if (!this.isFormValid() || !this.frontFile || !this.backFile) return;
+ submit() {
+  if (!this.isFormValid() || !this.frontFile || !this.backFile) return;
 
-    this.submitting.set(true);
-    this.errorMsg.set('');
+  this.submitting.set(true);
+  this.errorMsg.set('');
 
-    const formData = new FormData();
-    formData.append('national_id', this.form.national_id);
-    formData.append('front_image', this.frontFile);
-    formData.append('back_image', this.backFile);
+  const formData = new FormData();
+  formData.append('national_id', this.form.national_id);
+  formData.append('front_image', this.frontFile);
+  formData.append('back_image', this.backFile);
 
-    this.http.post(`${environment.apiUrl}/identity-verification/submit`, formData, { headers: this.headers() })
-      .subscribe({
-        next: () => {
-          this.submitting.set(false);
-          // بعد النجاح، نرجّع المستخدم للصفحة اللي كان جاي منها (مثلاً
-          // إضافة إعلان) لو موجودة في queryParam، وإلا نرجّعه للسوق
-          // كافتراضي — بدل رجوعه للسوق ثابت دايمًا زي ما كان قبل كده.
-          const returnTo = this.route.snapshot.queryParamMap.get('returnTo');
-          this.router.navigate([returnTo || '/marketplace']);
-        },
-        error: (err) => {
-          this.submitting.set(false);
-          this.errorMsg.set(
-            err?.error?.detail ?? (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again')
-          );
-        }
-      });
-  }
+  // 🔴 تأكد من إرسال توكن Auth فقط وتجنب وضعه كـ application/json
+  const token = localStorage.getItem('token'); // أو مكان حفظ التوكن لديك
+  const headers = new HttpHeaders({
+    'Authorization': `Bearer ${token}`
+    // ⚠️ لا تضع 'Content-Type' هنا نهائياً ليقوم المتصفح بإنشاء boundary الـ multipart
+  });
+
+  this.http.post(`${environment.apiUrl}/identity-verification/submit`, formData, { headers })
+    .subscribe({
+      next: () => {
+        this.submitting.set(false);
+        const returnTo = this.route.snapshot.queryParamMap.get('returnTo');
+        this.router.navigate([returnTo || '/marketplace']);
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.errorMsg.set(
+          err?.error?.detail ?? (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again')
+        );
+      }
+    });
+}
 }
