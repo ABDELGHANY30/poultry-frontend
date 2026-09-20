@@ -225,15 +225,16 @@
 // }
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router'; // 👈 استيراد RouterModule هنا
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-listing-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterModule], // 👈 وضع RouterModule هنا بدلاً من RouterLink
   template: `
+  ...
   <div class="page-wrapper max-w-3xl mx-auto p-4">
 
     <!-- زر العودة -->
