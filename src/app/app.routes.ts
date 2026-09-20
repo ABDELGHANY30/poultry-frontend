@@ -290,7 +290,7 @@ import { dailyRecordGuard } from './core/guards/daily-record.guard'; // 👈 ح�
 import { LayoutComponent } from './layout/layout.component';
 import { SubscriptionComponent } from './features/sub/subscription.component';
 import { ReportsComponent } from './features/reports/reports.component.';
-import { AddListingComponent } from './features/marketplace/add-listing.component';
+import { ListingDetailComponent } from './features/marketplace/add-listing.component';
 import { CalculatorComponent } from './features/calculator/calculator.component';
 import { MarketHubComponent } from './features/marckethub/markethub';
 import { DecisionSimulatorComponent } from './features/desicion/desicion.component';
@@ -352,7 +352,7 @@ export const routes: Routes = [
 
       { path: 'market-hub', component: MarketHubComponent },
       { path: 'marketplace', redirectTo: 'market-hub', pathMatch: 'full' },
-      { path: 'marketplace/add', component: AddListingComponent },
+      { path: 'marketplace/add', component: ListingDetailComponent },
       { path: 'marketplace/my-orders', component:MyOrdersComponent  },
       { path: 'marketplace/seller-dashboard', component: SellerDashboardComponent },
       { path: 'calculator', component: CalculatorComponent },
