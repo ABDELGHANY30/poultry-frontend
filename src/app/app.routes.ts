@@ -339,7 +339,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/learning/learning.component').then(m => m.LearningComponent),
       },{
-  path: 'verify',
+  path: 'verify-identity',
   loadComponent: () =>
     import('./features/verify-identity/verify-identity.component').then(m => m.VerifyIdentityComponent),
 },
