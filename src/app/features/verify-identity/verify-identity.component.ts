@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
@@ -83,6 +83,7 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
 export class VerifyIdentityComponent implements OnInit {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   lang = localStorage.getItem('lang') ?? 'ar';
 
   alreadyVerified = signal(false);
@@ -141,9 +142,11 @@ export class VerifyIdentityComponent implements OnInit {
       .subscribe({
         next: () => {
           this.submitting.set(false);
-          // بعد النجاح، نرجّع المستخدم للسوق — أو ممكن تحفظ الصفحة
-          // اللي كان جاي منها في queryParam وترجّعه لها بدل السوق دايمًا
-          this.router.navigate(['/marketplace']);
+          // بعد النجاح، نرجّع المستخدم للصفحة اللي كان جاي منها (مثلاً
+          // إضافة إعلان) لو موجودة في queryParam، وإلا نرجّعه للسوق
+          // كافتراضي — بدل رجوعه للسوق ثابت دايمًا زي ما كان قبل كده.
+          const returnTo = this.route.snapshot.queryParamMap.get('returnTo');
+          this.router.navigate([returnTo || '/marketplace']);
         },
         error: (err) => {
           this.submitting.set(false);
