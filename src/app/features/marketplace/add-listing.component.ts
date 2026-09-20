@@ -182,27 +182,32 @@ selectGov(govName: string) {
   this.form.location = govName;
   this.showDropdown = false;
 }
-  submit() {
-    if (!this.form.title || !this.form.location || !this.form.phone) {
-      this.error.set(this.lang === 'ar' ? 'يرجى ملء الحقول المطلوبة' : 'Please fill required fields');
-      return;
-    }
 
-    this.loading.set(true);
-    this.error.set('');
-
-    const token = localStorage.getItem('spa_token');
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-
-    this.http.post(`${environment.apiUrl}/listings/`, this.form, { headers }).subscribe({
-      next: () => {
-        this.loading.set(false);
-        this.router.navigate(['/marketplace']);
-      },
-      error: () => {
-        this.loading.set(false);
-        this.error.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again');
-      }
-    });
+submit() {
+  if (!this.form.title || !this.form.location || !this.form.phone) {
+    this.error.set(this.lang === 'ar' ? 'يرجى ملء الحقول المطلوبة' : 'Please fill required fields');
+    return;
   }
+
+  // 🔍 فحص هل المستخدم موثق أم لا من localstorage (أو Auth State)
+  const isVerified = localStorage.getItem('is_verified') === 'true';
+
+  if (!isVerified) {
+    // 🚦 توجيه المستخدم فوراً لصفحة توثيق الهوية
+    this.router.navigate(['/verify-identity']);
+    return;
+  }
+
+  // إذا كان موثقاً، استكمل عملية النشر كالمعتاد...
+  this.loading.set(true);
+  this.http.post(`${environment.apiUrl}/listings/`, this.form, { headers }).subscribe({
+    next: () => {
+      this.router.navigate(['/marketplace']);
+    },
+    error: (err) => {
+      this.loading.set(false);
+      // ...
+    }
+  });
+}
 }
