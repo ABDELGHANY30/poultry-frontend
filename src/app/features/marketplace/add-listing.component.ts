@@ -204,7 +204,7 @@ export class AddListingComponent implements OnInit {
     const token = localStorage.getItem('spa_token');
     if (!token) {
       this.error.set(this.lang === 'ar' ? 'يرجى تسجيل الدخول أولاً' : 'Please login first');
-      this.router.navigate(['/login']);
+      this.router.navigate(['/auth/login']);
       return;
     }
 
@@ -225,7 +225,7 @@ export class AddListingComponent implements OnInit {
           this.router.navigate(['/verify-identity']);
         } else if (err.status === 401) {
           this.error.set(this.lang === 'ar' ? 'جلسة الدخول انتهت، يرجى إعادة تسجيل الدخول' : 'Session expired');
-          this.router.navigate(['/login']);
+          this.router.navigate(['/auth/login']);
         } else {
           this.error.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again');
         }
