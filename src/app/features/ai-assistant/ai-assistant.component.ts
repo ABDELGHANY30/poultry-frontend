@@ -126,7 +126,7 @@ const SUGGESTIONS_AR = [
              class="flex gap-2"
              [class.flex-row-reverse]="msg.role === 'user'">
 
-          <!-- Bubble -->
+          /* <!-- Bubble --> */
           <div [class]="msg.role === 'user' ? 'max-w-[80%]' : 'max-w-[85%]'">
             <div [class]="msg.role === 'user'
                     ? 'rounded-2xl rounded-br-md px-4 py-3 bg-gray-100 text-gray-900'
@@ -256,7 +256,7 @@ const SUGGESTIONS_AR = [
       </div>
 
       <!-- Input -->
-      <div class="border-t border-gray-100 p-3 bg-white">
+      <div class="border-t border-gray-100 p-3 bg-transparent">
         <div class="flex items-end gap-1 bg-gray-50 border border-gray-200 rounded-[1.75rem] px-2 py-1.5
                     focus-within:border-gray-300 focus-within:bg-white transition-colors"
              style="transform: translateZ(0);">
