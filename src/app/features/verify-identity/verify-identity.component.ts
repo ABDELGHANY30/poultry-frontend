@@ -29,8 +29,11 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
       <p class="font-bold text-green-700">
         {{ lang === 'ar' ? 'تم توثيق حسابك بالفعل' : 'Your account is already verified' }}
       </p>
-      <a routerLink="/marketplace" class="text-sm text-green-600 underline mt-2 inline-block">
-        {{ lang === 'ar' ? 'العودة للسوق' : 'Back to marketplace' }}
+      <p class="text-xs text-gray-500 mt-1">
+        {{ lang === 'ar' ? 'جاري تحويلك...' : 'Redirecting...' }}
+      </p>
+      <a [routerLink]="returnTo || '/marketplace'" class="text-sm text-green-600 underline mt-2 inline-block">
+        {{ lang === 'ar' ? 'أكمل الآن' : 'Continue now' }}
       </a>
     </div>
 
@@ -89,6 +92,7 @@ export class VerifyIdentityComponent implements OnInit {
   alreadyVerified = signal(false);
   submitting = signal(false);
   errorMsg = signal('');
+  returnTo: string | null = null;
 
   form = { national_id: '' };
   frontFile: File | null = null;
@@ -102,9 +106,20 @@ export class VerifyIdentityComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.returnTo = this.route.snapshot.queryParamMap.get('returnTo');
+
     this.http.get<any>(`${environment.apiUrl}/identity-verification/status`, { headers: this.headers() })
       .subscribe({
-        next: res => this.alreadyVerified.set(res.is_verified === true),
+        next: res => {
+          const verified = res.is_verified === true;
+          this.alreadyVerified.set(verified);
+          if (verified) {
+            // موثّق بالفعل -> ودّيه على طول لمكانه الأصلي بدل ما يسيبه واقف
+            setTimeout(() => {
+              this.router.navigate([this.returnTo || '/marketplace']);
+            }, 1200);
+          }
+        },
         error: () => {}
       });
   }
@@ -138,8 +153,7 @@ export class VerifyIdentityComponent implements OnInit {
   formData.append('front_image', this.frontFile);
   formData.append('back_image', this.backFile);
 
-  // 🔴 تأكد من إرسال توكن Auth فقط وتجنب وضعه كـ application/json
-  const token = localStorage.getItem('token'); // أو مكان حفظ التوكن لديك
+  const token = localStorage.getItem('spa_token');
   const headers = new HttpHeaders({
     'Authorization': `Bearer ${token}`
     // ⚠️ لا تضع 'Content-Type' هنا نهائياً ليقوم المتصفح بإنشاء boundary الـ multipart
@@ -149,8 +163,7 @@ export class VerifyIdentityComponent implements OnInit {
     .subscribe({
       next: () => {
         this.submitting.set(false);
-        const returnTo = this.route.snapshot.queryParamMap.get('returnTo');
-        this.router.navigate([returnTo || '/marketplace']);
+        this.router.navigate([this.returnTo || '/marketplace']);
       },
       error: (err) => {
         this.submitting.set(false);

@@ -27,9 +27,9 @@ export const identityGuard: CanActivateFn = (route, state) => {
 
   const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
 
-  return http.get<any>(`${environment.apiUrl}/users/me`, { headers }).pipe(
-    map((user) => {
-      if (!user.has_identity_verification) {
+  return http.get<any>(`${environment.apiUrl}/identity-verification/status`, { headers }).pipe(
+    map((res) => {
+      if (res.is_verified !== true) {
         return router.createUrlTree(['/verify-identity'], { queryParams: { returnTo: state.url } });
       }
       return true; // موثّق -> يدخل الصفحة عادي
