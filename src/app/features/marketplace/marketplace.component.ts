@@ -19,7 +19,7 @@ import { environment } from '../../../environments/environment';
         <h1 class="text-xl font-bold">🛒 {{ lang === 'ar' ? 'السوق' : 'Marketplace' }}</h1>
         <p class="text-white/70 text-sm">{{ lang === 'ar' ? 'بيع واشتري دواجن ومعدات' : 'Buy & sell poultry and equipment' }}</p>
       </div>
-      <a routerLink="/marketplace/add"
+      <a routerLink="/marketplace/add-listing"
          class="bg-white text-green-700 font-bold px-4 py-2 rounded-2xl text-sm hover:bg-green-50 transition">
         + {{ lang === 'ar' ? 'إعلان' : 'Add' }}
       </a>
@@ -94,7 +94,7 @@ import { environment } from '../../../environments/environment';
            class="text-center py-12 text-gray-400">
         <p class="text-4xl mb-2">🛒</p>
         <p class="font-semibold">{{ lang === 'ar' ? 'لا توجد إعلانات بعد' : 'No listings yet' }}</p>
-        <a routerLink="/marketplace/add" class="btn-primary btn mt-3 inline-flex">
+        <a routerLink="/marketplace/add-listing" class="btn-primary btn mt-3 inline-flex">
           + {{ lang === 'ar' ? 'أضف أول إعلان' : 'Add first listing' }}
         </a>
       </div>
