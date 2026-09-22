@@ -78,9 +78,9 @@ import { environment } from '../../../environments/environment';
         <button
           *ngIf="!isCurrentPlan('monthly')"
           (click)="subscribe('pro_monthly')"
-          [disabled]="loading()"
+          [disabled]="loadingPlan() !== null"
           class="shrink-0 bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
-          {{ loading() ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
+          {{ loadingPlan() === 'pro_monthly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
         </button>
         <span *ngIf="isCurrentPlan('monthly')" class="shrink-0 text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}
@@ -105,9 +105,9 @@ import { environment } from '../../../environments/environment';
         <button
           *ngIf="!isCurrentPlan('yearly')"
           (click)="subscribe('pro_yearly')"
-          [disabled]="loading()"
+          [disabled]="loadingPlan() !== null"
           class="shrink-0 bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 transition disabled:opacity-50">
-          {{ loading() ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
+          {{ loadingPlan() === 'pro_yearly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
         </button>
         <span *ngIf="isCurrentPlan('yearly')" class="shrink-0 text-xs font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}
@@ -121,7 +121,7 @@ import { environment } from '../../../environments/environment';
 export class SubscriptionComponent implements OnInit {
   private http = inject(HttpClient);
   lang = localStorage.getItem('lang') ?? 'ar';
-  loading = signal(false);
+  loadingPlan = signal<string | null>(null);
   status = signal<any>(null);
   errorMessage = signal<string | null>(null);
 
@@ -172,7 +172,7 @@ export class SubscriptionComponent implements OnInit {
   }
 
   async subscribe(plan: string) {
-    this.loading.set(true);
+    this.loadingPlan.set(plan);
     this.errorMessage.set(null);
     const token = localStorage.getItem('spa_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -184,9 +184,9 @@ export class SubscriptionComponent implements OnInit {
     // مش من هنا، عشان محدش يقدر يفعّل نفسه من غير ما يدفع فعلاً.
     this.http.post(`${environment.apiUrl}/payment/create-paymob`, { plan }, { headers }).subscribe({
       next: async (res: any) => {
-        this.loading.set(false);
         const paymentUrl = res.payment_url;
         if (!paymentUrl) {
+          this.loadingPlan.set(null);
           this.errorMessage.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, please try again');
           return;
         }
@@ -199,9 +199,10 @@ export class SubscriptionComponent implements OnInit {
           // شغال كموقع في براوزر عادي — نروح مباشرة لصفحة الدفع
           window.location.href = paymentUrl;
         }
+        this.loadingPlan.set(null);
       },
       error: (err) => {
-        this.loading.set(false);
+        this.loadingPlan.set(null);
         this.errorMessage.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, please try again');
       }
     });
