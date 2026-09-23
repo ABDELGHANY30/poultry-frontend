@@ -1,6 +1,7 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
@@ -78,7 +79,7 @@ import { environment } from '../../../environments/environment';
         <button
           *ngIf="!isCurrentPlan('monthly')"
           (click)="subscribe('pro_monthly')"
-          [disabled]="loadingPlan() !== null"
+          [disabled]="loadingPlan() === 'pro_monthly'"
           class="shrink-0 bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
           {{ loadingPlan() === 'pro_monthly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
         </button>
@@ -105,7 +106,7 @@ import { environment } from '../../../environments/environment';
         <button
           *ngIf="!isCurrentPlan('yearly')"
           (click)="subscribe('pro_yearly')"
-          [disabled]="loadingPlan() !== null"
+          [disabled]="loadingPlan() === 'pro_yearly'"
           class="shrink-0 bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 transition disabled:opacity-50">
           {{ loadingPlan() === 'pro_yearly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
         </button>
@@ -120,6 +121,8 @@ import { environment } from '../../../environments/environment';
 })
 export class SubscriptionComponent implements OnInit {
   private http = inject(HttpClient);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
   lang = localStorage.getItem('lang') ?? 'ar';
   loadingPlan = signal<string | null>(null);
   status = signal<any>(null);
@@ -127,12 +130,13 @@ export class SubscriptionComponent implements OnInit {
 
   ngOnInit() {
     this.loadStatus();
+    this.errorMessage.set(null); // مسح أي رسالة خطأ قديمة قبل ما نتشيك من جديد
 
     // لما Paymob يرجّع المستخدم من صفحة الدفع (نجاح أو فشل)، بيحط
     // query params على نفس الرابط. نستخدمها بس عشان نعمل refresh
     // للحالة ونوري رسالة مناسبة — التفعيل الفعلي بيحصل من الـ webhook
     // في الباك اند، مش من هنا (مينفعش نثق في القيم دي وحدها).
-    const params = new URLSearchParams(window.location.search);
+    const params = this.route.snapshot.queryParamMap;
     if (params.has('success') || params.has('payment_status')) {
       this.loadStatus();
       if (params.get('success') === 'true' || params.get('payment_status') === 'success') {
@@ -144,7 +148,16 @@ export class SubscriptionComponent implements OnInit {
             : 'Payment was not completed, please try again'
         );
       }
-      window.history.replaceState({}, '', window.location.pathname);
+      // بنمسح الـ query params عن طريق Router نفسه (مش window.history
+      // مباشرة) عشان حالة الـ Router جوه Angular تتحدث هي كمان — لو
+      // عدّلنا الرابط من غيره، Angular ممكن يرجّع نفس الـ params دي تاني
+      // لما تتنقل بعيد عن الصفحة وترجعلها تاني (السبب الأرجح للمشكلة
+      // اللي كانت بتحصل).
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: {},
+        replaceUrl: true,
+      });
     }
   }
 
