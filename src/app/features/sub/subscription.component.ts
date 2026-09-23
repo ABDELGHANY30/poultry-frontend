@@ -49,6 +49,18 @@ import { environment } from '../../../environments/environment';
       {{ errorMessage() }}
     </p>
 
+    <!-- التطبيق (Capacitor) مينفعش يدير عملية دفع خارج Google Play Billing —
+         بنكتفي بمعلومة بسيطة وليها بس، من غير ما التطبيق يبدأ أي عملية
+         دفع بنفسه -->
+    <div *ngIf="isNative && !status()?.is_pro" class="bg-stone-100 rounded-xl px-4 py-3 mb-6 text-sm text-stone-600">
+      {{ lang === 'ar'
+        ? 'للاشتراك، افتح موقعنا من متصفحك وادفع من هناك (فوري / إنستاباي / بطاقة). '
+        : 'To subscribe, open our website in your browser and pay there (Fawry / InstaPay / card). ' }}
+      <a (click)="openWebsite()" class="text-emerald-700 font-semibold underline cursor-pointer">
+        {{ lang === 'ar' ? 'افتح الموقع' : 'Open website' }}
+      </a>
+    </div>
+
     <!-- Plans -->
     <div class="space-y-3">
 
@@ -77,7 +89,7 @@ import { environment } from '../../../environments/environment';
           <p class="text-sm text-stone-500">{{ lang === 'ar' ? 'أسئلة وصور بلا حد، تقارير متقدمة' : 'Unlimited Q&A and images, advanced reports' }}</p>
         </div>
         <button
-          *ngIf="!isCurrentPlan('monthly')"
+          *ngIf="!isCurrentPlan('monthly') && !isNative"
           (click)="subscribe('pro_monthly')"
           [disabled]="loadingPlan() === 'pro_monthly'"
           class="shrink-0 bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
@@ -104,7 +116,7 @@ import { environment } from '../../../environments/environment';
           <p class="text-sm text-stone-500">{{ lang === 'ar' ? 'كل مميزات الشهري، بأقل تكلفة شهرياً' : 'Everything in monthly, at a lower monthly cost' }}</p>
         </div>
         <button
-          *ngIf="!isCurrentPlan('yearly')"
+          *ngIf="!isCurrentPlan('yearly') && !isNative"
           (click)="subscribe('pro_yearly')"
           [disabled]="loadingPlan() === 'pro_yearly'"
           class="shrink-0 bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 transition disabled:opacity-50">
@@ -127,6 +139,14 @@ export class SubscriptionComponent implements OnInit {
   loadingPlan = signal<string | null>(null);
   status = signal<any>(null);
   errorMessage = signal<string | null>(null);
+  isNative = Capacitor.isNativePlatform();
+
+  // بس بيفتح الموقع من برا — التطبيق مش بيبدأ ولا بيدير أي عملية دفع؛
+  // المستخدم نفسه هو اللي بيكمل الاشتراك من الموقع بمحض إرادته، زي ما
+  // اتفقنا (الفرق ده هو اللي بيخلي الأمر مقبول في سياسة Google Play)
+  openWebsite() {
+    Browser.open({ url: environment.websiteUrl + '/subscription' });
+  }
 
   ngOnInit() {
     this.loadStatus();
@@ -195,23 +215,18 @@ export class SubscriptionComponent implements OnInit {
     // التفعيل الفعلي للاشتراك بيحصل لاحقاً عن طريق webhook من Paymob
     // للباك اند (/payment/paymob-webhook) بعد نجاح الدفع فعلياً —
     // مش من هنا، عشان محدش يقدر يفعّل نفسه من غير ما يدفع فعلاً.
+    //
+    // الدالة دي بقت خاصة بنسخة الموقع بس (isNative بيخفي زرار الاشتراك
+    // خالص جوه التطبيق) — التطبيق نفسه مبيبدأش ولا بيدير أي عملية دفع.
     this.http.post(`${environment.apiUrl}/payment/create-paymob`, { plan }, { headers }).subscribe({
-      next: async (res: any) => {
+      next: (res: any) => {
         const paymentUrl = res.payment_url;
         if (!paymentUrl) {
           this.loadingPlan.set(null);
           this.errorMessage.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, please try again');
           return;
         }
-        if (Capacitor.isNativePlatform()) {
-          // جوه التطبيق (Android) — نفتح متصفح النظام الخارجي، مش WebView
-          // جوه التطبيق، عشان نلتزم بسياسة Google بخصوص أي دفع خارج
-          // Play Billing.
-          await Browser.open({ url: paymentUrl });
-        } else {
-          // شغال كموقع في براوزر عادي — نروح مباشرة لصفحة الدفع
-          window.location.href = paymentUrl;
-        }
+        window.location.href = paymentUrl;
         this.loadingPlan.set(null);
       },
       error: (err) => {
