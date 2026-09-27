@@ -96,7 +96,7 @@ import { environment } from '../../../environments/environment';
           <div *ngIf="lastInviteLink()" class="bg-gray-50 rounded-lg p-2">
             <p class="text-xs text-gray-500 mb-2">
               {{ inviteMode() === 'link'
-                ? '✅ اتعمل الرابط — ابعته دلوقتي على واتساب أو تليجرام:'
+                ? '✅ اتعمل الرابط — ابعته دلوقتي على تليجرام أو فيسبوك:'
                 : '⚠️ لو العضو معندوش حساب لسه، ابعتله اللينك ده يعمل حساب بيه:' }}
             </p>
             <div class="flex gap-2">
@@ -107,6 +107,10 @@ import { environment } from '../../../environments/environment';
               <a [href]="telegramShareUrl()" target="_blank" rel="noopener"
                  class="flex-1 py-2 rounded-lg bg-blue-500 text-white text-xs font-bold text-center no-underline">
                 ✈️ تيليجرام
+              </a>
+              <a [href]="facebookShareUrl()" target="_blank" rel="noopener"
+                 class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold text-center no-underline">
+                📘 فيسبوك
               </a>
             </div>
           </div>
@@ -326,6 +330,10 @@ export class TeamComponent implements OnInit {
   }
   telegramShareUrl(): string {
     return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان')}`;
+  }
+  facebookShareUrl(): string {
+    // ⚠️ فيسبوك بيتجاهل أي نص مخصص (quote) في أغلب الحالات دلوقتي — بيشارك الرابط بس
+    return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(this.lastInviteLink() || '')}`;
   }
 
   private headers() {
