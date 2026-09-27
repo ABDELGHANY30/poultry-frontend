@@ -53,30 +53,9 @@ import { environment } from '../../../environments/environment';
     <div *ngIf="activeTab() === 'invite'">
       <div class="card mb-4">
         <h2 class="section-title mb-3">دعوة عضو جديد</h2>
-
-        <!-- 🔀 طريقة الدعوة: عنده إيميل يستخدمه، ولا لسه معملش حساب على الموقع؟ -->
-        <div class="flex gap-2 mb-3">
-          <button type="button" (click)="inviteMode.set('email')"
-                  class="flex-1 py-2 rounded-lg text-xs font-bold border"
-                  [class.bg-green-600]="inviteMode() === 'email'" [class.text-white]="inviteMode() === 'email'"
-                  [class.text-gray-500]="inviteMode() !== 'email'">
-            📧 عنده إيميل
-          </button>
-          <button type="button" (click)="inviteMode.set('link')"
-                  class="flex-1 py-2 rounded-lg text-xs font-bold border"
-                  [class.bg-green-600]="inviteMode() === 'link'" [class.text-white]="inviteMode() === 'link'"
-                  [class.text-gray-500]="inviteMode() !== 'link'">
-            🔗 لسه معملش حساب
-          </button>
-        </div>
-
         <div class="space-y-2">
-          <input *ngIf="inviteMode() === 'email'" type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو"
+          <input type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو"
                  class="form-input text-sm w-full"/>
-          <p *ngIf="inviteMode() === 'link'" class="text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
-            💡 مش لازم تعرف إيميله دلوقتي — حدد الصلاحيات وابعتله رابط الدعوة على واتساب أو تليجرام مباشرة،
-            وهو هيعمل حساب ويقبل الدعوة من نفس اللينك.
-          </p>
           <select [(ngModel)]="inviteForm.role" class="form-input text-sm w-full">
             <option value="worker">عامل مزرعة</option>
             <option value="vet">طبيب بيطري</option>
@@ -89,15 +68,13 @@ import { environment } from '../../../environments/environment';
             <input type="checkbox" [(ngModel)]="inviteForm.can_view_financials"/>
             يقدر يشوف البيانات المالية
           </label>
-          <button (click)="sendInvite()" [disabled]="(inviteMode() === 'email' && !inviteForm.invited_email) || inviting()"
+          <button (click)="sendInvite()" [disabled]="!inviteForm.invited_email || inviting()"
                   class="w-full py-2.5 rounded-xl bg-green-600 text-white font-bold disabled:opacity-40">
-            {{ inviting() ? 'جاري الإرسال...' : (inviteMode() === 'link' ? '🔗 إنشاء رابط الدعوة' : 'إرسال الدعوة') }}
+            {{ inviting() ? 'جاري الإرسال...' : 'إرسال الدعوة' }}
           </button>
           <div *ngIf="lastInviteLink()" class="bg-gray-50 rounded-lg p-2">
             <p class="text-xs text-gray-500 mb-2">
-              {{ inviteMode() === 'link'
-                ? '✅ اتعمل الرابط — ابعته دلوقتي على واتساب أو تليجرام:'
-                : '⚠️ لو العضو معندوش حساب لسه، ابعتله اللينك ده يعمل حساب بيه:' }}
+              ⚠️ لو العضو معندوش حساب لسه، ابعتله اللينك ده يعمل حساب بيه:
             </p>
             <div class="flex gap-2">
               <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
@@ -119,7 +96,7 @@ import { environment } from '../../../environments/environment';
         <div *ngFor="let m of members()" class="bg-gray-50 rounded-lg px-3 py-2 mb-1.5">
           <div class="flex items-center justify-between text-sm">
             <div>
-              <span class="font-bold">{{ m.invited_email || '🔗 دعوة بلينك (لسه بدون إيميل)' }}</span>
+              <span class="font-bold">{{ m.invited_email }}</span>
               <span class="text-[var(--c-muted)] text-xs"> — {{ m.role === 'vet' ? 'بيطري' : 'عامل' }}</span>
               <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold mr-1"
                     [class.bg-amber-100]="m.status === 'pending'" [class.text-amber-700]="m.status === 'pending'"
@@ -222,7 +199,6 @@ export class TeamComponent implements OnInit {
   pendingInvites = signal<any[]>([]);
   inviting = signal(false);
   lastInviteLink = signal<string | null>(null);
-  inviteMode = signal<'email' | 'link'>('email'); // 📧 دعوة بإيميل معروف / 🔗 دعوة بلينك بس لحد لسه معملش حساب
 
   // ✏️ تعديل صلاحيات/تقييد قطعان عضو موجود
   editingMemberId = signal<string | null>(null);
@@ -344,15 +320,9 @@ export class TeamComponent implements OnInit {
   }
 
   sendInvite() {
-    const isLinkMode = this.inviteMode() === 'link';
-    if (!isLinkMode && !this.inviteForm.invited_email) return;
-
+    if (!this.inviteForm.invited_email) return;
     this.inviting.set(true);
-    // 🔗 وضع "لسه معملش حساب": نبعت من غير إيميل — الباك إند لازم يقبل invited_email = null
-    // (يتقارن بالإيميل الحقيقي وقت ما العضو يعمل حساب ويفتح اللينك ويقبل الدعوة)
-    const payload = isLinkMode ? { ...this.inviteForm, invited_email: null } : this.inviteForm;
-
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, payload, { headers: this.headers() })
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm, { headers: this.headers() })
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
