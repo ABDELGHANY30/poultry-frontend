@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
@@ -111,12 +111,24 @@ interface HealthScoreData {
           </div>
         </div>
 
-        <!-- الأسباب -->
-        <div *ngIf="d.factors.length" class="space-y-1.5 border-t pt-3">
-          <div class="text-[11px] font-black text-gray-500 mb-2">⚠️ أسباب نقص {{ 100 - d.score }} درجة</div>
-          <div *ngFor="let f of d.factors" class="flex items-center justify-between text-xs bg-red-50 rounded-lg px-2.5 py-1.5">
-            <span class="text-gray-700 font-medium">{{ f.label }}</span>
-            <span class="text-red-500 font-black flex-shrink-0">{{ f.impact }}</span>
+        <!-- 🔎 زرار عرض أسباب النقص -->
+        <div *ngIf="d.factors.length" class="border-t pt-3">
+          <button type="button" (click)="showFactors.set(!showFactors())"
+                  class="w-full flex items-center justify-between text-xs font-black text-red-600 bg-red-50 rounded-lg px-2.5 py-2">
+            <span>⚠️ في {{ d.factors.length }} سبب نقص {{ 100 - d.score }} درجة</span>
+            <span>{{ showFactors() ? 'إخفاء ▲' : 'عرض التفاصيل ▼' }}</span>
+          </button>
+
+          <!-- الأسباب: كل سبب زرار بيودّيك للمكان اللي المشكلة ظاهرة فيه -->
+          <div *ngIf="showFactors()" class="space-y-1.5 mt-2">
+            <button *ngFor="let f of d.factors" type="button" (click)="factorClick.emit(f)"
+                    class="w-full flex items-center justify-between text-xs bg-red-50 hover:bg-red-100 transition-colors rounded-lg px-2.5 py-1.5 text-right">
+              <span class="text-gray-700 font-medium">{{ f.label }}</span>
+              <span class="flex items-center gap-1 flex-shrink-0">
+                <span class="text-red-500 font-black">{{ f.impact }}</span>
+                <span class="text-red-300">←</span>
+              </span>
+            </button>
           </div>
         </div>
 
@@ -149,8 +161,12 @@ interface HealthScoreData {
 export class HealthScoreWidgetComponent implements OnInit {
   @Input() flockId?: string;
 
+  /** بينبعت لما المستخدم يدوس على سبب نقص معين — الصفحة الأب هي اللي تقرر تودّيه فين بالظبط */
+  @Output() factorClick = new EventEmitter<HealthFactor>();
+
   private http = inject(HttpClient);
   data = signal<HealthScoreData | null>(null);
+  showFactors = signal(false);
   loading = signal(true);
   error = signal(false);
 
@@ -240,6 +256,7 @@ export class HealthScoreWidgetComponent implements OnInit {
   load() {
     this.loading.set(true);
     this.error.set(false);
+    this.showFactors.set(false); // نقفل تفاصيل الأسباب لما نغيّر القطيع/نعيد التحميل
     const id = this.selectedFlockId();
     const params = id ? `?flock_id=${id}` : '';
 

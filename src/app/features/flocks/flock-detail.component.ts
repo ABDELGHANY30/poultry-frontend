@@ -154,6 +154,60 @@ const TURKEY_VACC = [
                   class="text-xs text-gray-400 font-bold hover:text-gray-600">إغلاق ✕</button>
         </div>
 
+        <!-- 📊 مرحلة اليوم: كام المفروض ياكل القطيع النهاردة وإيه المطلوب يتعمل -->
+        <div class="mb-3">
+          <button type="button" (click)="showTodayStagePanel.set(!showTodayStagePanel())"
+                  class="w-full flex items-center justify-between text-xs font-black text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <span>📊 مرحلة اليوم — إيه المفروض ياكل ويتعمل النهاردة</span>
+            <span>{{ showTodayStagePanel() ? 'إخفاء ▲' : 'عرض ▼' }}</span>
+          </button>
+
+          <div *ngIf="showTodayStagePanel()" class="mt-2 rounded-xl bg-gray-50 border p-3 text-xs space-y-2">
+            <ng-container *ngIf="cycleProgram() as cp; else noCycleData">
+              <div *ngIf="!cp.has_program" class="text-center text-[var(--c-muted)]">{{ cp.message }}</div>
+
+              <ng-container *ngIf="cp.has_program">
+                <div class="font-black text-sm text-gray-800">
+                  {{ cp.is_repeating ? ('دورة رقم ' + cp.cycle_number + ' — يوم ' + cp.age_days) : ('اليوم ' + cp.age_days) }}
+                  <span *ngIf="cp.today_phase">— مرحلة "{{ cp.today_phase.phase_label }}"</span>
+                </div>
+
+                <!-- 🌾 كام المفروض ياكل القطيع كله النهاردة، حسب العدد المسجل -->
+                <div *ngIf="cp.target_feed_g_per_bird_today !== null" class="bg-white rounded-lg p-2 border">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[var(--c-muted)]">العلف المستهدف للطائر الواحد:</span>
+                    <span class="font-bold">{{ cp.target_feed_g_per_bird_today }} جم/طائر</span>
+                  </div>
+                  <div *ngIf="todayTotalFeedKg() !== null" class="flex items-center justify-between mt-1">
+                    <span class="text-[var(--c-muted)]">إجمالي العلف المطلوب للقطيع ({{ flock()!.currentCount | number }} طائر):</span>
+                    <span class="font-black text-green-700">{{ todayTotalFeedKg() }} كجم</span>
+                  </div>
+                </div>
+                <p *ngIf="cp.target_feed_g_per_bird_today === null" class="text-gray-400">{{ cp.feed_amount_note }}</p>
+
+                <!-- ✅ إيه المطلوب يتعمل النهاردة بالظبط -->
+                <div *ngIf="cp.today_phase?.actions?.length" class="bg-white rounded-lg p-2 border">
+                  <p class="font-bold text-gray-600 mb-1">✅ المطلوب يتعمل النهاردة:</p>
+                  <ul class="space-y-0.5">
+                    <li *ngFor="let a of cp.today_phase.actions">• {{ a }}</li>
+                  </ul>
+                </div>
+
+                <!-- 🧠 نصايح مبنية على آخر سجل فعلي -->
+                <div *ngIf="cp.advice?.length" class="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                  <p class="font-bold text-blue-800 mb-1">🧠 نصايح اليوم:</p>
+                  <p *ngFor="let a of cp.advice" class="text-blue-900">• {{ a }}</p>
+                </div>
+
+                <p *ngIf="cp.today_phase?.warning" class="text-red-600 font-bold">⚠️ {{ cp.today_phase.warning }}</p>
+              </ng-container>
+            </ng-container>
+            <ng-template #noCycleData>
+              <div class="text-center text-[var(--c-muted)]">جاري تحميل بيانات المرحلة...</div>
+            </ng-template>
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
           <div>
             <label class="form-label">النفوق اليومي</label>
@@ -227,7 +281,7 @@ const TURKEY_VACC = [
 
     <ng-template #todaySummaryBlock>
       <div class="grid lg:grid-cols-2 gap-4 mb-4">
-        <app-health-score-widget [flockId]="flock()!.id"></app-health-score-widget>
+        <app-health-score-widget [flockId]="flock()!.id" (factorClick)="onHealthFactorClick($event)"></app-health-score-widget>
 
         <div class="card">
           <div class="flex items-center justify-between mb-2">
@@ -919,6 +973,38 @@ export class FlockDetailComponent implements OnInit {
   adherenceReport = signal<any>(null);
   showFullProgram = signal(false);
   toggleFullProgram() { this.showFullProgram.update(v => !v); }
+
+  // 📊 لوحة "مرحلة اليوم" جوه فورم التسجيل — العلف المطلوب + المهام حسب عمر القطيع
+  showTodayStagePanel = signal(false);
+
+  /** إجمالي العلف المطلوب (كجم) للقطيع كله النهاردة = المستهدف للطائر × العدد المسجل حاليًا */
+  todayTotalFeedKg = (): number | null => {
+    const cp = this.cycleProgram();
+    const count = this.flock()?.currentCount;
+    if (!cp || cp.target_feed_g_per_bird_today == null || !count) return null;
+    return Math.round((cp.target_feed_g_per_bird_today * count / 1000) * 10) / 10;
+  };
+
+  /** لما المستخدم يدوس على سبب نقص في كرت الصحة — نودّيه للمكان اللي يشرح المشكلة بالتفصيل */
+  onHealthFactorClick(factor: { label: string; impact: number }) {
+    const label = factor.label || '';
+    const isAbout = (...keywords: string[]) => keywords.some(k => label.includes(k));
+
+    if (isAbout('نفوق', 'وفيات', 'موت')) {
+      this.activeSection.set('records'); // 📜 السجلات — فيها عمود النفوق اليومي بالتفصيل
+    } else if (isAbout('علف', 'تغذية', 'وزن', 'حرارة', 'إضاءة')) {
+      this.activeSection.set('today'); // 📅 اليوم — فيه برنامج الدورة والنصايح المبنية على المقارنة بالمستهدف
+      this.showTodayStagePanel.set(true);
+    } else if (isAbout('تطعيم', 'لقاح', 'علاج', 'دواء', 'سحب')) {
+      this.activeSection.set('health'); // 💉 الصحة — فيها التحصينات والعلاجات
+    } else {
+      this.activeSection.set('today');
+    }
+
+    // نمرّر للتابات نفسها عشان المستخدم يشوف فين اتنقل
+    document.querySelector('.flex.gap-2.mb-4.overflow-x-auto')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   // 👷 دعوة أعضاء (مطبّقة على كل قطعان صاحب الحساب، مش القطيع المفتوح بس)
   farmMembers = signal<any[]>([]);
