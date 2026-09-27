@@ -41,7 +41,7 @@ import { environment } from '../../../environments/environment';
         <p class="text-2xl font-bold text-stone-800 tabular-nums">
           {{ status()?.remaining }}<span class="text-stone-300">/{{ status()?.daily_limit === 999999 ? '∞' : status()?.daily_limit }}</span>
         </p>
-        <p class="text-xs text-stone-400">{{ lang === 'ar' ? 'سؤال متبقي اليوم' : 'questions left today' }}</p>
+        <p class="text-xs text-stone-400">{{ lang === 'ar' ? 'نقطة متبقية اليوم' : 'points left today' }}</p>
       </div>
     </div>
 
@@ -69,60 +69,35 @@ import { environment } from '../../../environments/environment';
            [class.bg-stone-50]="!status()?.is_pro">
         <div>
           <p class="font-semibold text-stone-700">{{ lang === 'ar' ? 'مجانية' : 'Free' }}</p>
-          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '10 أسئلة كل يوم' : '10 questions per day' }}</p>
+          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '10 نقاط كل يوم' : '10 points per day' }}</p>
         </div>
         <span *ngIf="!status()?.is_pro" class="text-xs font-semibold text-stone-500 bg-stone-200 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}
         </span>
       </div>
 
-      <!-- Pro Monthly -->
-      <div class="relative border-2 rounded-xl px-5 py-4 flex items-center justify-between"
-           [class.border-emerald-600]="!isCurrentPlan('monthly')"
-           [class.border-emerald-700]="isCurrentPlan('monthly')"
-           [class.bg-emerald-50]="isCurrentPlan('monthly')">
+      <!-- Pro tiers: p150 / p200 / p350 -->
+      <div *ngFor="let p of tiers" class="relative border-2 rounded-xl px-5 py-4 flex items-center justify-between"
+           [class.border-emerald-600]="!isCurrentPlan(p.id)"
+           [class.border-emerald-700]="isCurrentPlan(p.id)"
+           [class.bg-emerald-50]="isCurrentPlan(p.id)">
         <div>
           <p class="font-semibold text-stone-800">
-            {{ lang === 'ar' ? 'شهري' : 'Monthly' }}
-            <span class="text-emerald-700 font-bold ms-1">150 {{ lang === 'ar' ? 'ج.م' : 'EGP' }}</span>
+            {{ p.label[lang] }}
+            <span class="text-emerald-700 font-bold ms-1">{{ p.price }} {{ lang === 'ar' ? 'ج.م' : 'EGP' }}</span>
           </p>
-          <p class="text-sm text-stone-500">{{ lang === 'ar' ? 'أسئلة وصور بلا حد، تقارير متقدمة' : 'Unlimited Q&A and images, advanced reports' }}</p>
+          <p class="text-sm text-stone-500">
+            {{ lang === 'ar' ? p.points + ' نقطة يومياً — أسئلة نصية 1 نقطة، اتخاذ قرار 2، تحليل صورة 4' : p.points + ' points/day — text Q&A 1pt, decisions 2pt, image analysis 4pt' }}
+          </p>
         </div>
         <button
-          *ngIf="!isCurrentPlan('monthly') && !isNative"
-          (click)="subscribe('pro_monthly')"
-          [disabled]="loadingPlan() === 'pro_monthly'"
+          *ngIf="!isCurrentPlan(p.id) && !isNative"
+          (click)="subscribe(p.id)"
+          [disabled]="loadingPlan() === p.id"
           class="shrink-0 bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
-          {{ loadingPlan() === 'pro_monthly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
+          {{ loadingPlan() === p.id ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
         </button>
-        <span *ngIf="isCurrentPlan('monthly')" class="shrink-0 text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
-          {{ lang === 'ar' ? 'الحالية' : 'Current' }}
-        </span>
-      </div>
-
-      <!-- Pro Yearly -->
-      <div class="relative border-2 rounded-xl px-5 py-4 flex items-center justify-between"
-           [class.border-amber-500]="!isCurrentPlan('yearly')"
-           [class.border-amber-600]="isCurrentPlan('yearly')"
-           [class.bg-amber-50]="isCurrentPlan('yearly')">
-        <div class="absolute -top-2.5 left-5 bg-amber-500 text-white text-[11px] font-semibold px-2 py-0.5 rounded-full">
-          {{ lang === 'ar' ? 'وفّر 800 ج.م' : 'Save 800 EGP' }}
-        </div>
-        <div class="pt-1.5">
-          <p class="font-semibold text-stone-800">
-            {{ lang === 'ar' ? 'سنوي' : 'Yearly' }}
-            <span class="text-amber-700 font-bold ms-1">1000 {{ lang === 'ar' ? 'ج.م' : 'EGP' }}</span>
-          </p>
-          <p class="text-sm text-stone-500">{{ lang === 'ar' ? 'كل مميزات الشهري، بأقل تكلفة شهرياً' : 'Everything in monthly, at a lower monthly cost' }}</p>
-        </div>
-        <button
-          *ngIf="!isCurrentPlan('yearly') && !isNative"
-          (click)="subscribe('pro_yearly')"
-          [disabled]="loadingPlan() === 'pro_yearly'"
-          class="shrink-0 bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 transition disabled:opacity-50">
-          {{ loadingPlan() === 'pro_yearly' ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
-        </button>
-        <span *ngIf="isCurrentPlan('yearly')" class="shrink-0 text-xs font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full">
+        <span *ngIf="isCurrentPlan(p.id)" class="shrink-0 text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}
         </span>
       </div>
@@ -140,6 +115,14 @@ export class SubscriptionComponent implements OnInit {
   status = signal<any>(null);
   errorMessage = signal<string | null>(null);
   isNative = Capacitor.isNativePlatform();
+
+  // الأسعار والنقاط اليومية لكل باقة — لو غيّرت رقم هنا، لازم يتغيّر
+  // نفس الرقم في credites.py (DAILY_CREDITS) وpay.py (PLANS) في الباك اند
+  tiers: { id: string; price: number; points: number; label: Record<string, string> }[] = [
+    { id: 'p150', price: 150, points: 30, label: { ar: 'باقة 150', en: 'Package 150' } },
+    { id: 'p200', price: 200, points: 45, label: { ar: 'باقة 200', en: 'Package 200' } },
+    { id: 'p350', price: 350, points: 100, label: { ar: 'باقة 350', en: 'Package 350' } },
+  ];
 
   // بس بيفتح الموقع من برا — التطبيق مش بيبدأ ولا بيدير أي عملية دفع؛
   // المستخدم نفسه هو اللي بيكمل الاشتراك من الموقع بمحض إرادته، زي ما
@@ -181,18 +164,18 @@ export class SubscriptionComponent implements OnInit {
     }
   }
 
-  // بيتأكد إن الخطة دي هي الفعلية بالظبط (شهري/سنوي)، مش بس "المستخدم Pro"
-  // — عشان لو المستخدم مشترك شهري، الكارت السنوي يفضل يوري زرار "اشترك"
-  // بدل ما يتعامل معاه كأنه مشترك فيه هو كمان
-  isCurrentPlan(period: 'monthly' | 'yearly'): boolean {
-    return !!this.status()?.is_pro && this.status()?.billing_period === period;
+  // بيتأكد إن الباقة دي هي الفعلية بالظبط (p150/p200/p350)، مش بس
+  // "المستخدم Pro" — عشان لو مشترك في باقة معينة، الباقات التانية تفضل
+  // توري زرار "اشترك" بدل ما تتعامل معاه كأنه مشترك فيها هو كمان
+  isCurrentPlan(tierId: string): boolean {
+    return !!this.status()?.is_pro && this.status()?.billing_period === tierId;
   }
 
   planLabel(): string {
     const s = this.status();
     if (!s?.is_pro) return this.lang === 'ar' ? 'مجانية' : 'Free';
-    if (s.billing_period === 'yearly') return this.lang === 'ar' ? 'Pro سنوي' : 'Pro Yearly';
-    return this.lang === 'ar' ? 'Pro شهري' : 'Pro Monthly';
+    const tier = this.tiers.find(t => t.id === s.billing_period);
+    return tier ? tier.label[this.lang] : (this.lang === 'ar' ? 'Pro' : 'Pro');
   }
 
   loadStatus() {
