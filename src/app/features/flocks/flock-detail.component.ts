@@ -1590,6 +1590,11 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     this.loadAdherenceReport(id);
     this.loadFarmMembers();
     this.loadPendingInvitesForMe();
+    this.loadMyAccess(id);       // 🐛 كانت متعرّفة بس مش متنادى عليها — myAccess() كان فاضل null دايمًا
+    this.loadVaccinations(id);   // 🐛 السبب الأساسي: كانت متعرّفة بس مش متنادى عليها هنا، فـ dbVaccinations()
+                                  // كانت فاضلة [] دايمًا، وكل صف تحصين كان بياخد dbId: null، فزرار "اتنفذ"
+                                  // كان بيدخل على toggleVaccination() ويرجع فورًا من غير ما يعمل أي حاجة
+                                  // (شوف الشرط if (!flockId || !row.dbId) return;)
     // 🥚 تحميل السجلات اليومية (بنستخدمها في عرض سجلات البياض + التحقق من تسجيل اليوم)
     this.svc.getRecords(id).subscribe({
       next: (recs) => this.records.set(recs || []),
