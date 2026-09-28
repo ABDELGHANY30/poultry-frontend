@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مشروعك
 
@@ -15,11 +15,19 @@ export class StreakService {
 
   constructor(private http: HttpClient) {}
 
+  // نفس طريقة باقي الصفحات: التوكن بيتبعت يدوي في الـ header
+  private headers() {
+    const token = localStorage.getItem('spa_token');
+    return new HttpHeaders({ Authorization: `Bearer ${token}` });
+  }
+
   /** ناديها في أي مكان (فتح الداشبورد، بعد تسجيل سجل يومي جديد، إلخ) */
   async refresh(): Promise<void> {
     try {
       const result = await firstValueFrom(
-        this.http.get<StreakStatus>(`${environment.apiUrl}/growth/streak/status`)
+        this.http.get<StreakStatus>(`${environment.apiUrl}/growth/streak/status`, {
+          headers: this.headers(),
+        })
       );
       this.streak.set(result);
     } catch (err) {

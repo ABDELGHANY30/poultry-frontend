@@ -37,22 +37,33 @@ const CATEGORIES = [
       <div class="absolute inset-0 opacity-10"
             style="background:repeating-linear-gradient(45deg,transparent,transparent 30px,rgba(255,255,255,.05) 30px,rgba(255,255,255,.05) 60px)"></div>
       <div class="relative px-6 py-7 flex items-center gap-4">
-        <div class="flex-1">
-          <p class="text-white/60 text-sm font-medium mb-1">{{ 'DASHBOARD.WELCOME' | translate }},</p>
-          <h1 class="text-2xl font-bold leading-tight">{{ userName() }} 👋</h1>
+        <div class="flex-1 min-w-0">
+          <!-- مسجّل: الترحيب + الاسم + عدد مرات التسجيل المتتالية -->
+          <ng-container *ngIf="isLoggedIn(); else guestBanner">
+            <p class="text-white/60 text-sm font-medium mb-1">{{ 'DASHBOARD.WELCOME' | translate }},</p>
+            <h1 class="text-2xl font-bold leading-tight">{{ userName() }} 👋</h1>
+            <div *ngIf="bannerStreakText() as text" class="mt-3">
+              <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                          bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
+                <span class="text-base leading-none">🔥</span>
+                <span class="text-white text-xs font-black leading-tight">{{ text }}</span>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- غير مسجّل: زرار تسجيل الدخول جوه البانر -->
+          <ng-template #guestBanner>
+            <p class="text-white/60 text-sm font-medium mb-1">أهلاً بيك 👋</p>
+            <h1 class="text-xl font-bold leading-tight mb-3">سجّل دخولك عشان تفتح كل المميزات</h1>
+            <a routerLink="/auth/login"
+               class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white text-green-800 font-bold text-sm no-underline shadow-md active:scale-95 transition-all">
+              تسجيل الدخول
+            </a>
+          </ng-template>
         </div>
         <!-- Pro Badge -->
         <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-3 py-1.5 rounded-2xl flex-shrink-0">
           ⭐ PRO
-        </div>
-        <!-- Streak Badge (بدل عرض الأسئلة المتبقية القديم) -->
-        <div *ngIf="bannerStreakText() as text" class="flex-shrink-0">
-          <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                      bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30
-                      animate-pulse">
-            <span class="text-base leading-none">🔥</span>
-            <span class="text-white text-xs font-black leading-none">{{ text }}</span>
-          </div>
         </div>
         <div class="text-6xl opacity-20 select-none hidden sm:block">🐔</div>
       </div>
@@ -125,21 +136,14 @@ const CATEGORIES = [
     </ng-container>
 
     <!-- 🔒 كارت توجيه لغير المكتملين: يظهر لحد ما يسجّل دخول ويضيف أول قطيع -->
-    <div *ngIf="!fullAccess()" class="card text-center py-8 px-5"
+    <div *ngIf="isLoggedIn() && !hasFlock()" class="card text-center py-8 px-5"
          style="background:linear-gradient(135deg,#f0fdf4 0%,#e8f5e9 100%); border:1px dashed #2d9e5f66;">
-      <div class="text-4xl mb-3">{{ !isLoggedIn() ? '🔑' : '🐔' }}</div>
-      <h2 class="text-base font-bold text-gray-800 mb-1">
-        {{ !isLoggedIn() ? 'سجّل دخولك عشان تفتح كل المميزات' : 'سجّل أول قطيع عشان تفتح كل المميزات' }}
-      </h2>
+      <div class="text-4xl mb-3">🐔</div>
+      <h2 class="text-base font-bold text-gray-800 mb-1">سجّل أول قطيع عشان تفتح كل المميزات</h2>
       <p class="text-sm text-[var(--c-muted)] mb-4">
-        {{ !isLoggedIn()
-            ? 'بعد تسجيل الدخول هتقدر تضيف قطعانك وتشوف صحتها وتنبيهاتها ونتائج التقارير.'
-            : 'بمجرد ما تضيف قطيع هتقدر تتابع صحته وتنبيهاته ونتائج التقارير كاملة.' }}
+        بمجرد ما تضيف قطيع هتقدر تتابع صحته وتنبيهاته ونتائج التقارير كاملة.
       </p>
-      <a *ngIf="!isLoggedIn()" routerLink="/auth/login" class="btn-primary btn btn-sm inline-flex">
-        تسجيل الدخول
-      </a>
-      <a *ngIf="isLoggedIn()" routerLink="/flocks" class="btn-primary btn btn-sm inline-flex">
+      <a routerLink="/flocks" class="btn-primary btn btn-sm inline-flex">
         + {{ 'FLOCK.ADD' | translate }}
       </a>
     </div>
@@ -345,7 +349,8 @@ export class DashboardComponent implements OnInit {
 
   bannerStreakText = computed(() => {
     const s = this.streakSvc.streak();
-    if (!s || s.current_streak === 0) return null;
+    if (!s) return null;
+    if (s.current_streak === 0) return 'سجّل بيانات النهاردة عشان تبدأ سلسلة أيامك';
     const remaining = s.next_milestone ? s.next_milestone - s.current_streak : null;
     return remaining
       ? `سجّلت ${s.current_streak} ${s.current_streak === 1 ? 'مرة' : 'مرات'} متتالية — باقي ${remaining} ${remaining === 1 ? 'يوم' : 'أيام'} للهدية 🎁`
@@ -490,7 +495,7 @@ getCategoryNameAr(categoryKey: string): string {
     this.loadPrices();
     this.loadTodayTemps();
     this.loadReportsProStatus();
-    this.streakSvc.refresh();
+    if (this.isLoggedIn()) this.streakSvc.refresh();
   }
 
   loadReportsProStatus() {
