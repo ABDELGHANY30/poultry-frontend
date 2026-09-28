@@ -49,10 +49,16 @@ html { scroll-behavior: smooth; }
   لوحدها (overflow-y-auto) فمش محتاج قفل الـ body عشان يشتغل صح.
 */
 html, body {
-  height: 100dvh;
+  height: calc(var(--app-vh, 1vh) * 100);
   overscroll-behavior: none;
 }
-
+.h-screen, .min-h-screen, .max-h-screen,
+.h-dvh, .min-h-dvh, .max-h-dvh,
+.h-svh, .min-h-svh, .max-h-svh,
+.h-lvh, .min-h-lvh, .max-h-lvh {
+  height: calc(var(--app-vh, 1vh) * 100) !important;
+  min-height: calc(var(--app-vh, 1vh) * 100) !important;
+}
 app-root {
   display: block;
   height: 100%;
@@ -89,6 +95,7 @@ input, textarea, select {
   height: 100%;
   display: flex;
   flex-direction: column;
+  
 }
 
 .page-wrapper {
@@ -185,7 +192,36 @@ textarea.form-input {
   @apply w-12 h-12 rounded-2xl flex items-center justify-center;
   width: 52px; height: 52px;
 }
+.splash-container {
+  position: fixed;
+  inset: 0;
+  opacity: 1 !important;      // ← جديد
+  isolation: isolate;         // ← جديد، يمنع أي blending من عناصر تحته
+  background-color: #fdf6e8 !important;
+  color-scheme: light;
+  direction: ltr;
 
+}
+
+:host {                       // ← جديد، خارج .splash-container
+  display: block;
+  background: #fdf6e8;
+}
+
+ 
+:root {
+  --keyboard-height: 0px;
+    color-scheme: light only;
+}
+
+main {
+  transition: transform .15s ease-out;
+  will-change: transform;
+}
+
+body.keyboard-open main {
+  transform: translateY(calc(var(--keyboard-height) * -1));
+}
 /* Animations */
 @keyframes fadeIn  { from {opacity:0} to {opacity:1} }
 @keyframes slideUp { from {opacity:0;transform:translateY(14px)} to {opacity:1;transform:translateY(0)} }
@@ -217,5 +253,6 @@ textarea.form-input {
   @apply inline-block w-1.5 h-1.5 rounded-full bg-current mx-0.5;
   animation: typing 1.2s ease-in-out infinite;
 }
+
 .dot-pulse span:nth-child(2) { animation-delay: .2s; }
 .dot-pulse span:nth-child(3) { animation-delay: .4s; }
