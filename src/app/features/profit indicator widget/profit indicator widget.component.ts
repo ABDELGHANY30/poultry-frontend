@@ -102,6 +102,7 @@ interface ProfitData {
   revenue?: number;
   costs?: { feed: number; chicks: number; overhead_estimated: number; total: number };
   assumptions?: { current_weight_kg: number; sell_price_per_kg: number; feed_price_per_kg: number; note: string };
+  projection?: any;
 }
 
 @Component({
@@ -133,6 +134,14 @@ interface ProfitData {
             <div class="flex justify-between"><span class="text-gray-500">تكاليف تشغيل تقديرية</span><span class="text-red-500">-{{ d.costs?.overhead_estimated | number:'1.0-0' }} ج</span></div>
           </div>
 
+          <div *ngIf="d.projection" class="border-t mt-2 pt-2 space-y-1 text-xs">
+            <div class="font-bold text-gray-700">🎯 لو كملت لوزن البيع ({{ d.projection.target_weight_kg }} كجم)</div>
+            <div class="flex justify-between"><span class="text-gray-500">الإيراد المتوقع</span><span class="font-bold text-gray-700">{{ d.projection.revenue | number:'1.0-0' }} ج</span></div>
+            <div class="flex justify-between"><span class="text-gray-500">تكلفة العلف حتى البيع</span><span class="text-red-500">-{{ d.projection.feed_cost | number:'1.0-0' }} ج</span></div>
+            <div class="flex justify-between"><span class="text-gray-500">الربح المتوقع</span>
+              <span class="font-black" [class.text-green-600]="d.projection.expected_profit >= 0" [class.text-red-600]="d.projection.expected_profit < 0">{{ d.projection.expected_profit | number:'1.0-0' }} ج ({{ d.projection.profit_per_bird | number:'1.0-1' }} ج/طائر)</span></div>
+            <div class="text-[10px] text-gray-400">{{ d.projection.note }}</div>
+          </div>
           <div class="text-[10px] text-gray-400 border-t mt-2 pt-2">{{ d.assumptions?.note }}</div>
         </ng-container>
 
