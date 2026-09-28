@@ -822,7 +822,26 @@ const TURKEY_VACC = [
       </p>
 
       <div *ngIf="showInviteForm()" class="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
-        <input type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو" class="form-input text-xs w-full"/>
+        <!-- 🔀 طريقة الدعوة: عنده إيميل يستخدمه، ولا لسه معملش حساب على الموقع؟ -->
+        <div class="flex gap-2">
+          <button type="button" (click)="inviteMode.set('email')"
+                  class="flex-1 py-2 rounded-lg text-[11px] font-bold border"
+                  [class.bg-green-600]="inviteMode() === 'email'" [class.text-white]="inviteMode() === 'email'"
+                  [class.text-gray-500]="inviteMode() !== 'email'">
+            📧 عنده إيميل
+          </button>
+          <button type="button" (click)="inviteMode.set('link')"
+                  class="flex-1 py-2 rounded-lg text-[11px] font-bold border"
+                  [class.bg-green-600]="inviteMode() === 'link'" [class.text-white]="inviteMode() === 'link'"
+                  [class.text-gray-500]="inviteMode() !== 'link'">
+            🔗 لسه معملش حساب
+          </button>
+        </div>
+
+        <input *ngIf="inviteMode() === 'email'" type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو" class="form-input text-xs w-full"/>
+        <p *ngIf="inviteMode() === 'link'" class="text-[11px] text-gray-500 bg-white rounded-lg p-2 border">
+          💡 مش لازم تعرف إيميله دلوقتي — حدد الصلاحيات وابعتله رابط الدعوة على تليجرام أو فيسبوك مباشرة.
+        </p>
         <select [(ngModel)]="inviteForm.role" class="form-input text-xs w-full">
           <option value="worker">عامل مزرعة</option>
           <option value="vet">طبيب بيطري</option>
@@ -831,20 +850,24 @@ const TURKEY_VACC = [
           <input type="checkbox" [(ngModel)]="inviteForm.can_view_financials"/>
           يقدر يشوف البيانات المالية
         </label>
-        <button type="button" (click)="sendInvite()" [disabled]="!inviteForm.invited_email || inviting()"
+        <button type="button" (click)="sendInvite()" [disabled]="(inviteMode() === 'email' && !inviteForm.invited_email) || inviting()"
                 class="w-full py-2 rounded-lg bg-green-600 text-white text-xs font-bold disabled:opacity-40">
-          {{ inviting() ? 'جاري الإرسال...' : 'إرسال الدعوة' }}
+          {{ inviting() ? 'جاري الإرسال...' : (inviteMode() === 'link' ? '🔗 إنشاء رابط الدعوة' : 'إرسال الدعوة') }}
         </button>
 
         <div *ngIf="lastInviteLink()" class="bg-white rounded-lg p-2 border">
           <p class="text-[10px] text-gray-500 mb-2">
-            لو العضو عنده حساب بالإيميل ده بالفعل، هيلاقي الدعوة تلقائي جوه التطبيق (تاب "قطعاني المشتركة"). لو لسه معندوش حساب، ابعتله اللينك ده يعمل حساب بيه:
+            {{ inviteMode() === 'link'
+              ? 'اتعمل الرابط — ابعته دلوقتي على تليجرام أو فيسبوك:'
+              : 'لو العضو عنده حساب بالإيميل ده بالفعل، هيلاقي الدعوة تلقائي جوه التطبيق (تاب "قطعاني المشتركة"). لو لسه معندوش حساب، ابعتله اللينك ده يعمل حساب بيه:' }}
           </p>
           <div class="flex gap-2">
             <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
                class="flex-1 py-2 rounded-lg bg-green-500 text-white text-xs font-bold text-center no-underline">📱 واتساب</a>
             <a [href]="telegramShareUrl()" target="_blank" rel="noopener"
                class="flex-1 py-2 rounded-lg bg-blue-500 text-white text-xs font-bold text-center no-underline">✈️ تيليجرام</a>
+            <a [href]="facebookShareUrl()" target="_blank" rel="noopener"
+               class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold text-center no-underline">📘 فيسبوك</a>
           </div>
         </div>
       </div>
@@ -852,7 +875,7 @@ const TURKEY_VACC = [
       <div *ngIf="farmMembers().length === 0" class="text-center py-2 text-[var(--c-muted)] text-sm">لسه معملتش أي دعوة.</div>
       <div *ngFor="let m of farmMembers()" class="flex items-center justify-between text-sm bg-gray-50 rounded-lg px-3 py-2 mb-1.5">
         <div>
-          <span class="font-bold">{{ m.invited_email }}</span>
+          <span class="font-bold">{{ m.invited_email || '🔗 دعوة بلينك (لسه بدون إيميل)' }}</span>
           <span class="text-[var(--c-muted)] text-xs"> — {{ m.role === 'vet' ? 'بيطري' : 'عامل' }}</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold mr-1"
                 [class.bg-amber-100]="m.status === 'pending'" [class.text-amber-700]="m.status === 'pending'"
@@ -1011,6 +1034,7 @@ export class FlockDetailComponent implements OnInit {
   showInviteForm = signal(false);
   inviting = signal(false);
   lastInviteLink = signal<string | null>(null);
+  inviteMode = signal<'email' | 'link'>('email'); // 📧 دعوة بإيميل معروف / 🔗 دعوة بلينك بس لحد لسه معملش حساب
   pendingInvitesForMe = signal<any[]>([]); // 🔔 دعوات موجهة لإيميلي أنا (لو صاحب الحساب ده كمان مدعو من حد تاني)
   inviteForm: { invited_email: string; role: string; can_add_records: boolean; can_view_financials: boolean } = {
     invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false,
@@ -1189,9 +1213,15 @@ export class FlockDetailComponent implements OnInit {
   }
 
   sendInvite() {
-    if (!this.inviteForm.invited_email) return;
+    const isLinkMode = this.inviteMode() === 'link';
+    if (!isLinkMode && !this.inviteForm.invited_email) return;
+
     this.inviting.set(true);
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm, { headers: this.headers() })
+    // 🔗 وضع "لسه معملش حساب": نبعت من غير إيميل — ⚠️ الباك إند لازم يقبل invited_email = null
+    // (لسه محتاج تعديل في الـ backend، شوف ملاحظة الـ 422 اللي اتبعتت في الرد)
+    const payload = isLinkMode ? { ...this.inviteForm, invited_email: null } : this.inviteForm;
+
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, payload, { headers: this.headers() })
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
@@ -1237,6 +1267,10 @@ export class FlockDetailComponent implements OnInit {
   }
   telegramShareUrl(): string {
     return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان')}`;
+  }
+  facebookShareUrl(): string {
+    // ⚠️ فيسبوك بيتجاهل أي نص مخصص (quote) في أغلب الحالات دلوقتي — بيشارك الرابط بس
+    return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(this.lastInviteLink() || '')}`;
   }
 
   // 💉 دمج الجدول الاسترشادي (أسماء/طريقة) مع حالة التنفيذ الحقيقية من الداتابيز
@@ -1726,7 +1760,10 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     const onError = (err: any) => {
       this.saving.set(false);
       console.error('تفاصيل الخطأ:', err);
-      alert('حدث خطأ أثناء الحفظ.');
+      const detail = err?.error?.detail;
+      alert(typeof detail === 'string' ? detail : 'حدث خطأ أثناء الحفظ.');
+      // 🔄 ممكن السيرفر يكون حفظ السجل فعلاً قبل ما الخطأ يحصل — نحدّث الشاشة بدل ما المستخدم يعمل ريفرش يدوي
+      this.loadData(flockId);
     };
 
     if (isEditing) {
