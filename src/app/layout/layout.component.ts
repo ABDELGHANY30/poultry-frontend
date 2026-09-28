@@ -36,8 +36,12 @@ interface NavItem {
         <div class="flex items-center gap-3 px-5 py-5 border-b border-white/10">
           <div class="w-10 h-10 rounded-2xl bg-primary-500/20 border border-primary-400/30 flex items-center justify-center text-xl">🐔</div>
           <div class="flex-1 min-w-0">
-            <p class="text-white font-bold text-sm leading-tight truncate">{{ 'MAZAR.KO' }}</p>
-            <p class="text-white/40 text-[10px] font-medium">{{ 'APP.TAGLINE' | translate }}</p>
+<a 
+  routerLink="/dashboard" 
+  class="text-white font-bold text-sm leading-tight truncate cursor-pointer hover:underline focus:outline-none">
+  {{ 'APP.NAME' | translate }}
+</a>
+          <p class="text-white/40 text-[10px] font-medium">{{ 'APP.TAGLINE' | translate }}</p>
           </div>
           <button class="text-white/40 hover:text-white lg:hidden text-lg" (click)="sideOpen.set(false)">✕</button>
         </div>
