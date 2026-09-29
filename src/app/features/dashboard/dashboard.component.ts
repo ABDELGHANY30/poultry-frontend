@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, computed, signal } from '@angular/core';
+import { Component, OnInit, inject, computed, signal, effect, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -242,37 +242,64 @@ const CATEGORIES = [
           </div>
         </div>
 
-        <!-- Alerts -->
+        <!-- 📋 تقرير الدورة (مكان التنبيهات النشطة) — بيتبع القطيع المختار -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="section-title mb-0">🔔 {{ 'DASH.ALERTS' | translate }}</h2>
-            <a routerLink="/alerts" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
-              {{ 'COMMON.VIEW_ALL' | translate }} →
+            <h2 class="section-title mb-0">📋 تقرير الدورة</h2>
+            <a routerLink="/reports" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
+              التفاصيل الكاملة →
             </a>
           </div>
-          <div class="space-y-2">
-            <div *ngFor="let a of activeAlerts()"
-                 class="flex items-start gap-3 p-3 rounded-xl border"
-                 [class.bg-red-50]="a.type==='danger'"
-                 [class.bg-orange-50]="a.type==='warning'"
-                 [class.bg-blue-50]="a.type==='info'"
-                 [class.bg-green-50]="a.type==='success'"
-                 [class.border-red-100]="a.type==='danger'"
-                 [class.border-orange-100]="a.type==='warning'">
-              <span class="text-xl mt-0.5 flex-shrink-0">{{ alertIcon(a) }}</span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate"
-                   [class.text-red-800]="a.type==='danger'"
-                   [class.text-orange-800]="a.type==='warning'"
-                   [class.text-blue-800]="a.type==='info'">
-                  {{ a.title }}
-                </p>
-                <p *ngIf="a.flock_name" class="text-xs text-[var(--c-muted)] mt-0.5">🐔 {{ a.flock_name }}</p>
+
+          <!-- 🔒 دورة منتهية والمستخدم مش Pro -->
+          <div *ngIf="cycleLocked()" class="text-center py-4">
+            <div class="text-3xl mb-2">🔒</div>
+            <p class="text-sm font-bold text-gray-800 mb-1">تقرير الدورة المنتهية لمشتركي Pro فقط</p>
+            <p class="text-xs text-[var(--c-muted)] mb-3">التقرير متاح مجاناً طول ما الدورة شغالة.</p>
+            <a routerLink="/subscription" class="btn-primary btn btn-sm inline-flex">⭐ ترقية لـ Pro</a>
+          </div>
+
+          <ng-container *ngIf="cycleReport() as r">
+            <p class="text-xs text-[var(--c-muted)] mb-3">🐔 {{ r.flock_name }}</p>
+            <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">مدة الدورة</div>
+                <div class="font-black">{{ r.cycle_days ?? '—' }} يوم</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">نسبة النفوق</div>
+                <div class="font-black text-red-600">{{ r.mortality_rate }}%</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">FCR</div>
+                <div class="font-black">{{ r.fcr ?? '—' }}</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">التحصينات</div>
+                <div class="font-black">{{ r.vaccinations_completed }}</div>
               </div>
             </div>
-            <div *ngIf="activeAlerts().length === 0" class="text-center py-6 text-green-600 font-medium text-sm">
-              ✅ {{ 'DASH.NO_ALERTS' | translate }}
+
+            <div *ngIf="r.financial as fin" class="flex items-baseline justify-between border-t pt-3 mb-3">
+              <span class="text-xs text-gray-500">💰 صافي الربح التقديري</span>
+              <span class="font-black"
+                    [class.text-green-600]="fin.net_profit >= 0" [class.text-red-600]="fin.net_profit < 0">
+                {{ fin.net_profit >= 0 ? '+' : '' }}{{ fin.net_profit | number:'1.0-0' }} ج
+              </span>
             </div>
+
+            <div *ngIf="!reportsIsPro()" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2 mb-3">
+              ⏳ متاح لك مجاناً طول ما الدورة شغالة، وبعد ما تنتهي محتاج اشتراك Pro.
+            </div>
+
+            <button (click)="downloadCyclePdf()"
+                    class="w-full py-2 rounded-xl bg-gray-800 text-white text-xs font-bold">
+              ⬇️ تحميل PDF
+            </button>
+          </ng-container>
+
+          <div *ngIf="!cycleReport() && !cycleLocked()" class="text-center py-6 text-[var(--c-muted)] text-sm">
+            {{ cycleLoading() ? 'جاري تحميل التقرير...' : 'لا توجد بيانات كافية بعد' }}
           </div>
         </div>
 
@@ -411,6 +438,52 @@ export class DashboardComponent implements OnInit {
   // users.plan)، عشان كارد الداشبورد ده يتفق مع الصفحة الحقيقية دايماً
   // ومايحصلش تناقض بين مصدرين مختلفين لنفس المعلومة.
   reportsIsPro = signal(false);
+
+  // 📋 تقرير الدورة للقطيع المختار
+  cycleReport = signal<any>(null);
+  cycleLocked = signal(false);
+  cycleLoading = signal(false);
+
+  // بيعيد تحميل التقرير كل ما القطيع المختار يتغير
+  private cycleReportEffect = effect(() => {
+    const id = this.currentFlockId();
+    untracked(() => {
+      if (id && this.isLoggedIn()) this.loadCycleReport(id);
+      else { this.cycleReport.set(null); this.cycleLocked.set(false); }
+    });
+  });
+
+  loadCycleReport(flockId: string) {
+    this.cycleLoading.set(true);
+    this.cycleReport.set(null);
+    this.cycleLocked.set(false);
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}`, { headers: this.headers() }).subscribe({
+      next: (res: any) => { this.cycleReport.set(res); this.cycleLoading.set(false); },
+      error: (err: any) => {
+        this.cycleLoading.set(false);
+        // 403 + upgrade_required = دورة منتهية والمستخدم مش مشترك
+        if (err?.status === 403 && err?.error?.detail?.upgrade_required) this.cycleLocked.set(true);
+      },
+    });
+  }
+
+  downloadCyclePdf() {
+    const id = this.currentFlockId();
+    if (!id) return;
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${id}`,
+      { headers: this.headers(), responseType: 'blob' }
+    ).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'تقرير_نهاية_الدورة.pdf';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
+    });
+  }
 // 1. قاموس لترجمة اسم الفئة للعربية
 categoryNamesAr: { [key: string]: string } = {
   'poultry': 'دجاج التسمين',
