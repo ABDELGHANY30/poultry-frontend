@@ -1,11 +1,11 @@
-import { Component, OnInit, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-splash',
   standalone: true,
   imports: [CommonModule],
-  template:` 
+  template: `
     <div class="splash-container">
 
       <svg class="hill" viewBox="0 0 1280 300" preserveAspectRatio="none">
@@ -31,10 +31,9 @@ import { CommonModule } from '@angular/common';
 
       <div class="center-content">
         <div class="logo">
-          <span class="mazar3">MAZAR3.</span>
+          <span class="mazar3">mazar3.</span>
           <span class="ko-slot">
-            <span class="ko-text" [class.hide]="iconIndex >= 0">ko</span>
-            <span class="ko-icon" *ngIf="iconIndex >= 0">{{ icons[iconIndex] }}</span>
+            <span class="flip-el" [class.flipping]="isFlipping">{{ displayValue }}</span>
           </span>
         </div>
 
@@ -43,8 +42,7 @@ import { CommonModule } from '@angular/common';
         </div>
       </div>
 
-    </div>
-    `
+    </div>`
   ,
   styles: [`
     .splash-container {
@@ -52,10 +50,13 @@ import { CommonModule } from '@angular/common';
       inset: 0;
       direction: ltr;
       unicode-bidi: isolate;
+      isolation: isolate;
+      color-scheme: light;
       display: flex;
       align-items: center;
       justify-content: center;
       background-color: #fdf6e8 !important;
+      opacity: 1 !important;
       overflow: hidden;
       z-index: 99999;
     }
@@ -68,41 +69,10 @@ import { CommonModule } from '@angular/common';
       align-items: center;
     }
 
-    .hill {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 28%;
-      z-index: 1;
-    }
-
-    .plants.left {
-      position: absolute;
-      bottom: 6%;
-      left: 3%;
-      width: 80px;
-      opacity: 0.9;
-      z-index: 1;
-    }
-
-    .barn {
-      position: absolute;
-      bottom: 5%;
-      right: 4%;
-      width: 130px;
-      opacity: 0.9;
-      z-index: 1;
-    }
-
-    .sparkle {
-      position: absolute;
-      bottom: 10%;
-      right: 8%;
-      width: 18px;
-      opacity: 0.8;
-      z-index: 1;
-    }
+    .hill { position: absolute; bottom: 0; left: 0; width: 100%; height: 28%; z-index: 1; }
+    .plants.left { position: absolute; bottom: 6%; left: 3%; width: 80px; opacity: 0.9; z-index: 1; }
+    .barn { position: absolute; bottom: 5%; right: 4%; width: 130px; opacity: 0.9; z-index: 1; }
+    .sparkle { position: absolute; bottom: 10%; right: 8%; width: 18px; opacity: 0.8; z-index: 1; }
 
     .logo {
       display: flex;
@@ -115,32 +85,24 @@ import { CommonModule } from '@angular/common';
     }
 
     .ko-slot {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-block;
       min-width: 1.5em;
       min-height: 1em;
+      perspective: 300px;
     }
-
-    .ko-text {
-      transition: opacity 0.35s ease, transform 0.35s ease;
+    .flip-el {
+      display: inline-block;
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
+      will-change: transform;
     }
-    .ko-text.hide {
-      opacity: 0;
-      transform: translateY(-8px);
-      position: absolute;
+    .flip-el.flipping {
+      animation: flipDigit 0.45s ease;
     }
-
-    .ko-icon {
-      font-size: 0.95em;
-      line-height: 1;
-      animation: pop 0.35s ease;
-    }
-    @keyframes pop {
-      0%   { transform: scale(0.3); opacity: 0; }
-      70%  { transform: scale(1.15); opacity: 1; }
-      100% { transform: scale(1); }
+    @keyframes flipDigit {
+      0%   { transform: rotateX(0deg); }
+      50%  { transform: rotateX(-90deg); }
+      100% { transform: rotateX(0deg); }
     }
 
     .progress-bar-wrapper {
@@ -158,27 +120,50 @@ import { CommonModule } from '@angular/common';
       transition: width 0.15s linear;
       border-radius: 10px;
     }
-  `]
+ ` ]
 })
-export class SplashComponent implements OnInit {
+export class SplashComponent implements OnInit, OnDestroy {
   @Output() finished = new EventEmitter<void>();
+
   progress = 0;
-  iconIndex = -1;
-  icons = [ '🐓','🦆','🐇', '🦃',];
+  isFlipping = false;
+
+  // ko يظهر الأول، وبعدين الحيوانات بتلف باستمرار
+  private sequence = ['ko', '🦆', '🐇', '🦃', '🐓', '🐦']; // بط، أرنب، رومي، ديك، سمان(بديل)
+  private seqIndex = 0;
+  displayValue = this.sequence[0];
+  private progressTimer: any;
+  private flipTimer: any;
 
   ngOnInit() {
-    const interval = setInterval(() => {
-      this.progress += 0.7;
-
-      if (this.progress >= 25 && this.iconIndex < 0) this.iconIndex = 0;
-      else if (this.progress >= 50 && this.iconIndex < 1) this.iconIndex = 1;
-      else if (this.progress >= 75 && this.iconIndex < 2) this.iconIndex = 2;
-      else if (this.progress >= 95 && this.iconIndex < 3) this.iconIndex = 3;
-
+    // شريط التقدم مستقل تمامًا عن دوران الأيقونات
+    this.progressTimer = setInterval(() => {
+      this.progress += 2;
       if (this.progress >= 100) {
-        clearInterval(interval);
+        clearInterval(this.progressTimer);
+        clearInterval(this.flipTimer);
         setTimeout(() => this.finished.emit(), 400);
       }
     }, 40);
+
+    // دوران مستمر على الحيوانات كل 450ms طول ما التحميل شغال
+    this.flipTimer = setInterval(() => {
+      this.seqIndex = (this.seqIndex + 1) % this.sequence.length;
+      this.flipTo(this.sequence[this.seqIndex]);
+    }, 450);
+  }
+
+  ngOnDestroy() {
+    clearInterval(this.progressTimer);
+    clearInterval(this.flipTimer);
+  }
+
+  private flipTo(next: string) {
+    this.isFlipping = false;
+    // إعادة تشغيل الأنيميشن (لازم نشيل الكلاس لحظة عشان يعيد التشغيل)
+    requestAnimationFrame(() => {
+      this.isFlipping = true;
+      setTimeout(() => { this.displayValue = next; }, 225);
+    });
   }
 }
