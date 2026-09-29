@@ -97,7 +97,7 @@ import { CommonModule } from '@angular/common';
   will-change: transform;
 }
 .flip-el.flipping {
-  animation: flipDigit 0.85s ease;
+  animation: flipDigit 0.6s ease;
 }
 @keyframes flipDigit {
   0%   { transform: rotateY(0deg); }
@@ -150,7 +150,7 @@ export class SplashComponent implements OnInit, OnDestroy {
     this.flipTimer = setInterval(() => {
       this.seqIndex = (this.seqIndex + 1) % this.sequence.length;
       this.flipTo(this.sequence[this.seqIndex]);
-    }, 900);
+    }, 650);
   }
 
   ngOnDestroy() {
@@ -163,7 +163,7 @@ export class SplashComponent implements OnInit, OnDestroy {
     // إعادة تشغيل الأنيميشن (لازم نشيل الكلاس لحظة عشان يعيد التشغيل)
     requestAnimationFrame(() => {
       this.isFlipping = true;
-      setTimeout(() => { this.displayValue = next; }, 400);
+      setTimeout(() => { this.displayValue = next; }, 300);
     });
   }
 }
