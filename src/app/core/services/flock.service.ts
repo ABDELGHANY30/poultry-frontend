@@ -36,8 +36,9 @@ export class FlockService {
       ageInDays: Number(raw.age_in_days ?? raw.ageInDays ?? 0),
       mortalityRate: Number(raw.mortality_rate ?? raw.mortalityRate ?? 0),
       createdAt: raw.created_at || raw.createdAt,
-      breed: raw.breed
-    };
+      breed: raw.breed,
+      housingSystem: raw.housing_system ?? raw.housingSystem ?? null
+    } as Flock;
   }
 
   // دالة مساعدة لتحويل سجل يومي قادم من الباكيند (snake_case) لصيغة الفرونت (camelCase)
@@ -75,14 +76,15 @@ export class FlockService {
   }
 
   // 3. إنشاء قطيع جديد وإرساله للباكيند
-  createFlock(payload: FlockCreate): Observable<Flock> {
+  createFlock(payload: FlockCreate & { housingSystem?: string }): Observable<Flock> {
     // تحويل البيانات المرسلة إلى snake_case ليقبلها الباكيند بسهولة
     const body = {
       name: payload.name,
       type: payload.type,
       initial_count: payload.initialCount,
       start_date: payload.startDate,
-      breed: payload.breed
+      breed: payload.breed,
+      housing_system: payload.housingSystem || null
     };
 
     return this.http.post<any>(`${environment.apiUrl}/flocks/`, body, { headers: this.getHeaders() }).pipe(

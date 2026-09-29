@@ -308,7 +308,7 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
         <div>
          <label class="form-label">{{ 'FLOCK.TYPE' | translate }}</label>
 
-<select class="form-select" [(ngModel)]="form.type" (change)="onTypeChange()">
+<select class="form-select" [(ngModel)]="form.type" (ngModelChange)="onTypeChange($event)">
   <option value="">
     {{ 'FLOCK.CHOOSE' | translate }}
   </option>
@@ -432,13 +432,13 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
           <!-- 6. أسلوب التربية — فرشة/أقفاص/نطاق حر حسب النوع -->
       <div>
   <label class="form-label">أسلوب التربية</label>
-  <select 
-    class="form-select" 
-    name="housingSystem" 
+  <select
+    class="form-select"
+    name="housingSystem"
     [(ngModel)]="housingSystem">
-    
-    <option [ngValue]="''" disabled selected>اختر أسلوب التربية</option>
-    <option *ngFor="let h of housingOptionsFor(form.type)" [value]="h.value">
+
+    <option value="" disabled>اختر أسلوب التربية</option>
+    <option *ngFor="let h of housingOptions; trackBy: trackByValue" [value]="h.value">
       {{ h.label }}
     </option>
   </select>
@@ -582,6 +582,10 @@ export class FlocksListComponent implements OnInit {
   // وفي الباك إند FlockCreate schema عشان يتبعت ويتحفظ فعليًا)
   housingSystem = '';
 
+  // ✅ قايمة ثابتة (مش بتتعمل من جديد في كل change detection) — كانت سبب إن الـ select يرجع لـ "أرضي"
+  housingOptions: { value: string; label: string }[] = [];
+  trackByValue = (_: number, h: { value: string }) => h.value;
+
   housingOptionsFor(type: string): { value: string; label: string }[] {
     const map: Record<string, { value: string; label: string }[]> = {
       broiler: [{ value: 'floor', label: 'فرشة (أرضي)' },{value:'cage',label:'بطاريات'}],
@@ -606,12 +610,12 @@ export class FlocksListComponent implements OnInit {
     this.svc.getFlocks().subscribe(); 
   }
 
-  onTypeChange() {
+  onTypeChange(type: string) {
+    this.form.type = type as unknown as FlockType;
     this.form.breed = '';
-    // 🏠 لو النوع عنده خيار تربية واحد بس (زي الأرانب = أقفاص دايمًا)، نختاره
-    // تلقائي عشان مانضايقش المستخدم بقايمة فيها اختيار واحد بس
-    const opts = this.housingOptionsFor(this.form.type as unknown as string);
-    this.housingSystem = opts.length === 1 ? opts[0].value : '';
+    // 🏠 نحسب الخيارات مرة واحدة هنا؛ لو فيه خيار واحد بس (زي الأرانب) نختاره تلقائي
+    this.housingOptions = type ? this.housingOptionsFor(type) : [];
+    this.housingSystem = this.housingOptions.length === 1 ? this.housingOptions[0].value : '';
   }
 
   toggleForm() {
@@ -630,6 +634,7 @@ export class FlocksListComponent implements OnInit {
       breed: ''
     };
     this.housingSystem = '';
+    this.housingOptions = [];
   }
 
   isValid(): boolean {
