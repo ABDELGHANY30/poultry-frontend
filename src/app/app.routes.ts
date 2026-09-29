@@ -349,7 +349,9 @@ export const routes: Routes = [
       // ⚠️ محمية بـ proGuard — مشتركي Pro فقط، وإلا يتحول لـ /subscription
       { path: 'decisionS', component: DecisionSimulatorComponent, canActivate: [proGuard] },
       { path: 'profit', component: ProfitIndicatorWidgetComponent, canActivate: [proGuard] },
-      { path: 'reports', component: ReportsComponent, canActivate: [proGuard] },
+      // 📋 التقارير: لازم تسجيل دخول بس. صلاحيات Pro بتتفحص جوه الصفحة والباك إند
+      // (المجاني بيشوف تقرير الدورة الشغالة، وباقي التقارير Pro فقط)
+      { path: 'reports', component: ReportsComponent, canActivate: [authGuard] },
 
       { path: 'market-hub', component: MarketHubComponent },
       { path: 'marketplace', redirectTo: 'market-hub', pathMatch: 'full' },

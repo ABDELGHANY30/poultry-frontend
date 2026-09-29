@@ -238,7 +238,7 @@ private clearAuth() {
     );
   }
 
-  register(payload: { name: string; email: string; password: string; language: string }) {
+  register(payload: { name: string; email: string; password: string }) {
     return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/auth/register`, payload).pipe(
       tap(r => {
         this._token.set(r.access_token);

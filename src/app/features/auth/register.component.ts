@@ -53,13 +53,6 @@ import { AuthService } from '../../core/services/auth.service';
             }
           </div>
 
-          <div class="col-span-2">
-            <label class="form-label">{{ 'AUTH.LANGUAGE' | translate }}</label>
-            <select class="form-select" [(ngModel)]="form.language">
-              <option value="ar">🇸🇦 العربية</option>
-              <option value="en">🇺🇸 English</option>
-            </select>
-          </div>
 
         </div>
 
@@ -90,7 +83,7 @@ export class RegisterComponent {
   private auth   = inject(AuthService);
   private router = inject(Router);
 
-  form = { name: '', email: '', password: '', language: 'ar', phone: '' };
+  form = { name: '', email: '', password: '', phone: '' };
   loading  = signal(false);
   phoneError = signal('');
   errorMsg   = signal('');
