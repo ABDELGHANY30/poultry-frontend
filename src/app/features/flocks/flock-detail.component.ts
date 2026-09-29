@@ -445,6 +445,17 @@ const TURKEY_VACC = [
             القطيع خارج نطاق البرنامج المعروف حاليًا (يوم {{ cp.age_days }}).
           </div>
 
+          <!-- 🏠 دليل الإسكان حسب أسلوب التربية (بطاريات/أرضي/...) — من قاعدة المعرفة -->
+          <p *ngIf="cp.housing_note" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-3">{{ cp.housing_note }}</p>
+          <div *ngIf="cp.housing_guide as hg" class="rounded-xl bg-amber-50 border border-amber-200 p-3 mt-3">
+            <p class="text-xs font-bold text-amber-800 mb-1">🏠 {{ hg.title }}</p>
+            <p *ngIf="hg.density" class="text-xs text-amber-900 mb-2"><span class="font-bold">الكثافة:</span> {{ hg.density }}</p>
+            <ul class="text-sm space-y-1 mb-2">
+              <li *ngFor="let pt of hg.points">• {{ pt }}</li>
+            </ul>
+            <p class="text-[10px] text-gray-400 border-t pt-1">المصدر: {{ hg.source }}</p>
+          </div>
+
           <!-- 🗓️ الخط الزمني الكامل للدورة -->
           <button type="button" (click)="toggleFullProgram()" class="text-xs font-bold text-green-600 mt-2">
             {{ showFullProgram() ? 'إخفاء الخط الزمني الكامل' : 'عرض الخط الزمني الكامل للدورة (' + (cp.phases?.length || 0) + ' مراحل)' }}
