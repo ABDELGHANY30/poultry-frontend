@@ -97,7 +97,7 @@ import { CommonModule } from '@angular/common';
   will-change: transform;
 }
 .flip-el.flipping {
-  animation: flipDigit 0.45s ease;
+  animation: flipDigit 0.85s ease;
 }
 @keyframes flipDigit {
   0%   { transform: rotateY(0deg); }
@@ -129,7 +129,7 @@ export class SplashComponent implements OnInit, OnDestroy {
   isFlipping = false;
 
   // ko يظهر الأول، وبعدين الحيوانات بتلف باستمرار
-  private sequence = ['ko', '🦆', '🐇', '🦃', '🐓', '🐦']; // بط، أرنب، رومي، ديك، سمان(بديل)
+  private sequence = ['ko', '🐓', '🦃','🐇',  '🐦' ,'🦆']; // بط، أرنب، رومي، ديك، سمان(بديل)
   private seqIndex = 0;
   displayValue = this.sequence[0];
   private progressTimer: any;
@@ -150,7 +150,7 @@ export class SplashComponent implements OnInit, OnDestroy {
     this.flipTimer = setInterval(() => {
       this.seqIndex = (this.seqIndex + 1) % this.sequence.length;
       this.flipTo(this.sequence[this.seqIndex]);
-    }, 450);
+    }, 900);
   }
 
   ngOnDestroy() {
@@ -163,7 +163,7 @@ export class SplashComponent implements OnInit, OnDestroy {
     // إعادة تشغيل الأنيميشن (لازم نشيل الكلاس لحظة عشان يعيد التشغيل)
     requestAnimationFrame(() => {
       this.isFlipping = true;
-      setTimeout(() => { this.displayValue = next; }, 225);
+      setTimeout(() => { this.displayValue = next; }, 400);
     });
   }
 }
