@@ -91,19 +91,19 @@ import { CommonModule } from '@angular/common';
       perspective: 300px;
     }
     .flip-el {
-      display: inline-block;
-      transform-style: preserve-3d;
-      backface-visibility: hidden;
-      will-change: transform;
-    }
-    .flip-el.flipping {
-      animation: flipDigit 0.45s ease;
-    }
-    @keyframes flipDigit {
-      0%   { transform: rotateX(0deg); }
-      50%  { transform: rotateX(-90deg); }
-      100% { transform: rotateX(0deg); }
-    }
+  display: inline-block;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+.flip-el.flipping {
+  animation: flipDigit 0.45s ease;
+}
+@keyframes flipDigit {
+  0%   { transform: rotateY(0deg); }
+  50%  { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
 
     .progress-bar-wrapper {
       width: 200px;
