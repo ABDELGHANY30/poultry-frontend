@@ -140,8 +140,27 @@ interface NavItem {
           <button class="text-gray-500 text-2xl lg:hidden" (click)="sideOpen.set(!sideOpen())">☰</button>
 <a 
   routerLink="/dashboard" 
-  class="text-white font-bold text-sm leading-tight truncate cursor-pointer hover:underline focus:outline-none">
-  {{ 'APP.NAME' | translate }}
+  class="group flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-300
+         hover:bg-emerald-500/10 focus:outline-none cursor-pointer">
+  
+  <!-- أيقونة الشعار (Logo Icon Container) -->
+  <div class="flex items-center justify-center w-8 h-8 rounded-lg 
+              bg-gradient-to-tr from-emerald-600 to-green-500 
+              text-white shadow-md shadow-emerald-500/20 
+              group-hover:scale-110 transition-transform duration-300">
+    <!-- أيقونة طائر / مزرعة تعبر عن دواجن بلس -->
+    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-5l6 2.5-6 2.5zm0-8.5 6 2.5-6 2.5V8z"/>
+    </svg>
+  </div>
+
+  <!-- نص الشعار (Logo Text & Dark Mode Support) -->
+  <span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300
+               text-slate-800 dark:text-white 
+              group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+    {{ 'APP.NAME' | translate }}
+  </span>
+
 </a>
           <div class="hidden lg:block flex-1"></div>
           <div class="flex items-center gap-2 ms-auto">
