@@ -21,13 +21,13 @@ import { FlockService } from '../../core/services/flock.service';
     </div>
 
     <!-- Locked state -->
-    <div *ngIf="!isPro()" class="card text-center py-10">
+    <div *ngIf="!isPro()" class="card text-center py-6 mb-5">
       <div class="text-5xl mb-3">🔒</div>
       <h2 class="text-lg font-bold text-gray-800 mb-2">
-        {{ lang === 'ar' ? 'هذه الميزة لمشتركي Pro فقط' : 'This feature is Pro only' }}
+        {{ lang === 'ar' ? 'باقي التقارير المتقدمة لمشتركي Pro فقط' : 'Other advanced reports are Pro only' }}
       </h2>
       <p class="text-gray-500 text-sm mb-4">
-        {{ lang === 'ar' ? 'احصل على تقارير FCR ومتابعة يومية للنفوق' : 'Get FCR reports and daily mortality tracking' }}
+        {{ lang === 'ar' ? 'FCR والنفوق والتقارير اليومية والأسبوعية والشهرية والسنوية — وتقرير الدورة الحالية متاح لك مجاناً تحت' : 'FCR, mortality and periodic reports are Pro only — your current cycle report is free below' }}
       </p>
       <a routerLink="/subscription" class="btn-primary btn inline-flex">
         {{ lang === 'ar' ? '⭐ ترقية لـ Pro' : '⭐ Upgrade to Pro' }}
@@ -35,8 +35,9 @@ import { FlockService } from '../../core/services/flock.service';
     </div>
 
     <!-- Pro content -->
-    <div *ngIf="isPro()" class="space-y-5">
+    <div class="space-y-5">
 
+      <ng-container *ngIf="isPro()">
       <!-- FCR Comparison -->
       <div class="card">
         <h2 class="section-title">⚖️ {{ lang === 'ar' ? 'مقارنة معدل التحويل الغذائي (FCR)' : 'FCR Comparison' }}</h2>
@@ -74,6 +75,8 @@ import { FlockService } from '../../core/services/flock.service';
           </div>
         </div>
       </div>
+
+      </ng-container>
 
       <!-- 📅 تقارير اليوم / الشهر / نهاية الدورة -->
       <div class="card">
@@ -166,7 +169,7 @@ import { FlockService } from '../../core/services/flock.service';
           </div>
         </ng-template>
 
-        <div class="flex gap-2 mb-4 overflow-x-auto">
+        <div *ngIf="isPro()" class="flex gap-2 mb-4 overflow-x-auto">
           <button *ngFor="let t of tabs" (click)="selectTab(t.key)"
                   class="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold border transition whitespace-nowrap"
                   [class.bg-green-600]="activeTab() === t.key"
@@ -419,6 +422,18 @@ import { FlockService } from '../../core/services/flock.service';
 
         <!-- تقرير نهاية الدورة -->
         <ng-container *ngIf="selectedFlockId && activeTab() === 'cycle'">
+          <!-- 🔒 دورة منتهية + مستخدم مش Pro -->
+          <div *ngIf="cycleLocked()" class="text-center py-8">
+            <div class="text-4xl mb-2">🔒</div>
+            <div class="font-bold text-gray-800 mb-1">تقرير الدورة المنتهية لمشتركي Pro فقط</div>
+            <p class="text-xs text-gray-500 mb-4">تقرير الدورة متاح مجاناً طول ما الدورة شغالة، وبعد ما تنتهي بيتاح للمشتركين بس.</p>
+            <a routerLink="/subscription" class="btn-primary btn inline-flex">⭐ ترقية لـ Pro</a>
+          </div>
+
+          <div *ngIf="!isPro() && cycleReport()" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2.5 mb-3">
+            ⏳ التقرير ده متاح لك مجاناً طول ما الدورة شغالة. بعد ما تنتهي هتحتاج اشتراك Pro عشان تشوفه أو تحمّله.
+          </div>
+
           <div *ngIf="cycleReport() as r" class="space-y-3">
             <button (click)="downloadCyclePdf()"
                     class="w-full py-2 rounded-xl bg-gray-800 text-white text-xs font-bold mb-1">
@@ -610,6 +625,7 @@ export class ReportsComponent implements OnInit {
   ];
 
   cycleReport = signal<any>(null);
+  cycleLocked = signal(false); // دورة منتهية والمستخدم مش Pro
   comparisonReport = signal<any>(null);
   benchmarkReport = signal<any>(null);
 
@@ -625,7 +641,8 @@ export class ReportsComponent implements OnInit {
       if (list?.length && !this.selectedFlockId) {
         this.selectedFlockId = list[0].id;
       }
-      this.loadFarmSummary();
+      // المجاني: تقرير الدورة هو الوحيد المتاح (الـ Pro بيحمّل من checkProAndLoad)
+      if (!this.isPro() && this.activeTab() === 'cycle') this.loadCycle();
     });
   }
 
@@ -772,9 +789,18 @@ export class ReportsComponent implements OnInit {
 
   loadCycle() {
     if (!this.selectedFlockId) return;
+    this.cycleReport.set(null);
+    this.cycleLocked.set(false);
     this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${this.selectedFlockId}`,
       { headers: this.headers() }
-    ).subscribe({ next: (res: any) => this.cycleReport.set(res), error: () => this.cycleReport.set(null) });
+    ).subscribe({
+      next: (res: any) => this.cycleReport.set(res),
+      error: (err: any) => {
+        this.cycleReport.set(null);
+        // 403 + upgrade_required = دورة منتهية والمستخدم مش مشترك
+        if (err?.status === 403 && err?.error?.detail?.upgrade_required) this.cycleLocked.set(true);
+      },
+    });
   }
 
   checkProAndLoad() {
@@ -784,6 +810,11 @@ export class ReportsComponent implements OnInit {
         if (res.is_pro) {
           this.loadFcr();
           this.loadMortality();
+          this.loadFarmSummary();
+        } else {
+          // المستخدم المجاني: تاب الدورة بس
+          this.activeTab.set('cycle');
+          this.loadCycle();
         }
       }
     });
