@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { ContactUnlockComponent } from '../marketplace/contact-unlock.component';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
@@ -21,7 +22,7 @@ const PRICE_CATEGORIES = [
 @Component({
   selector: 'app-market-hub',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [CommonModule, RouterLink, FormsModule, ContactUnlockComponent],
   template: `
     <!-- Shared Header -->
     <div class="rounded-3xl text-white px-6 py-5 mb-4 flex items-center justify-between"
@@ -256,18 +257,9 @@ const PRICE_CATEGORIES = [
             </div>
           </div>
 
-          <div class="flex gap-2 mt-3" *ngIf="!item.is_mine && item.status === 'active'">
-            <a [href]="'tel:' + item.phone"
-               (click)="registerContact(item)"
-               class="flex-1 bg-green-600 text-white text-center py-2 rounded-xl text-sm font-bold hover:bg-green-700 transition">
-              📞 {{ lang === 'ar' ? 'اتصل' : 'Call' }}
-            </a>
-            <a [href]="'https://wa.me/2' + item.phone"
-               target="_blank"
-               (click)="registerContact(item)"
-               class="flex-1 bg-green-500 text-white text-center py-2 rounded-xl text-sm font-bold hover:bg-green-600 transition">
-              💬 {{ lang === 'ar' ? 'واتساب' : 'WhatsApp' }}
-            </a>
+          <!-- 🔒 الرقم مخفي: 50 جنيه عبر Paymob لفتح الاتصال والواتساب (أو مفتوح لو دفع قبل كده) -->
+          <div class="mt-3" *ngIf="!item.is_mine && item.status === 'active'">
+            <app-contact-unlock [listing]="item" (contacted)="registerContact(item)" />
           </div>
 
           <div class="flex gap-2 mt-3" *ngIf="item.is_mine">

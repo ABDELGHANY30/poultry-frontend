@@ -222,7 +222,12 @@ export class AddListingComponent implements OnInit {
         this.loading.set(false);
 
         if (err.status === 403) {
-          this.router.navigate(['/verify-identity']);
+          // لو المشكلة رسوم التاجر -> صفحة الدفع، غير كده -> توثيق البطاقة
+          if (err.error?.detail?.code === 'merchant_fee_required') {
+            this.router.navigate(['/merchant-fee'], { queryParams: { returnTo: '/marketplace/add-listing' } });
+          } else {
+            this.router.navigate(['/verify-identity']);
+          }
         } else if (err.status === 401) {
           this.error.set(this.lang === 'ar' ? 'جلسة الدخول انتهت، يرجى إعادة تسجيل الدخول' : 'Session expired');
           this.router.navigate(['/auth/login']);

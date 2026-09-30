@@ -163,7 +163,10 @@ export class VerifyIdentityComponent implements OnInit {
     .subscribe({
       next: () => {
         this.submitting.set(false);
-        this.router.navigate([this.returnTo || '/marketplace']);
+        // بعد توثيق البطاقة -> دفع رسوم حساب التاجر (200 جنيه مرة واحدة)
+        this.router.navigate(['/merchant-fee'], {
+          queryParams: { returnTo: this.returnTo || '/marketplace/add-listing' }
+        });
       },
       error: (err) => {
         this.submitting.set(false);

@@ -299,6 +299,7 @@ import { AiAssistantComponent } from './features/ai-assistant/ai-assistant.compo
 import { MyOrdersComponent } from './features/marketplace/MyOrdersComponent';
 import { SellerDashboardComponent } from './features/marketplace/seller-dashboard.component';
 import { identityGuard } from './core/guards/identity.guard'; // عدّل المسار حسب مكانه
+import { merchantGuard } from './core/guards/merchant.guard'; // بطاقة موثّقة + رسوم التاجر
 
 export const routes: Routes = [
   // ── Auth (بدون layout) ──────────────────────────────
@@ -344,6 +345,16 @@ export const routes: Routes = [
   loadComponent: () =>
     import('./features/verify-identity/verify-identity.component').then(m => m.VerifyIdentityComponent),
 },
+{
+  path: 'merchant-fee',
+  loadComponent: () => import('./features/marketplace/merchant-fee.components').then(m => m.MerchantFeeComponent),
+  canActivate: [authGuard]
+},
+{
+  path: 'marketplace-payment-result',
+  loadComponent: () => import('./features/marketplace/payment-result.component').then(m => m.PaymentResultComponent),
+  canActivate: [authGuard]
+},
       { path: 'subscription', component: SubscriptionComponent },
 
       // ⚠️ محمية بـ proGuard — مشتركي Pro فقط، وإلا يتحول لـ /subscription
@@ -359,7 +370,7 @@ export const routes: Routes = [
 {
   path: 'marketplace/add-listing',
   loadComponent: () => import('./features/marketplace/add-listing.component').then(m => m.AddListingComponent),
-  canActivate: [identityGuard]
+  canActivate: [merchantGuard] // بدل identityGuard: توثيق البطاقة + دفع 200 جنيه مرة واحدة
 },
       { path: 'marketplace/my-orders', component:MyOrdersComponent  },
       { path: 'marketplace/seller-dashboard', component: SellerDashboardComponent },
