@@ -226,7 +226,7 @@ export class AddListingComponent implements OnInit {
           if (err.error?.detail?.code === 'merchant_fee_required') {
             this.router.navigate(['/merchant-fee'], { queryParams: { returnTo: '/marketplace/add-listing' } });
           } else {
-            this.router.navigate(['/verify-identity']);
+            this.router.navigate(['/verify-identity'], { queryParams: { returnTo: '/marketplace/add-listing' } });
           }
         } else if (err.status === 401) {
           this.error.set(this.lang === 'ar' ? 'جلسة الدخول انتهت، يرجى إعادة تسجيل الدخول' : 'Session expired');

@@ -90,6 +90,10 @@ export class ContactUnlockComponent {
         error: (err) => {
           this.loading.set(false);
           const d = err?.error?.detail;
+          if (err?.status === 403) { // بطاقته مش موثّقة -> صفحة توثيق البطاقة
+            this.router.navigate(['/verify-identity'], { queryParams: { returnTo: '/market-hub' } });
+            return;
+          }
           if (d?.code === 'already_unlocked') { window.location.reload(); return; } // الرقم مفتوح بالفعل
           this.errorMsg.set(typeof d === 'string' ? d : (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again'));
         },
