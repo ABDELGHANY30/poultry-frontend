@@ -32,6 +32,12 @@ export const merchantGuard: CanActivateFn = (route, state) => {
       }
       return true;
     }),
-    catchError(() => of(router.createUrlTree(['/auth/login'])))
+    catchError((err) =>
+      // 401 بس = توكن منتهي -> تسجيل الدخول. أي خطأ تاني (سيرفر/جدول ناقص) منخبّيهوش ورا صفحة الدخول:
+      // بنسيبه يدخل والسيرفر هو اللي بيرفض فعلياً عند النشر (require_merchant).
+      of(err?.status === 401
+        ? router.createUrlTree(['/auth/login'], { queryParams: { returnTo: state.url } })
+        : true)
+    )
   );
 };

@@ -69,7 +69,10 @@ export class MerchantFeeComponent implements OnInit {
             this.router.navigate([this.returnTo]); // تاجر بالفعل -> مفيش دفع تاني
           }
         },
-        error: () => this.router.navigate(['/auth/login']),
+        error: (err) => {
+          if (err?.status === 401) this.router.navigate(['/auth/login']);
+          else this.errorMsg.set(this.lang === 'ar' ? 'تعذر تحميل حالة الحساب، حاول مرة أخرى' : 'Could not load account status');
+        },
       });
   }
 
