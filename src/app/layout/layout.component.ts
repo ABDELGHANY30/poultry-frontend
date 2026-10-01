@@ -155,11 +155,11 @@ interface NavItem {
   </div>
 
   <!-- نص الشعار (Logo Text & Dark Mode Support) -->
-  <span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300
-               text-slate-800 dark:text-white 
-              group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-    {{ 'APP.NAME' | translate }}
-  </span>
+<span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300
+             text-gray-900 dark:text-emerald-400 
+             group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+  {{ 'APP.NAME' | translate }}
+</span>
 
 </a>
           <div class="hidden lg:block flex-1"></div>

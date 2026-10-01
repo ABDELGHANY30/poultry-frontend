@@ -12,7 +12,6 @@ import { Component, inject, NgZone, OnInit } from "@angular/core";
 import { OfflineSyncService } from './core/services/offline-sync.service';
 import { AdsService } from './core/services/ads.service';
 import { SplashScreen } from '@capacitor/splash-screen';
-import { Keyboard } from '@capacitor/keyboard';
 import { LoaderService } from './core/services/loading.service';
 import { LoadingScreenComponent } from './features/loading-screen/loading-screen';
 import { SplashComponent } from './features/splash/splash.component';
@@ -28,8 +27,8 @@ import { CommonModule } from '@angular/common';
     <ng-container *ngIf="splashDone">
       <app-loading-screen/>
       <div class="app-shell"><router-outlet /></div>
-    </ng-container>
-  `})
+    </ng-container>`
+  })
 export class AppComponent implements OnInit {
   private translate = inject(TranslateService);
   private auth = inject(AuthService);
@@ -43,10 +42,8 @@ export class AppComponent implements OnInit {
   constructor(private adsService: AdsService) {}
 
   ngOnInit() {
-    SplashScreen.hide({ fadeOutDuration: 200 }); // نقفل splash الأندرويد الأصلي فورًا
+    SplashScreen.hide({ fadeOutDuration: 200 });
 
-    // ── الـ Loading Screen بتاع التنقل: بيبان بس مع تنقل حقيقي بين الصفحات ──
-    // (مش مربوط بأي HTTP call تاني — شلنا loaderInterceptor من app.config.ts)
     this.router.events.subscribe(e => {
       if (e instanceof NavigationStart) {
         this.loader.start();
@@ -78,19 +75,19 @@ export class AppComponent implements OnInit {
     setAppHeight();
     window.visualViewport?.addEventListener('resize', setAppHeight);
 
-    Keyboard.addListener('keyboardWillShow', (info) => {
-      this.ngZone.run(() => {
-        document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
-        document.body.classList.add('keyboard-open');
-      });
+    // ── تمرير الحقل النشط فوق الكيبورد أوتوماتيك، بيتفعل لحظة أي تغيير حقيقي في ارتفاع الكيبورد (القادم من MainActivity.java) ──
+    const kbObserver = new MutationObserver(() => {
+      const kh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-height')) || 0;
+      if (kh > 0) {
+        const active = document.activeElement as HTMLElement;
+        if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) {
+          requestAnimationFrame(() => {
+            active.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        }
+      }
     });
-
-    Keyboard.addListener('keyboardWillHide', () => {
-      this.ngZone.run(() => {
-        document.documentElement.style.setProperty('--keyboard-height', '0px');
-        document.body.classList.remove('keyboard-open');
-      });
-    });
+    kbObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   }
 
   onSplashFinished() {
