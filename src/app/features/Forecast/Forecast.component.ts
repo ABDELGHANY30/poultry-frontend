@@ -56,7 +56,7 @@ interface ForecastData {
       <ng-container *ngIf="!proLocked()">
         <div class="flex items-center gap-2 mb-3">
           <span class="text-xs text-gray-500 flex-shrink-0">توقع عند عمر</span>
-          <input type="number" [(ngModel)]="targetAgeDays" (ngModelChange)="load()"
+          <input type="number" [(ngModel)]="targetAgeDays" (change)="load()"
                  class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center"/>
           <span class="text-xs text-gray-500">يوم</span>
         </div>
