@@ -156,7 +156,7 @@ interface NavItem {
 
   <!-- نص الشعار (Logo Text & Dark Mode Support) -->
 <span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300
-             text-gray-900 dark:text-emerald-400 
+             text-gray-900 dark:text-emerald-200 
              group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
   {{ 'APP.NAME' | translate }}
 </span>
@@ -177,9 +177,9 @@ interface NavItem {
         <!-- Page content -->
         <!-- صفحة الشات (ai-assistant) بتاخد المساحة كاملة من غير padding — باقي
              الصفحات بتفضل زي ما هي بالظبط -->
-        <main [class]="isChatRoute()
-                ? 'flex-1 flex flex-col overflow-hidden min-h-0 w-full'
-                : 'flex-1 p-2 lg:p-6 pb-12 lg:pb-6 max-w-7xl mx-auto w-full'">
+       <main [class]="isChatRoute()
+        ? 'kb-shift flex-1 flex flex-col overflow-hidden min-h-0 w-full'
+        : 'flex-1 p-2 lg:p-6 pb-12 lg:pb-6 max-w-7xl mx-auto w-full'">
           <router-outlet />
         </main>
       </div>
