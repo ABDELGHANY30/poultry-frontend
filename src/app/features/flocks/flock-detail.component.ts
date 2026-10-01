@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -243,9 +243,9 @@ const TURKEY_VACC = [
           </div>
 
           <div>
-            <label class="form-label">متوسط الوزن</label>
+            <label class="form-label">متوسط الوزن (اختياري)</label>
             <div class="flex gap-1">
-              <input class="form-input text-black bg-gray-100 border p-2 rounded-l w-2/3" type="number" [(ngModel)]="userInputs.weightValue" placeholder="الوزن" />
+              <input class="form-input text-black bg-gray-100 border p-2 rounded-l w-2/3" type="number" [(ngModel)]="userInputs.weightValue" placeholder="الوزن (لو وزنت)" />
               <select class="text-black bg-gray-200 border p-2 rounded-r w-1/3 text-xs font-bold" [(ngModel)]="userInputs.weightUnit">
                 <option value="kg">كجم</option>
                 <option value="gm">جرام</option>
@@ -525,88 +525,43 @@ const TURKEY_VACC = [
       </div>
     </div>
 
-    <!-- 📊 رسوم الوزن والبيض -->
+    <!-- 📊 رسوم بيانية خطية (Line Chart) -->
     <div class="grid lg:grid-cols-2 gap-5 mb-4">
 
-      <!-- 🥚 رسم إنتاج البيض - يظهر بس لقطعان البياض -->
-      <div class="card" *ngIf="flock()!.type === 'layer' && eggRecords().length > 0">
+      <div class="card" *ngIf="flock()!.type === 'layer'">
         <h2 class="section-title">🥚 منحنى إنتاج البيض</h2>
-
-        <div style="display: flex; flex-direction: column; height: 170px; justify-content: flex-end; margin-top: 15px; position: relative; border-bottom: 2px solid #e5e7eb;">
-
-          <div class="absolute inset-0 flex flex-col justify-between pb-10 pointer-events-none" style="height: 120px;">
-            <div style="width: 100%; border-top: 1px dashed #f3f4f6;"></div>
-            <div style="width: 100%; border-top: 1px dashed #f3f4f6;"></div>
-            <div style="width: 100%; border-top: 1px dashed #e5e7eb;"></div>
-          </div>
-
-          <div style="display: flex; width: 100%; align-items: flex-end; gap: 4px; height: 150px; position: relative; z-index: 10;">
-
-            <div *ngFor="let pt of eggRecords().slice(-14)"
-                 style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-w: 35px; position: relative;">
-
-              <div style="position: relative; width: 100%; height: 110px; margin-bottom: 8px;">
-                <div style="width: 12px; background-color: #d97706; border-radius: 3px 3px 0 0; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); transition: all 0.3s;"
-                     [style.height]="barH($any(pt).eggCount, maxEgg()) + '%'"
-                     [title]="($any(pt).eggCount ?? 0) + ' بيضة'">
-
-                  <span style="position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: bold; background-color: #1e293b; color: white; padding: 1px 4px; border-radius: 3px; white-space: nowrap;">
-                    {{ $any(pt).eggCount ?? 0 }}
-                  </span>
-                </div>
-              </div>
-
-              <span style="font-size: 10px; font-weight: bold; color: #6b7280; white-space: nowrap; margin-top: auto; padding-bottom: 4px;">
-                {{ ($any(pt).recordDate || '').slice(8) }}
-              </span>
-
-            </div>
-          </div>
-
-          <div style="position: absolute; top: 0; left: 0; font-size: 10px; font-weight: 900; color: #9ca3af;">بيضة</div>
-        </div>
+        <div *ngIf="!eggChart()" class="text-center py-6 text-[var(--c-muted)] text-sm">لسه مفيش بيانات بيض كفاية للرسم.</div>
+        <ng-container *ngIf="eggChart() as c">
+          <ng-container *ngTemplateOutlet="lineChartTpl; context: { c: c, color: '#d97706', unit: 'بيضة' }"></ng-container>
+        </ng-container>
       </div>
 
-      <!-- ⚖️ رسم الوزن - يظهر لباقي الأنواع (تسمين، أرانب، رومي، بط، سمان) -->
-      <div class="card" *ngIf="flock()!.type !== 'layer' && analytics()">
+      <div class="card" *ngIf="flock()!.type !== 'layer'">
         <h2 class="section-title">📈 {{ 'FLOCK.WEIGHT_HIST' | translate }}</h2>
-        
-        <div style="display: flex; flex-direction: column; height: 170px; justify-content: flex-end; margin-top: 15px; position: relative; border-bottom: 2px solid #e5e7eb;">
-          
-          <div class="absolute inset-0 flex flex-col justify-between pb-10 pointer-events-none" style="height: 120px;">
-            <div style="width: 100%; border-top: 1px dashed #f3f4f6;"></div>
-            <div style="width: 100%; border-top: 1px dashed #f3f4f6;"></div>
-            <div style="width: 100%; border-top: 1px dashed #e5e7eb;"></div>
-          </div>
-
-          <div style="display: flex; width: 100%; align-items: flex-end; gap: 4px; height: 150px; position: relative; z-index: 10;">
-            
-            <div *ngFor="let pt of ($any(analytics())?.weight_history || analytics()?.weightHistory || []).slice(-14)"
-                 style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-w: 35px; position: relative;">
-              
-              <div style="position: relative; width: 100%; height: 110px; margin-bottom: 8px;">
-                <div style="width: 10px; height: 10px; background-color: #2563eb; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: all 0.3s; cursor: pointer; position: absolute; left: 50%; transform: translateX(-50%);"
-                     [style.bottom]="barH(pt, maxW()) + '%'"
-                     [title]="(($any(pt)?.avg_weight_kg || $any(pt)?.weight || 0)) + ' kg'">
-                  
-                  <span style="position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: bold; background-color: #1e293b; color: white; padding: 1px 4px; border-radius: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.15);">
-                    {{ ($any(pt)?.avg_weight_kg || $any(pt)?.weight || 0) }}
-                  </span>
-                </div>
-              </div>
-
-              <span style="font-size: 10px; font-weight: bold; color: #6b7280; white-space: nowrap; margin-top: auto; padding-bottom: 4px;">
-                {{ ($any(pt)?.record_date || $any(pt)?.date || '').slice(8) }}
-              </span>
-              
-            </div>
-          </div>
-          
-          <div style="position: absolute; top: 0; left: 0; font-size: 10px; font-weight: 900; color: #9ca3af; bg-white/80 px-1 rounded">kg</div>
-        </div>
+        <div *ngIf="!weightChart()" class="text-center py-6 text-[var(--c-muted)] text-sm">لسه مفيش أوزان مسجلة للرسم (تسجيل الوزن اختياري).</div>
+        <ng-container *ngIf="weightChart() as c">
+          <ng-container *ngTemplateOutlet="lineChartTpl; context: { c: c, color: '#2563eb', unit: 'كجم' }"></ng-container>
+        </ng-container>
       </div>
 
     </div>
+
+    <ng-template #lineChartTpl let-c="c" let-color="color" let-unit="unit">
+      <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H" dir="ltr" class="w-full mt-3" style="height:auto;">
+        <g *ngFor="let t of c.ticks">
+          <line [attr.x1]="c.L" [attr.x2]="c.W - c.R" [attr.y1]="t.y" [attr.y2]="t.y" stroke="#e5e7eb" stroke-dasharray="3 3"></line>
+          <text [attr.x]="c.L - 4" [attr.y]="t.y + 3" text-anchor="end" font-size="9" fill="#9ca3af">{{ t.label }}</text>
+        </g>
+        <polygon *ngIf="c.area" [attr.points]="c.area" [attr.fill]="color" fill-opacity="0.1"></polygon>
+        <polyline [attr.points]="c.line" fill="none" [attr.stroke]="color" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+        <g *ngFor="let p of c.pts; let i = index">
+          <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3.5" fill="#ffffff" [attr.stroke]="color" stroke-width="2">
+            <title>{{ p.label }}: {{ p.value }} {{ unit }}</title>
+          </circle>
+          <text *ngIf="i % c.step === 0" [attr.x]="p.x" [attr.y]="c.H - 8" text-anchor="middle" font-size="9" fill="#6b7280">{{ p.label }}</text>
+        </g>
+      </svg>
+    </ng-template>
     </ng-container>
 
     <!-- 💉 التحصينات وسجل العلاج -->
@@ -664,8 +619,29 @@ const TURKEY_VACC = [
     <!-- 📜 السجلات السابقة — تعديل أو حذف أي يوم غلطت فيه -->
     <ng-container *ngIf="activeSection() === 'records'">
 
+    <div class="flex gap-2 mb-3">
+      <button type="button" (click)="recordsView.set('records')"
+              class="flex-1 py-2 rounded-xl text-xs font-bold border transition"
+              [class.bg-green-600]="recordsView() === 'records'" [class.text-white]="recordsView() === 'records'"
+              [class.border-green-600]="recordsView() === 'records'"
+              [class.text-gray-500]="recordsView() !== 'records'" [class.border-gray-200]="recordsView() !== 'records'">
+        📜 السجلات
+      </button>
+      <button type="button" (click)="recordsView.set('report')"
+              class="flex-1 py-2 rounded-xl text-xs font-bold border transition"
+              [class.bg-green-600]="recordsView() === 'report'" [class.text-white]="recordsView() === 'report'"
+              [class.border-green-600]="recordsView() === 'report'"
+              [class.text-gray-500]="recordsView() !== 'report'" [class.border-gray-200]="recordsView() !== 'report'">
+        📊 التقرير
+      </button>
+    </div>
+
+    <div class="card mb-4 text-center py-4 text-[var(--c-muted)] text-sm" *ngIf="recordsView() === 'report' && !adherenceReport()">
+      التقرير لسه مش جاهز — سجّل بيانات كام يوم الأول.
+    </div>
+
     <!-- 📊 تقرير الالتزام بالبرنامج على مدار الدورة كاملة -->
-    <div class="card mb-4" *ngIf="adherenceReport() as ar">
+    <div class="card mb-4" *ngIf="recordsView() === 'report' && adherenceReport() as ar">
       <h2 class="section-title mb-3">📊 الالتزام بالبرنامج — الدورة كاملة</h2>
       <div *ngIf="!ar.has_program || ar.days_recorded === 0" class="text-center py-3 text-[var(--c-muted)] text-sm">
         {{ ar.message || 'مفيش بيانات كفاية للمقارنة لسه' }}
@@ -703,7 +679,7 @@ const TURKEY_VACC = [
       </div>
     </div>
 
-    <div class="card mt-4">
+    <div class="card mt-4" *ngIf="recordsView() === 'records'">
       <div class="flex items-center justify-between mb-3">
         <h2 class="section-title">📜 السجلات السابقة</h2>
         <button type="button" (click)="showPastRecords.set(!showPastRecords())" class="text-xs font-bold text-green-600">
@@ -748,6 +724,29 @@ const TURKEY_VACC = [
 
     <!-- 💊 سجل العلاج/الأدوية -->
     <ng-container *ngIf="activeSection() === 'health'">
+
+    <!-- 🩺 العلاجات والمكملات المتوقعة للقطيع حسب نوعه وعمره -->
+    <div class="card mt-4" *ngIf="treatmentPlan() as tp">
+      <h2 class="section-title mb-3">🩺 العلاجات والمكملات المتوقعة للقطيع</h2>
+      <div *ngIf="tp.items.length === 0" class="text-center py-3 text-[var(--c-muted)] text-sm">
+        مفيش علاجات أو مكملات موثّقة في البرنامج لنوع القطيع ده.
+      </div>
+      <div *ngFor="let it of tp.items" class="flex items-start gap-3 p-2.5 rounded-xl mb-1.5"
+           [class.bg-amber-50]="it.status === 'now'" [class.bg-gray-50]="it.status !== 'now'">
+        <span class="text-lg w-6 text-center flex-shrink-0">{{ it.status === 'now' ? '⏰' : (it.status === 'past' ? '✔️' : '⏳') }}</span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold" [class.text-gray-400]="it.status === 'past'">{{ it.name_ar }}</p>
+          <p class="text-[10px] text-[var(--c-muted)]">
+            يوم {{ it.day_from }}{{ it.day_to >= 999 ? ' → النهاية' : ' – ' + it.day_to }} · {{ it.note }}
+          </p>
+        </div>
+        <button type="button" *ngIf="it.status !== 'upcoming' && it.loggable && myAccess()?.is_owner !== false" (click)="logPlannedTreatment(it)"
+                class="text-[10px] px-2.5 py-1.5 rounded-full flex-shrink-0 font-bold bg-white border border-green-300 text-green-700">
+          + سجّله
+        </button>
+      </div>
+      <p class="text-[10px] text-[var(--c-muted)] mt-2">⚠️ استرشادي من برنامج الدورة — الجرعات والأدوية الفعلية بتتحدد مع الطبيب البيطري.</p>
+    </div>
     <div class="card mt-4">
       <div class="flex items-center justify-between mb-3">
         <h2 class="section-title">💊 سجل العلاج والأدوية</h2>
@@ -869,8 +868,8 @@ const TURKEY_VACC = [
         <div *ngIf="lastInviteLink()" class="bg-white rounded-lg p-2 border">
           <p class="text-[10px] text-gray-500 mb-2">
             {{ inviteMode() === 'link'
-              ? 'اتعمل الرابط — ابعته دلوقتي على تليجرام أو فيسبوك:'
-              : 'لو العضو عنده حساب بالإيميل ده بالفعل، هيلاقي الدعوة تلقائي جوه التطبيق (تاب "قطعاني المشتركة"). لو لسه معندوش حساب، ابعتله اللينك ده يعمل حساب بيه:' }}
+              ? 'اتسجلت الدعوة — ابعتله لينك الموقع يعمل حساب، وبعد ما يدخل هتظهرله الدعوة:'
+              : 'لو العضو عنده حساب بالإيميل ده بالفعل، هيلاقي الدعوة تلقائي جوه التطبيق (تاب "قطعاني المشتركة"). لو لسه معندوش حساب، ابعتله لينك الموقع يسجّل بنفس الإيميل:' }}
           </p>
           <div class="flex gap-2">
             <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
@@ -967,7 +966,7 @@ export class FlockDetailComponent implements OnInit {
     { key: 'health' as const, label: '💉 الصحة' },
     { key: 'charts' as const, label: '📊 الرسوم' },
     { key: 'decision' as const, label: '🎯 القرار والأهداف' },
-    { key: 'records' as const, label: '📜 السجلات' },
+    { key: 'records' as const, label: '📜 السجلات والتقرير' },
     { key: 'team' as const, label: '👷 الفريق' },
   ];
   // 👷 العضو المشارك (مش صاحب الحساب) ميشوفش تاب "الفريق" — إدارة الفريق لصاحب الحساب بس
@@ -983,13 +982,15 @@ export class FlockDetailComponent implements OnInit {
   dbVaccinations = signal<any[]>([]);
 
   // 📜 تعديل/حذف سجل يوم فات
-  showPastRecords = signal(false);
+  showPastRecords = signal(true);
+  recordsView = signal<'records' | 'report'>('records'); // 📜 سجلات / 📊 تقرير جوه تاب السجلات
   recordedByMap = signal<Record<string, string>>({});
   editingRecordId = signal<string | null>(null);
   editingRecordDate = signal<string | null>(null);
 
   // 💊 سجل العلاج والأدوية
   treatments = signal<any[]>([]);
+  treatmentPlan = signal<any>(null); // 🩺 العلاجات المتوقعة حسب نوع القطيع وعمره
   showTreatmentForm = signal(false);
   treatmentForm: {
     drug_name: string; category: string; start_date: string; end_date: string;
@@ -1026,6 +1027,7 @@ export class FlockDetailComponent implements OnInit {
 
     if (isAbout('نفوق', 'وفيات', 'موت')) {
       this.activeSection.set('records'); // 📜 السجلات — فيها عمود النفوق اليومي بالتفصيل
+      this.recordsView.set('records');
     } else if (isAbout('علف', 'تغذية', 'وزن', 'حرارة', 'إضاءة')) {
       this.activeSection.set('today'); // 📅 اليوم — فيه برنامج الدورة والنصايح المبنية على المقارنة بالمستهدف
       this.showTodayStagePanel.set(true);
@@ -1144,6 +1146,21 @@ export class FlockDetailComponent implements OnInit {
       .subscribe({ next: (res) => this.treatments.set(res || []), error: () => this.treatments.set([]) });
   }
 
+  loadTreatmentPlan(flockId: string) {
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/treatment-plan`, { headers: this.headers() })
+      .subscribe({ next: (res) => this.treatmentPlan.set(res), error: () => this.treatmentPlan.set(null) });
+  }
+
+  /** بيملّي فورم العلاج من بند في العلاجات المتوقعة — المستخدم يراجع ويحفظ */
+  logPlannedTreatment(it: any) {
+    const today = new Date().toISOString().slice(0, 10);
+    this.treatmentForm = {
+      drug_name: it.name_ar, category: it.category || 'other',
+      start_date: today, end_date: today, withdrawal_days: 0, reason: 'ضمن برنامج الدورة',
+    };
+    this.showTreatmentForm.set(true);
+  }
+
   saveTreatment() {
     const flockId = this.flock()?.id;
     if (!flockId || !this.treatmentForm.drug_name) return;
@@ -1237,7 +1254,8 @@ export class FlockDetailComponent implements OnInit {
         next: (res) => {
           this.inviting.set(false);
           // ⚠️ إرسال إيميل حقيقي مش موجود لسه — اللينك ده لازم يتبعت يدويًا للعضو
-          this.lastInviteLink.set(`${window.location.origin}/join-farm/${res.id}`);
+          // 🌐 لينك الموقع نفسه (مش لينك القطيع/الدعوة) — العضو يسجّل حساب وبعدين الدعوة تظهرله جوه التطبيق
+          this.lastInviteLink.set(window.location.origin);
           this.inviteForm = { invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false };
           this.loadFarmMembers();
         },
@@ -1273,11 +1291,11 @@ export class FlockDetailComponent implements OnInit {
 
   // 📱 مشاركة لينك الدعوة عبر واتساب/تيليجرام — مجرد رابط، مفيش API ولا حساب مدفوع مطلوب
   whatsappShareUrl(): string {
-    const text = `تم دعوتك للانضمام كعضو مشارك في إدارة القطعان. اضغط الرابط عشان توافق: ${this.lastInviteLink()}`;
+    const text = `تمت دعوتك للانضمام كعضو في إدارة القطعان. سجّل حساب على الموقع (بنفس الإيميل اللي اتدعيت عليه) وهتلاقي الدعوة جوه التطبيق: ${this.lastInviteLink()}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
   }
   telegramShareUrl(): string {
-    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان')}`;
+    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تمت دعوتك للانضمام كعضو في إدارة القطعان — سجّل حساب على الموقع')}`;
   }
   facebookShareUrl(): string {
     // ⚠️ فيسبوك بيتجاهل أي نص مخصص (quote) في أغلب الحالات دلوقتي — بيشارك الرابط بس
@@ -1537,6 +1555,54 @@ vaccSchedule = () => {
 
   barH(val: number, max: number) { return Math.max(4, (val / max) * 100); }
 
+  /** 📈 بيبني بيانات رسم خطي (SVG) من قايمة {label, value} — بيتحسب مرة واحدة لكل تغيير في السجلات */
+  private buildLineChart(data: { label: string; value: number }[]) {
+    if (data.length === 0) return null;
+    const W = 320, H = 170, L = 36, R = 12, T = 14, B = 26;
+    const vals = data.map(d => d.value);
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (min === max) { min = min * 0.9; max = (max * 1.1) || 1; }
+    const pad = (max - min) * 0.1;
+    min = Math.max(0, min - pad); max = max + pad;
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const fmt = (v: number) => (v >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100));
+    const x = (i: number) => data.length === 1 ? L + (W - L - R) / 2 : L + (i * (W - L - R)) / (data.length - 1);
+    const y = (v: number) => T + (1 - (v - min) / (max - min)) * (H - T - B);
+    const pts = data.map((d, i) => ({ x: r1(x(i)), y: r1(y(d.value)), label: d.label, value: d.value }));
+    const line = pts.map(p => p.x + ',' + p.y).join(' ');
+    const area = pts.length > 1 ? (pts[0].x + ',' + (H - B) + ' ' + line + ' ' + pts[pts.length - 1].x + ',' + (H - B)) : '';
+    const ticks = [0, 1, 2, 3].map(i => { const v = min + ((max - min) * i) / 3; return { y: r1(y(v)), label: fmt(v) }; });
+    return { W, H, L, R, pts, line, area, ticks, step: Math.max(1, Math.ceil(data.length / 7)) };
+  }
+
+  // 🥚 رسم خطي لإنتاج البيض (آخر 14 سجل)
+  eggChart = computed(() => {
+    const data = this.records()
+      .filter(r => (r.eggCount ?? r.egg_count) !== null && (r.eggCount ?? r.egg_count) !== undefined)
+      .slice()
+      .sort((a, b) => this.recordDateStr(a).localeCompare(this.recordDateStr(b)))
+      .slice(-14)
+      .map(r => ({ label: this.recordDateStr(r).slice(5), value: Number(r.eggCount ?? r.egg_count ?? 0) }));
+    return this.buildLineChart(data);
+  });
+
+  // ⚖️ رسم خطي للوزن — بيتخطى الأيام اللي مفيهاش وزن (الوزن اختياري)
+  weightChart = computed(() => {
+    const a: any = this.analytics();
+    const hist: any[] = a?.weight_history || a?.weightHistory || [];
+    let data = hist
+      .map(p => ({ label: String(p?.record_date || p?.date || '').slice(5), value: Number(p?.avg_weight_kg ?? p?.weight ?? 0) }))
+      .filter(d => d.value > 0);
+    if (data.length === 0) {
+      data = this.records()
+        .filter(r => this.recordWeight(r) !== null && (this.recordWeight(r) as number) > 0)
+        .slice()
+        .sort((x, y) => this.recordDateStr(x).localeCompare(this.recordDateStr(y)))
+        .map(r => ({ label: this.recordDateStr(r).slice(5), value: this.recordWeight(r) as number }));
+    }
+    return this.buildLineChart(data.slice(-14));
+  });
+
   ngOnInit() {
     // 🔄 بنشترك في تغييرات الـ paramMap بدل ما ناخد الـ id مرة واحدة بس من الـ snapshot.
     // ده ضروري لأن Angular بيعيد استخدام نفس الكومبوننت لما تنتقل من قطيع لقطيع تاني
@@ -1630,6 +1696,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     this.loadHealthScore(id);
     this.loadTodayEvents(id);
     this.loadTreatments(id);
+    this.loadTreatmentPlan(id);
     this.loadTodayTasks(id);
     this.loadCycleProgram(id);
     this.loadAdherenceReport(id);
