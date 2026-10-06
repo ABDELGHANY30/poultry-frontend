@@ -30,15 +30,54 @@
 </head>
 <body class="antialiased">
   <app-root>
-    <!-- شاشة فاضية بنفس لون الـ splash (بدون spinner) لحد ما أنجولار يشتغل،
-         فالـ splash هو أول حاجة المستخدم يحس إنها ظهرت -->
-    <div class="boot"></div>
+    <!-- نسخة خفيفة من الـ splash (HTML/CSS بس) بتظهر فوراً قبل ما أنجولار يتحمّل،
+         وأنجولار بيستبدلها بالـ splash الحقيقي بنفس الشكل أول ما يشتغل -->
+    <div class="boot">
+      <svg class="boot-hill" viewBox="0 0 1280 300" preserveAspectRatio="none">
+        <path d="M0,120 C300,40 900,180 1280,90 L1280,300 L0,300 Z" fill="#f3dfb8"/>
+      </svg>
+      <svg class="boot-plants" viewBox="0 0 200 200">
+        <path d="M20,180 Q10,120 40,90 Q30,130 50,150 Q35,110 60,80 Q55,125 75,140 Q60,100 85,70"
+              fill="none" stroke="#e9c98e" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      <svg class="boot-barn" viewBox="0 0 220 180">
+        <polygon points="30,90 110,30 190,90" fill="#f0d4a3"/>
+        <rect x="40" y="90" width="140" height="80" fill="#f0d4a3"/>
+        <rect x="90" y="120" width="40" height="50" fill="#e9c98e"/>
+        <circle cx="110" cy="140" r="3" fill="#f3dfb8"/>
+        <line x1="40" y1="170" x2="180" y2="170" stroke="#e9c98e" stroke-width="4"/>
+      </svg>
+      <svg class="boot-sparkle" viewBox="0 0 40 40">
+        <path d="M20,0 L24,16 L40,20 L24,24 L20,40 L16,24 L0,20 L16,16 Z" fill="#f0d4a3"/>
+      </svg>
+      <div class="boot-center">
+        <div class="boot-logo"><span>mazar3.</span><span class="boot-ko">ko</span></div>
+        <div class="boot-bar"></div>
+      </div>
+    </div>
   </app-root>
 
   <style>
     .boot {
-      position: fixed; inset: 0;
-      background: #fdf6e8; /* نفس لون .splash-container (ثابت، مش بيتغير مع الدارك) */
+      position: fixed; inset: 0; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      direction: ltr; color-scheme: light;
+      background: #fdf6e8; /* نفس لون الـ splash — ثابت، مش بيتغير مع الدارك */
+    }
+    .boot-hill    { position: absolute; bottom: 0; left: 0; width: 100%; height: 28%; }
+    .boot-plants  { position: absolute; bottom: 6%; left: 3%; width: 80px; opacity: .9; }
+    .boot-barn    { position: absolute; bottom: 5%; right: 4%; width: 130px; opacity: .9; }
+    .boot-sparkle { position: absolute; bottom: 10%; right: 8%; width: 18px; opacity: .8; }
+    .boot-center  { position: relative; display: flex; flex-direction: column; align-items: center; }
+    .boot-logo {
+      display: flex; align-items: center;
+      font-size: clamp(30px, 8vw, 52px); font-weight: 800; color: #6b8e23;
+      font-family: -apple-system, 'Segoe UI', sans-serif;
+    }
+    .boot-ko  { display: inline-block; min-width: 1.5em; }
+    .boot-bar {
+      width: 200px; max-width: 55vw; height: 8px; margin-top: 24px;
+      background: rgba(107, 142, 35, .15); border-radius: 10px;
     }
   </style>
 </body>

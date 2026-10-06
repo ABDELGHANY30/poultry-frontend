@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, OnDestroy, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -124,6 +124,8 @@ import { CommonModule } from '@angular/common';
 })
 export class SplashComponent implements OnInit, OnDestroy {
   @Output() finished = new EventEmitter<void>();
+  /** لما يبقى true (التطبيق جاهز: أول صفحة اتحملت) الشريط يكمّل 100% والـ splash يقفل */
+  @Input() ready = false;
 
   progress = 0;
   isFlipping = false;
@@ -136,13 +138,22 @@ export class SplashComponent implements OnInit, OnDestroy {
   private flipTimer: any;
 
   ngOnInit() {
-    // شريط التقدم مستقل تمامًا عن دوران الأيقونات
+    // شريط التقدم: يوصل بسرعة لحد 90%، وبعدها يمشي ببطء جداً وهو مستني التطبيق يجهز
+    // (الأيقونات فضلة تلف طول ما بيستنى)، ولما ready=true يكمّل 100% ويقفل.
     this.progressTimer = setInterval(() => {
-      this.progress += 2;
+      if (this.progress < 90) {
+        this.progress += 2;
+        return;
+      }
+      if (!this.ready) {
+        this.progress = Math.min(97, this.progress + 0.15);
+        return;
+      }
+      this.progress = Math.min(100, this.progress + 3);
       if (this.progress >= 100) {
         clearInterval(this.progressTimer);
         clearInterval(this.flipTimer);
-        setTimeout(() => this.finished.emit(), 400);
+        setTimeout(() => this.finished.emit(), 300);
       }
     }, 40);
 

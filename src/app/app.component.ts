@@ -23,7 +23,7 @@ import { App } from '@capacitor/app';
   standalone: true,
   imports: [CommonModule, RouterOutlet, LoadingScreenComponent, SplashComponent],
   template: `
-    <app-splash *ngIf="!splashDone" (finished)="onSplashFinished()"></app-splash>
+    <app-splash *ngIf="!splashDone" [ready]="initialNavDone" (finished)="onSplashFinished()"></app-splash>
 
     <ng-container *ngIf="splashDone">
       <app-loading-screen/>
@@ -40,9 +40,8 @@ export class AppComponent implements OnInit {
 
   splashDone = false;
 
-  // الـ splash مايخلصش إلا لما الأنيميشن يخلص *و* أول تنقل يخلص (عشان مايظهرش loading بعده)
-  private splashFinished = false;
-  private initialNavDone = false;
+  // true لما أول تنقل يخلص → الـ splash يكمّل الشريط 100% ويقفل (فالـ loading مايظهرش بعده)
+  initialNavDone = false;
 
   constructor(private adsService: AdsService) {}
 
@@ -51,6 +50,15 @@ export class AppComponent implements OnInit {
 
     // لو أول تنقل خلص قبل ما نوصل هنا
     if (this.router.navigated) this.initialNavDone = true;
+
+    // أمان: لو أول تنقل علق (سيرفر نايم/guard بطيء) منسيبش الـ splash ثابت للأبد —
+    // بعد 10 ثواني نقفله ونظهر الـ loading لحد ما الصفحة تجهز
+    setTimeout(() => {
+      if (!this.initialNavDone) {
+        this.initialNavDone = true;
+        this.loader.start();
+      }
+    }, 10000);
 
     this.router.events.subscribe(e => {
       if (e instanceof NavigationStart) {
@@ -62,10 +70,7 @@ export class AppComponent implements OnInit {
         e instanceof NavigationError
       ) {
         this.loader.stop();
-        if (!this.initialNavDone) {
-          this.initialNavDone = true;
-          this.tryShowApp();
-        }
+        this.initialNavDone = true;
       }
     });
 
@@ -117,14 +122,6 @@ export class AppComponent implements OnInit {
   }
 
   onSplashFinished() {
-    this.splashFinished = true;
-    this.tryShowApp();
-  }
-
-  private tryShowApp() {
-    if (this.splashFinished && this.initialNavDone && !this.splashDone) {
-      this.loader.stop();   // أمان: نتأكد إن مفيش loading فاضل شغال
-      this.splashDone = true;
-    }
+    this.splashDone = true;
   }
 }
