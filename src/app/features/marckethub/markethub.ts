@@ -407,7 +407,8 @@ const PRICE_CATEGORIES = [
     <!-- Item Name & Actions -->
     <div class="flex items-center justify-between mb-3">
   <div class="flex items-center gap-2">
-    <p class="font-black text-gray-800 dark:text-black text-base">{{ price.item_name_ar }}</p>
+    <!-- الكارت خلفيته فاتحة دايماً (لون inline) → النص لازم يبقى غامق في الدارك كمان -->
+    <p class="font-black text-base" style="color:#1f2937">{{ price.item_name_ar }}</p>
 
     <!-- 🗑️ زر مسح السعر (يظهر للآدمين فقط) -->
     <button *ngIf="isAdmin()" 
