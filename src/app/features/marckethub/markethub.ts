@@ -406,20 +406,20 @@ const PRICE_CATEGORIES = [
 
     <!-- Item Name & Actions -->
     <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <p class="font-black text-gray-800 text-base">{{ price.item_name_ar }}</p>
+  <div class="flex items-center gap-2">
+    <p class="font-black text-gray-800 dark:text-gray-100 text-base">{{ price.item_name_ar }}</p>
 
-        <!-- 🗑️ زر مسح السعر (يظهر للآدمين فقط) -->
-        <button *ngIf="isAdmin()" 
-                (click)="deletePrice(price.id)" 
-                title="حذف السعر"
-                class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition text-xs font-bold flex items-center gap-1">
-          🗑️ <span class="text-[10px]">مسح</span>
-        </button>
-      </div>
+    <!-- 🗑️ زر مسح السعر (يظهر للآدمين فقط) -->
+    <button *ngIf="isAdmin()" 
+            (click)="deletePrice(price.id)" 
+            title="حذف السعر"
+            class="text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 p-1 rounded-lg transition text-xs font-bold flex items-center gap-1">
+      🗑️ <span class="text-[10px]">مسح</span>
+    </button>
+  </div>
 
-      <span class="text-lg">{{ getPriceCategoryIcon(group.category) }}</span>
-    </div>
+  <span class="text-lg">{{ getPriceCategoryIcon(group.category) }}</span>
+</div>
 
     <!-- Price Row -->
     <div class="grid grid-cols-2 gap-3">
