@@ -1,12 +1,14 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { tap } from 'rxjs';
+import { firstValueFrom, tap, timeout } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { environment } from '../../../environments/environment';
 import { User, AuthResponse } from '../models';
 
+// المفاتيح دي بتتستخدم على الموبايل (Capacitor) بس. على الويب مفيش أي حاجة بتتخزن في المتصفح:
+// التوكن في cookie HttpOnly بيحطها السيرفر، والـ user بييجي من /auth/me.
 const TOKEN_KEY = 'spa_token';
 const USER_KEY  = 'spa_user';
 
@@ -15,81 +17,75 @@ export class AuthService {
   private http   = inject(HttpClient);
   private router = inject(Router);
 
+  readonly isNative = Capacitor.isNativePlatform();
+
   private _user  = signal<User | null>(null);
-  private _token = signal<string | null>(null);
+  private _token = signal<string | null>(null); // موبايل فقط — على الويب دايماً null
 
-  currentUser    = computed(() => this._user());
-  isAuthenticated= computed(() => !!this._token());
-  // ⚠️ للعرض في الواجهة فقط — القيمة جاية من السيرفر (/auth/me) مش من التخزين المحلي،
-  // والحماية الحقيقية في الباك (get_admin بتقرا الـ role من الداتابيز).
-  isAdmin        = computed(() => this._user()?.role === 'admin');
+  currentUser     = computed(() => this._user());
+  // ويب: مسجّل دخول = السيرفر رجّع user من /auth/me. موبايل: عنده توكن.
+  isAuthenticated = computed(() => !!this._user() || !!this._token());
+  // ⚠️ للعرض في الواجهة فقط — الحماية الحقيقية في الباك (get_admin).
+  isAdmin         = computed(() => this._user()?.role === 'admin');
 
-  // ── التخزين ────────────────────────────────────────────────
-  // على تطبيق Capacitor (أندرويد/iOS) بنستخدم @capacitor/preferences بدل localStorage.
-  // على الويب مفيش بديل أمن 100% من غير cookies HttpOnly (محتاج تغيير في الباك)،
-  // فبنفضل على localStorage + Content-Security-Policy في index.html.
-  // 💡 لو عايز تشفير فعلي على الموبايل: استبدل Preferences بـ capacitor-secure-storage-plugin
-  //    (نفس الـ get/set/remove) — التغيير محصور في الدوال التلاتة تحت بس.
-  private async storeGet(key: string): Promise<string | null> {
-    if (Capacitor.isNativePlatform()) {
-      return (await Preferences.get({ key })).value ?? null;
-    }
-    return localStorage.getItem(key);
+  // ── تخزين الموبايل فقط ─────────────────────────────────────
+  private async nativeGet(key: string): Promise<string | null> {
+    return (await Preferences.get({ key })).value ?? null;
+  }
+  private async nativeSet(key: string, value: string): Promise<void> {
+    await Preferences.set({ key, value });
+  }
+  private async nativeRemove(key: string): Promise<void> {
+    await Preferences.remove({ key });
   }
 
-  private async storeSet(key: string, value: string): Promise<void> {
-    if (Capacitor.isNativePlatform()) {
-      await Preferences.set({ key, value });
-    } else {
-      localStorage.setItem(key, value);
-    }
-  }
-
-  private async storeRemove(key: string): Promise<void> {
-    if (Capacitor.isNativePlatform()) {
-      await Preferences.remove({ key });
-    }
-    localStorage.removeItem(key); // دايماً امسح من localStorage كمان (تنظيف نسخ قديمة)
-  }
-
-  /** ترحيل لمرة واحدة: مستخدمين الموبايل القدام توكنهم في localStorage → Preferences */
-  private async migrateLegacyNativeToken(): Promise<void> {
-    if (!Capacitor.isNativePlatform()) return;
-    const legacy = localStorage.getItem(TOKEN_KEY);
-    if (legacy && !(await Preferences.get({ key: TOKEN_KEY })).value) {
-      await Preferences.set({ key: TOKEN_KEY, value: legacy });
-    }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+  /** تنظيف لمرة واحدة: أي توكن قديم كان متخزن في localStorage (ويب) يتمسح. المستخدم هيسجّل دخول تاني بالكوكي. */
+  private purgeLegacyLocalStorage(): void {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } catch { /* storage مقفول — مش مشكلة */ }
   }
 
   // ── Init ───────────────────────────────────────────────────
-  /**
-   * بيرجّع Promise بتخلص بعد قراءة التوكن (سريعة). طلب /auth/me بيتبعت في الخلفية
-   * عشان بدء التطبيق ميتعطلش لو السيرفر بطيء. لو بتناديها من APP_INITIALIZER
-   * ارجّع الـ Promise ده (أو await عليه) عشان الـ guards تلاقي التوكن جاهز.
-   */
+  /** idempotent: أول نداء بيشغّل التهيئة، وأي نداء بعده (من الـ guards) بيستنى نفس الـ Promise */
   initAuth(): Promise<void> {
-    // idempotent: أول نداء بيشغّل التهيئة، وأي نداء بعده (من الـ guards مثلاً) بيستنى نفس الـ Promise
     return (this._init ??= this.runInit());
   }
 
   private _init?: Promise<void>;
 
   private async runInit(): Promise<void> {
-    await this.migrateLegacyNativeToken();
-    const token = await this.storeGet(TOKEN_KEY);
+    this.purgeLegacyLocalStorage();
 
-    // زائر (أو توكن منتهي): من غير redirect — الموقع مفتوح للتصفح كزائر
+    if (this.isNative) {
+      await this.runInitNative();
+      return;
+    }
+
+    // ويب: مفيش طريقة نعرف إحنا مسجلين ولا لأ من غير ما نسأل السيرفر (الكوكي HttpOnly مش مقروءة).
+    // timeout عشان بدء التطبيق ميتعطلش لو السيرفر بطيء.
+    try {
+      const u = await firstValueFrom(
+        this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).pipe(timeout(8000))
+      );
+      this._user.set(u);
+    } catch (e) {
+      // 401/403/شبكة/timeout → نكمل كزائر (الموقع مفتوح للتصفح)
+      this._user.set(null);
+    }
+  }
+
+  private async runInitNative(): Promise<void> {
+    const token = await this.nativeGet(TOKEN_KEY);
     if (!token || this.isTokenExpired(token)) {
-      this.clearAuth();
+      await this.clearAuth();
       return;
     }
     this._token.set(token);
 
-    // الـ user (والـ role) بييجوا من السيرفر دايماً، مش من التخزين المحلي
     this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).subscribe({
-      next: u => { this._user.set(u); this.persistMinimalUser(u); },
+      next: u => { this._user.set(u); this.persistMinimalUserNative(u); },
       error: (err: HttpErrorResponse) => {
         // 401/403 → توكن مرفوض أو حساب معطّل. أي خطأ تاني (شبكة/سيرفر نايم) مايفصلش المستخدم.
         if (err.status === 401 || err.status === 403) this.logout(false);
@@ -97,24 +93,33 @@ export class AuthService {
     });
   }
 
-  // بنخزّن بس اللي الواجهة محتاجاه (الاسم/اللغة) — مش كائن المستخدم كله
-  private persistMinimalUser(user: User) {
+  private persistMinimalUserNative(user: User) {
+    if (!this.isNative) return;
     const minimal = { name: user.name, language: (user as any).language };
-    this.storeSet(USER_KEY, JSON.stringify(minimal)).catch(() => {});
+    this.nativeSet(USER_KEY, JSON.stringify(minimal)).catch(() => {});
   }
 
-  private saveAuth(token: string, user: User) {
-    this._token.set(token);
+  private saveAuth(token: string | null | undefined, user: User) {
     this._user.set(user);
-    this.storeSet(TOKEN_KEY, token).catch(() => {});
-    this.persistMinimalUser(user);
+    if (this.isNative && token) {
+      this._token.set(token);
+      this.nativeSet(TOKEN_KEY, token).catch(() => {});
+      this.persistMinimalUserNative(user);
+    }
+    // ويب: الكوكي اتحطت من السيرفر في رد الـ login — مفيش حاجة نخزنها هنا.
   }
 
-  private clearAuth() {
+  private async clearAuth(): Promise<void> {
     this._token.set(null);
     this._user.set(null);
-    this.storeRemove(TOKEN_KEY).catch(() => {});
-    this.storeRemove(USER_KEY).catch(() => {});
+    if (this.isNative) {
+      await Promise.all([this.nativeRemove(TOKEN_KEY), this.nativeRemove(USER_KEY)]).catch(() => {});
+    }
+  }
+
+  /** بيناديها الـ interceptor لما أي طلب يرجع 401 (كوكي/توكن انتهى) — بتصفّي الحالة المحلية بس من غير redirect. */
+  handleUnauthorized(): void {
+    if (this.isAuthenticated()) void this.clearAuth();
   }
 
   // ── Auth calls ─────────────────────────────────────────────
@@ -141,17 +146,16 @@ export class AuthService {
   }
 
   logout(remote = true) {
-    // بلّغ السيرفر يبطّل التوكن (token_version). الطلب بيتبعت قبل clearAuth عشان الـ interceptor يلحق يحط التوكن.
-    // لو فشل (أوفلاين/endpoint مش موجود) منعطّلش الخروج المحلي.
-    if (remote && this._token()) {
+    // بلّغ السيرفر يبطّل التوكن ويمسح الكوكي. الطلب بيتبعت قبل clearAuth عشان الـ interceptor يلحق يحط التوكن (موبايل).
+    // لو فشل (أوفلاين) منعطّلش الخروج المحلي — بس على الويب الكوكي هتفضل لحد ما تنتهي.
+    if (remote && this.isAuthenticated()) {
       this.http.post(`${environment.apiUrl}/auth/auth/logout`, {}).subscribe({ error: () => {} });
     }
-    this.clearAuth();
-    // ⚠️ الموقع مفتوح للتصفح كزائر، فتسجيل الخروج يرجّعك للداشبورد عادي
-    // مش يجبرك على صفحة تسجيل الدخول — التسجيل هيتطلب بس لو حاولت تستخدم
-    // ميزة محتاجة حساب (زي إضافة قطيع أو تخطي حد الأسئلة المجانية في الشات)
+    void this.clearAuth();
+    // الموقع مفتوح للتصفح كزائر، فتسجيل الخروج يرجّعك للداشبورد عادي
     this.router.navigate(['/dashboard']);
   }
 
+  /** توكن الموبايل فقط. على الويب بيرجّع null (الكوكي HttpOnly والـ interceptor بيستخدم withCredentials). */
   getToken() { return this._token(); }
 }
