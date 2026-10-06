@@ -142,7 +142,7 @@ const CATEGORIES = [
             <!-- Item Name & Delete Button -->
           <div class="flex items-center justify-between mb-3">
   <div class="flex items-center gap-2">
-    <p class="font-black text-gray-800 dark:text-black/50 text-base">{{ price.item_name_ar }}</p>
+    <p class="font-black text-gray-800 dark:text-black text-base">{{ price.item_name_ar }}</p>
     
     <!-- 🗑️ زرار المسح (يظهر للآدمين فقط) -->
     <button *ngIf="isAdmin()" 
