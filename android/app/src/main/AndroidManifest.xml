@@ -10,13 +10,13 @@
         android:theme="@style/AppTheme">
 
         <activity
-             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
-             android:name=".MainActivity"
-             android:label="@string/title_activity_main"
-             android:theme="@style/AppTheme.NoActionBarLaunch"
-             android:launchMode="singleTask"
-             android:windowSoftInputMode="adjustResize"
-             android:exported="true">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:name="com.indusry.poultry.MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustPan"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,7 +25,6 @@
 
         </activity>
 
-        <!-- 1. الـ FileProvider الخاص بمشاركة الملفات والصور -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -33,16 +32,14 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
+                android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- 2. المعرّف الخاص بـ AdMob (مستقل وخارج الـ provider) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-7829941409327460~1988318710" />
-    </application>
+            android:value="ca-app-pub-7829941409327460~1988318710"/>
 
-    <!-- Permissions -->
+    </application>
 
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

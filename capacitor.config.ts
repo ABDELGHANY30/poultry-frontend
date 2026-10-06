@@ -1,26 +1,8 @@
-// import type { CapacitorConfig } from '@capacitor/cli';
-
-// const config: CapacitorConfig = {
-//   appId: 'com.industry.poulrty',
-//   appName: 'smart_poulrty',
-//   webDir: 'dist/smart-poultry-frontend/browser',
-//   server: {
-//     androidScheme: 'http',  // 👈 تغيير https إلى http يحل المشكلة تماماً
-//     cleartext: true
-//   },
-//    plugins: {
-//     Keyboard: {
-//   resize: 'none'
-// }
-//   }
-// };
-
-// export default config;
-import { style } from '@angular/animations';
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
-  appId: 'com.industry.poulrty',
+  appId: 'com.indusry.poultry',
   appName: 'smart_poulrty',
   webDir: 'dist/smart-poultry-frontend/browser',
   server: {
@@ -28,18 +10,13 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   plugins: {
-    Keyboard: {
-      resize: 'native', // 👈 تم التغيير من 'none' إلى 'body'
-      style:"dark",
-      resizeOnFullScreen: true},
-    
-    SplashScreen: {
-    launchAutoHide: false,
-    backgroundColor: '#ffffff',
-    showSpinner: false
-  }
-
-    
+   
+   SplashScreen: {
+      launchShowDuration: 0,      // يختفي فورًا
+      launchAutoHide: true,
+      backgroundColor: "#fdf6e8", // نفس خلفية الكود بتاعك عشان مفيش فلاش لون مختلف
+      showSpinner: false
+    }
   }
 };
 
