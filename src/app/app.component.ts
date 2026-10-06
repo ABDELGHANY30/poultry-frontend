@@ -40,20 +40,32 @@ export class AppComponent implements OnInit {
 
   splashDone = false;
 
+  // الـ splash مايخلصش إلا لما الأنيميشن يخلص *و* أول تنقل يخلص (عشان مايظهرش loading بعده)
+  private splashFinished = false;
+  private initialNavDone = false;
+
   constructor(private adsService: AdsService) {}
 
   ngOnInit() {
     SplashScreen.hide({ fadeOutDuration: 200 });
 
+    // لو أول تنقل خلص قبل ما نوصل هنا
+    if (this.router.navigated) this.initialNavDone = true;
+
     this.router.events.subscribe(e => {
       if (e instanceof NavigationStart) {
-        this.loader.start();
+        // أول تنقل (وقت ظهور الـ splash) مفيهوش loading — الـ loading للتنقل بين الصفحات بس
+        if (this.initialNavDone) this.loader.start();
       } else if (
         e instanceof NavigationEnd ||
         e instanceof NavigationCancel ||
         e instanceof NavigationError
       ) {
         this.loader.stop();
+        if (!this.initialNavDone) {
+          this.initialNavDone = true;
+          this.tryShowApp();
+        }
       }
     });
 
@@ -105,6 +117,14 @@ export class AppComponent implements OnInit {
   }
 
   onSplashFinished() {
-    this.splashDone = true;
+    this.splashFinished = true;
+    this.tryShowApp();
+  }
+
+  private tryShowApp() {
+    if (this.splashFinished && this.initialNavDone && !this.splashDone) {
+      this.loader.stop();   // أمان: نتأكد إن مفيش loading فاضل شغال
+      this.splashDone = true;
+    }
   }
 }
