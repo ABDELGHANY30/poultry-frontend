@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 /**
@@ -83,8 +83,7 @@ export class PaymentResultComponent implements OnInit, OnDestroy {
   retry() { this.tries = 0; this.state.set('checking'); this.poll(); }
 
   private poll() {
-    const headers = new HttpHeaders({ Authorization: `Bearer ${localStorage.getItem('spa_token')}` });
-    this.http.get<any>(`${environment.apiUrl}/marketplace-payments/status?${this.query}`, { headers }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/marketplace-payments/status?${this.query}`).subscribe({
       next: (res) => {
         this.purpose.set(res.purpose);
         if (res.status === 'paid') return this.state.set('paid');

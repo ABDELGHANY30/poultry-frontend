@@ -1,7 +1,8 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../services/auth.service';
 import { environment } from '../../../environments/environment';
 
 /**
@@ -20,16 +21,15 @@ import { environment } from '../../../environments/environment';
 export const dailyRecordGuard: CanActivateFn = async () => {
   const http = inject(HttpClient);
   const router = inject(Router);
+  const auth = inject(AuthService);
 
-  const token = localStorage.getItem('spa_token');
-  if (!token) return true; // authGuard هيتكفل بيه، مش شغلنا هنا
+  await auth.initAuth();
+  if (!auth.isAuthenticated()) return true; // authGuard هيتكفل بيه، مش شغلنا هنا
 
   try {
-    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
     const status = await firstValueFrom(
       http.get<{ has_active_flocks: boolean; needs_recording: string[] }>(
-        `${environment.apiUrl}/flocks/today-status`,
-        { headers }
+        `${environment.apiUrl}/flocks/today-status`
       )
     );
 

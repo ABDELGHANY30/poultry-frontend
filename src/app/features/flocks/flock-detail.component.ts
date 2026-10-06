@@ -3,7 +3,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { FlockService } from '../../core/services/flock.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
@@ -1129,7 +1129,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   loadMyAccess(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/my-access`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/my-access`)
       .subscribe({
         next: (res) => {
           this.myAccess.set(res);
@@ -1142,12 +1142,12 @@ export class FlockDetailComponent implements OnInit {
 
   // 💊 سجل العلاج
   loadTreatments(flockId: string) {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/treatments`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/treatments`)
       .subscribe({ next: (res) => this.treatments.set(res || []), error: () => this.treatments.set([]) });
   }
 
   loadTreatmentPlan(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/treatment-plan`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/treatment-plan`)
       .subscribe({ next: (res) => this.treatmentPlan.set(res), error: () => this.treatmentPlan.set(null) });
   }
 
@@ -1164,7 +1164,7 @@ export class FlockDetailComponent implements OnInit {
   saveTreatment() {
     const flockId = this.flock()?.id;
     if (!flockId || !this.treatmentForm.drug_name) return;
-    this.http.post(`${environment.apiUrl}/flocks/${flockId}/treatments`, this.treatmentForm, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/flocks/${flockId}/treatments`, this.treatmentForm)
       .subscribe({
         next: () => {
           this.showTreatmentForm.set(false);
@@ -1178,32 +1178,32 @@ export class FlockDetailComponent implements OnInit {
   deleteTreatment(t: any) {
     const flockId = this.flock()?.id;
     if (!flockId || !confirm(`تمسح سجل علاج ${t.drug_name}؟`)) return;
-    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/treatments/${t.id}`, { headers: this.headers() })
+    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/treatments/${t.id}`)
       .subscribe({ next: () => this.loadTreatments(flockId), error: () => alert('حصل خطأ أثناء الحذف') });
   }
 
   // ✅ مهام اليوم
   loadTodayTasks(flockId: string) {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/tasks/today`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/tasks/today`)
       .subscribe({ next: (res) => this.todayTasks.set(res || []), error: () => this.todayTasks.set([]) });
   }
 
   // 📆 برنامج الدورة يوم بيوم
   loadCycleProgram(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program`)
       .subscribe({ next: (res) => this.cycleProgram.set(res), error: () => this.cycleProgram.set(null) });
   }
 
   // 📊 تقرير الالتزام بالبرنامج على مدار الدورة كاملة
   loadAdherenceReport(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program/adherence-report`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program/adherence-report`)
       .subscribe({ next: (res) => this.adherenceReport.set(res), error: () => this.adherenceReport.set(null) });
   }
 
   saveTask() {
     const flockId = this.flock()?.id;
     if (!flockId || !this.taskForm.title) return;
-    this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks`, this.taskForm, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks`, this.taskForm)
       .subscribe({
         next: () => {
           this.showTaskForm.set(false);
@@ -1219,8 +1219,8 @@ export class FlockDetailComponent implements OnInit {
     if (!flockId) return;
     const wasCompleted = t.completed_today;
     const req = wasCompleted
-      ? this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`, { headers: this.headers() })
-      : this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`, {}, { headers: this.headers() });
+      ? this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`)
+      : this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`, {});
     req.subscribe({
       next: () => this.loadTodayTasks(flockId),
       error: () => alert('حصل خطأ أثناء تحديث المهمة'),
@@ -1230,13 +1230,13 @@ export class FlockDetailComponent implements OnInit {
   deleteTask(t: any) {
     const flockId = this.flock()?.id;
     if (!flockId || !confirm(`تمسح مهمة "${t.title}" نهائيًا؟`)) return;
-    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}`, { headers: this.headers() })
+    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}`)
       .subscribe({ next: () => this.loadTodayTasks(flockId), error: () => alert('حصل خطأ أثناء الحذف') });
   }
 
   // 👷 دعوة الأعضاء — نفس endpoints صفحة /team، هنا بس عشان تكون قريبة من مكان الاستخدام
   loadFarmMembers() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/farm-members`)
       .subscribe({ next: (res) => this.farmMembers.set(res || []), error: () => this.farmMembers.set([]) });
   }
 
@@ -1249,7 +1249,7 @@ export class FlockDetailComponent implements OnInit {
     // (لسه محتاج تعديل في الـ backend، شوف ملاحظة الـ 422 اللي اتبعتت في الرد)
     const payload = isLinkMode ? { ...this.inviteForm, invited_email: null } : this.inviteForm;
 
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, payload, { headers: this.headers() })
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, payload)
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
@@ -1265,7 +1265,7 @@ export class FlockDetailComponent implements OnInit {
 
   revokeMember(m: any) {
     if (!confirm(`متأكد إنك عايز تلغي صلاحية ${m.invited_email}؟`)) return;
-    this.http.delete(`${environment.apiUrl}/farm-members/${m.id}`, { headers: this.headers() })
+    this.http.delete(`${environment.apiUrl}/farm-members/${m.id}`)
       .subscribe({ next: () => this.loadFarmMembers(), error: () => alert('حصل خطأ أثناء الإلغاء') });
   }
 
@@ -1275,17 +1275,17 @@ export class FlockDetailComponent implements OnInit {
 
   // 🔔 دعوات موجهة لإيميلي أنا (مش اللي أنا بعتها)
   loadPendingInvitesForMe() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members/pending-for-me`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/farm-members/pending-for-me`)
       .subscribe({ next: (res) => this.pendingInvitesForMe.set(res || []), error: () => this.pendingInvitesForMe.set([]) });
   }
 
   acceptInviteForMe(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {}, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {})
       .subscribe({ next: () => this.loadPendingInvitesForMe(), error: () => alert('حصل خطأ أثناء قبول الدعوة') });
   }
 
   rejectInviteForMe(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/reject`, {}, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/reject`, {})
       .subscribe({ next: () => this.loadPendingInvitesForMe(), error: () => alert('حصل خطأ أثناء رفض الدعوة') });
   }
 
@@ -1313,7 +1313,7 @@ export class FlockDetailComponent implements OnInit {
 
   loadVaccinations(id: string) {
     const items = this.vaccSchedule().map((v: any) => ({ day: v.day, name_ar: v.nameAr, method: v.method }));
-    this.http.post<any[]>(`${environment.apiUrl}/flocks/${id}/vaccinations/sync`, { items }, { headers: this.headers() })
+    this.http.post<any[]>(`${environment.apiUrl}/flocks/${id}/vaccinations/sync`, { items })
       .subscribe({
         next: (rows) => this.dbVaccinations.set(rows || []),
         error: () => this.dbVaccinations.set([]),
@@ -1324,7 +1324,7 @@ export class FlockDetailComponent implements OnInit {
     const flockId = this.flock()?.id;
     if (!flockId || !row.dbId) return;
     const completed = !row.completed;
-    this.http.patch(`${environment.apiUrl}/flocks/${flockId}/vaccinations/${row.dbId}`, { completed }, { headers: this.headers() })
+    this.http.patch(`${environment.apiUrl}/flocks/${flockId}/vaccinations/${row.dbId}`, { completed })
       .subscribe({
         next: () => this.dbVaccinations.update(list => list.map(d => d.id === row.dbId ? { ...d, completed } : d)),
         error: () => alert('حصل خطأ أثناء تحديث حالة التحصين'),
@@ -1333,7 +1333,7 @@ export class FlockDetailComponent implements OnInit {
 
   // 🚨 أي أحداث حرجة/تنبيهات اليوم من نفس منطق التقارير — بيفشل بهدوء لو المستخدم مش Pro
   loadTodayEvents(id: string) {
-    this.http.get<any>(`${environment.apiUrl}/reports/daily?flock_id=${id}`, { headers: this.headers() }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/reports/daily?flock_id=${id}`).subscribe({
       next: (res) => {
         const events = (res?.events || []).filter((e: any) => e.severity === 'critical' || e.severity === 'warning');
         this.todayCriticalEvents.set(events);
@@ -1374,7 +1374,7 @@ export class FlockDetailComponent implements OnInit {
     const flockId = this.flock()?.id;
     if (!flockId || !r.id) return;
     if (!confirm(`متأكد إنك عايز تمسح سجل يوم ${this.recordDateOf(r)}؟`)) return;
-    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/records/${r.id}`, { headers: this.headers() }).subscribe({
+    this.http.delete(`${environment.apiUrl}/flocks/${flockId}/records/${r.id}`).subscribe({
       next: () => this.loadData(flockId),
       error: () => alert('حصل خطأ أثناء حذف السجل'),
     });
@@ -1397,7 +1397,7 @@ export class FlockDetailComponent implements OnInit {
     this.photoUploadStatus.set('uploading');
     const formData = new FormData();
     formData.append('file', file);
-    this.http.post(`${environment.apiUrl}/flocks/${flockId}/records/${recordId}/photo`, formData, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/flocks/${flockId}/records/${recordId}/photo`, formData)
       .subscribe({
         next: () => {
           this.photoUploadStatus.set('done');
@@ -1713,17 +1713,13 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       error: () => this.records.set([])
     });
     // 👤 مين سجّل كل سجل — منفصلة عن getRecords لأن DailyRecordOut schema لسه مفيهاش recorded_by_user_id
-    this.http.get<Record<string, string>>(`${environment.apiUrl}/flocks/${id}/records/recorded-by`, { headers: this.headers() })
+    this.http.get<Record<string, string>>(`${environment.apiUrl}/flocks/${id}/records/recorded-by`)
       .subscribe({ next: (res) => this.recordedByMap.set(res || {}), error: () => this.recordedByMap.set({}) });
   }
 
-  private headers() {
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   loadHealthScore(id: string) {
-    this.http.get<any>(`${environment.apiUrl}/ai/health-score?flock_id=${id}`, { headers: this.headers() }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/ai/health-score?flock_id=${id}`).subscribe({
       next: (res) => this.healthScore.set(res),
       error: () => this.healthScore.set(null),
     });
@@ -1735,7 +1731,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     if (!confirm('هل أنت متأكد من قفل الدورة؟ الإجراء ده نهائي.')) return;
 
     this.closingFlock.set(true);
-    this.http.patch(`${environment.apiUrl}/flocks/${flockId}/close`, {}, { headers: this.headers() }).subscribe({
+    this.http.patch(`${environment.apiUrl}/flocks/${flockId}/close`, {}).subscribe({
       next: () => {
         this.closingFlock.set(false);
         this.showSurvey.set(true);
@@ -1752,7 +1748,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     const flockId = this.flock()?.id;
     if (!flockId) return;
     this.http.get(`${environment.apiUrl}/reports/certificate/pdf?flock_id=${flockId}`, {
-      headers: this.headers(), responseType: 'blob',
+      responseType: 'blob',
     }).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
@@ -1848,7 +1844,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       // ✏️ تعديل سجل يوم فات — PATCH على السجل الموجود، من غير ما نغيّر تاريخه
       this.http.patch<any>(
         `${environment.apiUrl}/flocks/${flockId}/records/${this.editingRecordId()}`,
-        commonFields, { headers: this.headers() }
+        commonFields
       ).subscribe({
         next: (res) => onSuccess(res?.id ?? (this.editingRecordId() as string)),
         error: onError,

@@ -1,10 +1,11 @@
 import { Component, Input, Output, EventEmitter, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 
 /**
  * بديل أزرار "اتصال / واتساب" في كارت الإعلان:
@@ -54,6 +55,7 @@ export class ContactUnlockComponent {
   @Output() contacted = new EventEmitter<void>(); // الأب يسجّل الاتصال (registerContact)
 
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
   private router = inject(Router);
 
   lang = localStorage.getItem('lang') ?? 'ar';
@@ -68,8 +70,7 @@ export class ContactUnlockComponent {
   }
 
   unlock() {
-    const token = localStorage.getItem('spa_token');
-    if (!token) { this.router.navigate(['/auth/login'], { queryParams: { returnTo: '/market-hub' } }); return; }
+    if (!this.auth.isAuthenticated()) { this.router.navigate(['/auth/login'], { queryParams: { returnTo: '/market-hub' } }); return; }
 
     // التطبيق مبيبدأش دفع — بيفتح الموقع والمستخدم يكمّل من هناك (نفس سياسة الاشتراك)
     if (Capacitor.isNativePlatform()) {
@@ -79,9 +80,8 @@ export class ContactUnlockComponent {
 
     this.loading.set(true);
     this.errorMsg.set('');
-    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
 
-    this.http.post<any>(`${environment.apiUrl}/marketplace-payments/contact/${this.listing.id}/checkout`, {}, { headers })
+    this.http.post<any>(`${environment.apiUrl}/marketplace-payments/contact/${this.listing.id}/checkout`, {})
       .subscribe({
         next: (res) => {
           if (res.payment_url) window.location.href = res.payment_url;

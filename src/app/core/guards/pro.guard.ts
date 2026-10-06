@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { environment } from '../../../environments/environment';
@@ -11,7 +11,7 @@ import { environment } from '../../../environments/environment';
  * بيمنع الوصول للمسارات المخصصة لمشتركي Pro (محاكي القرار، التقارير، مؤشر الربح...).
  *
  * على عكس adminGuard، التحقق هنا لازم يكون async (نداء فعلي لـ /payment/status)
- * مش مجرد قراءة من localStorage/Signal، لأن اشتراك الـ Pro بينتهي بتاريخ
+ * مش مجرد قراءة من التخزين المحلي/Signal، لأن اشتراك الـ Pro بينتهي بتاريخ
  * (زي ما واضح في subscription_1_.py: plan_expires_at بيرجّع اليوزر لـ free
  * تلقائيًا لما ينتهي)، فلو اعتمدنا على بيانات مخزّنة وقت اللوجين ممكن نسيب
  * يوزر اشتراكه خلص يدخل الصفحة غلط.
@@ -21,21 +21,17 @@ export const proGuard: CanActivateFn = async () => {
   const http = inject(HttpClient);
   const router = inject(Router);
 
-  // زي adminGuard بالظبط: تأكيد تحميل بيانات اليوزر لو لسه null (مثلاً بعد Reload)
-  if (!auth.currentUser()) {
-    auth.initAuth();
-  }
+  // استنى تحميل التوكن من التخزين (بعد Reload / على الموبايل) — idempotent، مفيش نداء زيادة
+  await auth.initAuth();
 
-  const token = localStorage.getItem('spa_token');
-  if (!token) {
+  if (!auth.isAuthenticated()) {
     return router.createUrlTree(['/auth/login']);
   }
 
-  const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-
   try {
+    // الـ interceptor هو اللي بيضيف الـ Authorization
     const res: any = await firstValueFrom(
-      http.get(`${environment.apiUrl}/payment/status`, { headers })
+      http.get(`${environment.apiUrl}/payment/status`)
     );
 
     if (res?.is_pro) {

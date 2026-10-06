@@ -1,6 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
@@ -195,14 +195,9 @@ export class HealthScoreWidgetComponent implements OnInit {
     this.loadFlocksList();
   }
 
-  private authHeaders(): HttpHeaders {
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
-
   /** بتجيب قايمة كل القطعان بتاعت المستخدم، وتفلتر القطعان المغلقة (status !== 'active') قبل ما تعرضها */
   loadFlocksList() {
-    this.http.get<{ id: string; name: string; status?: string }[]>(`${environment.apiUrl}/flocks/`, { headers: this.authHeaders() }).subscribe({
+    this.http.get<{ id: string; name: string; status?: string }[]>(`${environment.apiUrl}/flocks/`).subscribe({
       next: (flocks) => {
         // ⚠️ لو عندك اسم حالة مختلف عن "active" (زي "open" أو "ongoing")، عدّل الشرط ده
         const activeOnly = (flocks || []).filter(f => !f.status || f.status === 'active');
@@ -237,7 +232,7 @@ export class HealthScoreWidgetComponent implements OnInit {
 
     this.allFlocksLoading.set(true);
     const requests = this.flocksList().map(f =>
-      this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${f.id}`, { headers: this.authHeaders() })
+      this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${f.id}`)
         .pipe(map(res => ({ ...res, flock_id: f.id })))
     );
 
@@ -260,7 +255,7 @@ export class HealthScoreWidgetComponent implements OnInit {
     const id = this.selectedFlockId();
     const params = id ? `?flock_id=${id}` : '';
 
-    this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score${params}`, { headers: this.authHeaders() }).subscribe({
+    this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score${params}`).subscribe({
       next: (res) => {
         this.data.set(res);
         this.loading.set(false);

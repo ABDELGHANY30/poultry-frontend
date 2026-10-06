@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
 @Component({
@@ -105,11 +105,6 @@ export class SupplierSurveyComponent {
     this.loading.set(true);
     this.error.set(null);
 
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    });
 
     this.http.post(`${environment.apiUrl}/ai/supplier-feedback`, {
       flock_id: this.flockId || null,
@@ -118,7 +113,7 @@ export class SupplierSurveyComponent {
       rating: this.rating,
       fcr_actual: this.fcrActual,
       notes: this.notes.trim() || null,
-    }, { headers }).subscribe({
+    }).subscribe({
       next: () => {
         this.loading.set(false);
         this.submitted.set(true);

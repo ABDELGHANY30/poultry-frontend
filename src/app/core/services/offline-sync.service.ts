@@ -1,5 +1,5 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
@@ -42,11 +42,6 @@ export class OfflineSyncService {
     }
   }
 
-  private headers() {
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' });
-  }
-
   private async getQueue(): Promise<QueuedRecord[]> {
     const { value } = await Preferences.get({ key: QUEUE_KEY });
     return value ? JSON.parse(value) : [];
@@ -70,7 +65,7 @@ export class OfflineSyncService {
     if (this.isOnline()) {
       try {
         await firstValueFrom(
-          this.http.post(`${environment.apiUrl}/flocks/${flockId}/records`, payload, { headers: this.headers() })
+          this.http.post(`${environment.apiUrl}/flocks/${flockId}/records`, payload)
         );
         return { queued: false };
       } catch {
@@ -106,7 +101,7 @@ export class OfflineSyncService {
     for (const item of queue) {
       try {
         await firstValueFrom(
-          this.http.post(`${environment.apiUrl}/flocks/${item.flock_id}/records`, item.payload, { headers: this.headers() })
+          this.http.post(`${environment.apiUrl}/flocks/${item.flock_id}/records`, item.payload)
         );
       } catch {
         remaining.push(item);

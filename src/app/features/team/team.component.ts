@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, Router } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 @Component({
@@ -221,7 +221,7 @@ export class TeamComponent implements OnInit {
   }
 
   loadActivityFeed() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members/activity-feed`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/farm-members/activity-feed`)
       .subscribe({ next: (res) => this.activityFeed.set(res || []), error: () => this.activityFeed.set([]) });
   }
 
@@ -232,14 +232,14 @@ export class TeamComponent implements OnInit {
   }
 
   loadMyFlocks() {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/flocks`)
       .subscribe({ next: (res) => this.myFlocks.set(res || []), error: () => this.myFlocks.set([]) });
   }
 
   openEditMember(m: any) {
     this.editingMemberId.set(m.id);
     this.editForm = { role: m.role, can_add_records: m.can_add_records, can_view_financials: m.can_view_financials };
-    this.http.get<any>(`${environment.apiUrl}/farm-members/${m.id}/flocks`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/farm-members/${m.id}/flocks`)
       .subscribe({
         next: (res) => this.editFlockIds.set(res?.flock_ids || []),
         error: () => this.editFlockIds.set([]),
@@ -256,10 +256,10 @@ export class TeamComponent implements OnInit {
   }
 
   saveEditMember(m: any) {
-    this.http.patch(`${environment.apiUrl}/farm-members/${m.id}`, this.editForm, { headers: this.headers() })
+    this.http.patch(`${environment.apiUrl}/farm-members/${m.id}`, this.editForm)
       .subscribe({
         next: () => {
-          this.http.put(`${environment.apiUrl}/farm-members/${m.id}/flocks`, { flock_ids: this.editFlockIds() }, { headers: this.headers() })
+          this.http.put(`${environment.apiUrl}/farm-members/${m.id}/flocks`, { flock_ids: this.editFlockIds() })
             .subscribe({
               next: () => { this.editingMemberId.set(null); this.loadMembers(); },
               error: () => alert('اتحفظت الصلاحيات، لكن حصل خطأ في حفظ تقييد القطعان'),
@@ -271,17 +271,17 @@ export class TeamComponent implements OnInit {
 
   leaveFarm(f: any) {
     if (!confirm(`متأكد إنك عايز تسيب المزرعة دي؟ مش هتقدر توصل لقطيع "${f.name}" تاني إلا لو اتدعيت من جديد.`)) return;
-    this.http.post(`${environment.apiUrl}/farm-members/leave/${f.owner_user_id}`, {}, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/farm-members/leave/${f.owner_user_id}`, {})
       .subscribe({ next: () => this.loadSharedFlocks(), error: () => alert('حصل خطأ أثناء مغادرة المزرعة') });
   }
 
   loadPendingInvites() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members/pending-for-me`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/farm-members/pending-for-me`)
       .subscribe({ next: (res) => this.pendingInvites.set(res || []), error: () => this.pendingInvites.set([]) });
   }
 
   acceptInvite(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {}, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {})
       .subscribe({
         next: () => { this.loadPendingInvites(); this.loadSharedFlocks(); },
         error: () => alert('حصل خطأ أثناء قبول الدعوة'),
@@ -289,7 +289,7 @@ export class TeamComponent implements OnInit {
   }
 
   rejectInvite(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/reject`, {}, { headers: this.headers() })
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/reject`, {})
       .subscribe({ next: () => this.loadPendingInvites(), error: () => alert('حصل خطأ أثناء رفض الدعوة') });
   }
 
@@ -304,25 +304,21 @@ export class TeamComponent implements OnInit {
     return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان')}`;
   }
 
-  private headers() {
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   loadMembers() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/farm-members`)
       .subscribe({ next: (res) => this.members.set(res || []), error: () => this.members.set([]) });
   }
 
   loadSharedFlocks() {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks/shared`, { headers: this.headers() })
+    this.http.get<any[]>(`${environment.apiUrl}/flocks/shared`)
       .subscribe({ next: (res) => this.sharedFlocks.set(res || []), error: () => this.sharedFlocks.set([]) });
   }
 
   sendInvite() {
     if (!this.inviteForm.invited_email) return;
     this.inviting.set(true);
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm, { headers: this.headers() })
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm)
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
@@ -337,7 +333,7 @@ export class TeamComponent implements OnInit {
 
   revokeMember(m: any) {
     if (!confirm(`متأكد إنك عايز تلغي صلاحية ${m.invited_email}؟`)) return;
-    this.http.delete(`${environment.apiUrl}/farm-members/${m.id}`, { headers: this.headers() })
+    this.http.delete(`${environment.apiUrl}/farm-members/${m.id}`)
       .subscribe({ next: () => this.loadMembers(), error: () => alert('حصل خطأ أثناء الإلغاء') });
   }
 

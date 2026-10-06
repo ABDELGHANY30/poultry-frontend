@@ -6,9 +6,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 // ⚠️ عدّل المسار ده لو اسم/مكان الملف مختلف عندك
 import { FlockService } from '../../core/services/flock.service';
 import { Capacitor } from '@capacitor/core';
@@ -341,6 +342,7 @@ const SUGGESTIONS_AR = [
 })
 export class AiAssistantComponent implements OnInit, AfterViewChecked {
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
   private sanitizer = inject(DomSanitizer);
   private flockService = inject(FlockService);
 
@@ -366,13 +368,9 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
 
   suggestions = SUGGESTIONS_AR;
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
-    const isGuest = !localStorage.getItem('spa_token');
+    const isGuest = !this.auth.isAuthenticated();
     if (isGuest) {
       // الزائر من غير حساب: من غير أي طلبات محتاجة تسجيل دخول (كانت هتفشل بـ 401)
       this.loadArabicVoice();
@@ -417,7 +415,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
 
   /** يجيب التنبيهات الاستباقية غير المحلولة (تحصين قريب / نفوق مرتفع...) */
   loadAlerts() {
-    this.http.get<any[]>(`${environment.apiUrl}/ai/alerts`, { headers: this.headers() }).subscribe({
+    this.http.get<any[]>(`${environment.apiUrl}/ai/alerts`).subscribe({
       next: (list) => this.alerts.set(list || []),
       error: () => { /* تجاهل بهدوء لو مفيش تنبيهات أو حصل خطأ بسيط */ }
     });
@@ -425,7 +423,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
 
   dismissAlert(id: string) {
     this.alerts.update(list => list.filter(a => a.id !== id));
-    this.http.patch(`${environment.apiUrl}/ai/alerts/${id}/resolve`, {}, { headers: this.headers() }).subscribe({
+    this.http.patch(`${environment.apiUrl}/ai/alerts/${id}/resolve`, {}).subscribe({
       error: () => { /* حتى لو فشل الطلب، خليه مخفي في الواجهة */ }
     });
   }
@@ -453,7 +451,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
 
   /** يجيب آخر محادثة سابقة للمستخدم ويعرضها زي ما هي، بدل ما يبدأ من الصفر كل مرة */
   loadHistory() {
-    this.http.get<any[]>(`${environment.apiUrl}/ai/history`, { headers: this.headers() }).subscribe({
+    this.http.get<any[]>(`${environment.apiUrl}/ai/history`).subscribe({
       next: (logs) => {
         if (logs && logs.length) {
           const restored: Message[] = [];
@@ -491,7 +489,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
   }
 
   checkPro() {
-    this.http.get<any>(`${environment.apiUrl}/reports/summary`, { headers: this.headers() }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/reports/summary`).subscribe({
       next: res => this.isPro.set(res.is_pro),
       error: () => {}
     });
@@ -754,7 +752,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
     if (this.loading()) return;
 
     // زائر من غير حساب — اسمحله بـ 3 أسئلة مجانية بس، وبعدين اطلب منه يسجل
-    const isGuest = !localStorage.getItem('spa_token');
+    const isGuest = !this.auth.isAuthenticated();
     if (isGuest) {
       const used = Number(localStorage.getItem(GUEST_COUNT_KEY) || '0');
       if (used >= GUEST_QUESTION_LIMIT) {
@@ -797,7 +795,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
 
     try {
       // استخدم الـ streaming endpoint
-      const token = localStorage.getItem('spa_token');
+      const token = this.auth.getToken();
       const streamHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) streamHeaders['Authorization'] = `Bearer ${token}`; // من غير توكن خالص للزائر، مش "Bearer null"
 
@@ -925,8 +923,7 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
     if (msg.feedback === newState) return; // اتقيّم بنفس الطريقة قبل كده
     this.messages.update(m => m.map(x => x.id === msg.id ? { ...x, feedback: newState } : x));
     this.http.post(`${environment.apiUrl}/ai/feedback`,
-      { query_id: msg.queryId, helpful },
-      { headers: this.headers() }
+      { query_id: msg.queryId, helpful }
     ).subscribe({
       error: () => { /* التقييم بصري بس، مش لازم نرجّعه لو الطلب فشل */ }
     });

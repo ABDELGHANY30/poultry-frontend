@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
 
 @Component({
@@ -68,10 +68,6 @@ export class NotificationBellComponent implements OnInit {
   notifications = signal<any[]>([]);
   unreadCount = signal(0);
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
     this.loadUnreadCount();
@@ -86,7 +82,7 @@ export class NotificationBellComponent implements OnInit {
   }
 
   loadUnreadCount() {
-    this.http.get<any>(`${environment.apiUrl}/notifications/?unread_only=true&limit=1`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/notifications/?unread_only=true&limit=1`)
       .subscribe({
         next: res => this.unreadCount.set(res.unread_count ?? 0),
         error: () => {} // فشل صامت — جرس الإشعارات مش عنصر حرج يستاهل رسالة خطأ للمستخدم
@@ -95,7 +91,7 @@ export class NotificationBellComponent implements OnInit {
 
   loadNotifications() {
     this.loading.set(true);
-    this.http.get<any>(`${environment.apiUrl}/notifications/`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/notifications/`)
       .subscribe({
         next: res => {
           this.notifications.set(res.notifications ?? []);
@@ -110,7 +106,7 @@ export class NotificationBellComponent implements OnInit {
     this.showPanel.set(false);
     if (notification.is_read) return;
 
-    this.http.patch(`${environment.apiUrl}/notifications/${notification.id}/read`, {}, { headers: this.headers() })
+    this.http.patch(`${environment.apiUrl}/notifications/${notification.id}/read`, {})
       .subscribe({
         next: () => {
           notification.is_read = true;
@@ -120,7 +116,7 @@ export class NotificationBellComponent implements OnInit {
   }
 
   markAllRead() {
-    this.http.patch(`${environment.apiUrl}/notifications/read-all`, {}, { headers: this.headers() })
+    this.http.patch(`${environment.apiUrl}/notifications/read-all`, {})
       .subscribe({
         next: () => {
           const updated = this.notifications().map(n => ({ ...n, is_read: true }));

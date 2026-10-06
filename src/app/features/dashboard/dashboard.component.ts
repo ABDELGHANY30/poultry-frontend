@@ -2,7 +2,7 @@ import { Component, OnInit, inject, computed, signal, effect, untracked } from '
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { FlockService } from '../../core/services/flock.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AlertService, Alert } from '../../core/services/alert.service';
@@ -457,7 +457,7 @@ export class DashboardComponent implements OnInit {
     this.cycleLoading.set(true);
     this.cycleReport.set(null);
     this.cycleLocked.set(false);
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}`).subscribe({
       next: (res: any) => { this.cycleReport.set(res); this.cycleLoading.set(false); },
       error: (err: any) => {
         this.cycleLoading.set(false);
@@ -471,7 +471,7 @@ export class DashboardComponent implements OnInit {
     const id = this.currentFlockId();
     if (!id) return;
     this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${id}`,
-      { headers: this.headers(), responseType: 'blob' }
+      { responseType: 'blob' }
     ).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
@@ -530,11 +530,6 @@ getCategoryNameAr(categoryKey: string): string {
   const key = categoryKey ? categoryKey.toLowerCase() : '';
   return this.categoryNamesAr[key] || categoryKey;
 }
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
-
   stats = computed(() => {
     const flock: any = this.currentFlock();
     if (!flock) return [];
@@ -572,7 +567,7 @@ getCategoryNameAr(categoryKey: string): string {
   }
 
   loadReportsProStatus() {
-    this.http.get(`${environment.apiUrl}/reports/summary`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/summary`).subscribe({
       next: (res: any) => {
         this.reportsIsPro.set(!!res.is_pro);
         if (res.is_pro) this.loadReportsSummary();
@@ -582,21 +577,21 @@ getCategoryNameAr(categoryKey: string): string {
   }
 
   loadTodayTemps() {
-    this.http.get<Record<string, any>>(`${environment.apiUrl}/flocks/today-temperatures`, { headers: this.headers() }).subscribe({
+    this.http.get<Record<string, any>>(`${environment.apiUrl}/flocks/today-temperatures`).subscribe({
       next: (res) => this.todayTemps.set(res || {}),
       error: () => {}
     });
   }
 
   loadReportsSummary() {
-    this.http.get(`${environment.apiUrl}/reports/fcr-comparison`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/fcr-comparison`).subscribe({
       next: (res: any) => {
         const values = (res.flocks || []).map((f: any) => f.fcr).filter((v: any) => v != null);
         this.avgFcr.set(values.length ? +(values.reduce((a: number, b: number) => a + b, 0) / values.length).toFixed(2) : null);
       },
       error: () => {}
     });
-    this.http.get(`${environment.apiUrl}/reports/mortality-trend`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/mortality-trend`).subscribe({
       next: (res: any) => {
         const total = (res.data || []).reduce((s: number, d: any) => s + (d.mortality || 0), 0);
         this.recentMortalityTotal.set(total);
@@ -615,7 +610,7 @@ getCategoryNameAr(categoryKey: string): string {
   }
 
   loadPlanInfo() {
-    this.http.get(`${environment.apiUrl}/payment/status`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/payment/status`).subscribe({
       next: (res: any) => {
         this.planInfo.set(res);
         this.isPro.set(res.is_pro);

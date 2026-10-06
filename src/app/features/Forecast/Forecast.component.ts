@@ -2,7 +2,7 @@ import { Component, Input, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
 interface SaleOption {
@@ -146,13 +146,11 @@ export class ForecastWidgetComponent implements OnInit {
 
   load() {
     this.loading.set(true);
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     let url = `${environment.apiUrl}/forecast/predict?`;
     if (this.flockId) url += `flock_id=${this.flockId}&`;
     if (this.targetAgeDays) url += `target_age_days=${this.targetAgeDays}`;
 
-    this.http.get<ForecastData>(url, { headers }).subscribe({
+    this.http.get<ForecastData>(url).subscribe({
       next: (res) => {
         this.data.set(res);
         this.loading.set(false);

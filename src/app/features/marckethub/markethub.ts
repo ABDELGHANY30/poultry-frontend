@@ -2,8 +2,9 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 import { ContactUnlockComponent } from '../marketplace/contact-unlock.component';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -460,6 +461,7 @@ const PRICE_CATEGORIES = [
 
 export class MarketHubComponent implements OnInit {
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
   lang = localStorage.getItem('lang') ?? 'ar';
 
   activeTab = signal<'prices' | 'listings'>('prices');
@@ -521,7 +523,7 @@ export class MarketHubComponent implements OnInit {
   savingPrice = signal(false);
   showAddForm = signal(false);
   prices = signal<any[]>([]);
-  isAdmin = signal(false);
+  isAdmin = computed(() => this.auth.isAdmin());
   selectedPriceTab = signal('');
   private pricesLoadedOnce = false;
 
@@ -561,13 +563,8 @@ export class MarketHubComponent implements OnInit {
     return groups;
   });
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
-    this.checkAdmin();
 
     if (this.activeTab() === 'prices') {
       this.loadPrices();
@@ -656,7 +653,7 @@ export class MarketHubComponent implements OnInit {
 
     if (this.sortBy() !== 'newest') params.push(`sort_by=${this.sortBy()}`);
 
-    if (localStorage.getItem('spa_token')) params.push(`include_mine_closed=true`);
+    if (this.auth.isAuthenticated()) params.push(`include_mine_closed=true`);
 
     const url = `${environment.apiUrl}/listings/${params.length ? '?' + params.join('&') : ''}`;
 
@@ -687,16 +684,14 @@ export class MarketHubComponent implements OnInit {
   }
 
   registerContact(item: any) {
-    const token = localStorage.getItem('spa_token');
-    if (!token) return;
+    if (!this.auth.isAuthenticated()) return;
 
     if (this.contactedListingIds.has(item.id)) return;
     this.contactedListingIds.add(item.id);
 
     this.http.post(
       `${environment.apiUrl}/orders/`,
-      { listing_id: item.id },
-      { headers: this.headers() }
+      { listing_id: item.id }
     ).subscribe({
       next: () => { },
       error: () => { this.contactedListingIds.delete(item.id); }
@@ -718,8 +713,7 @@ export class MarketHubComponent implements OnInit {
   private updateListingStatus(item: any, newStatus: 'active' | 'closed') {
     this.http.patch(
       `${environment.apiUrl}/listings/${item.id}/status`,
-      { status: newStatus },
-      { headers: this.headers() }
+      { status: newStatus }
     ).subscribe({
       next: () => {
         const updated = this.listings().map(l => l.id === item.id ? { ...l, status: newStatus } : l);
@@ -729,12 +723,6 @@ export class MarketHubComponent implements OnInit {
     });
   }
 
-  checkAdmin() {
-    try {
-      const user = JSON.parse(localStorage.getItem('spa_user') ?? '{}');
-      this.isAdmin.set(user.role === 'admin');
-    } catch { }
-  }
 
   loadPrices() {
     this.loadingPrices.set(true);
@@ -793,7 +781,7 @@ export class MarketHubComponent implements OnInit {
     if (!this.priceForm.item_name_ar || (!this.priceForm.price_min && !this.priceForm.price_max)) return;
     this.savingPrice.set(true);
 
-    this.http.post(`${environment.apiUrl}/prices/`, this.priceForm, { headers: this.headers() }).subscribe({
+    this.http.post(`${environment.apiUrl}/prices/`, this.priceForm).subscribe({
       next: () => {
         this.savingPrice.set(false);
         this.showAddForm.set(false);
@@ -807,7 +795,7 @@ export class MarketHubComponent implements OnInit {
   deletePrice(priceId: number | string) {
     if (!confirm('هل أنت تأكد من حذف هذا السعر؟')) return;
 
-    this.http.delete(`${environment.apiUrl}/prices/${priceId}`, { headers: this.headers() }).subscribe({
+    this.http.delete(`${environment.apiUrl}/prices/${priceId}`).subscribe({
       next: () => this.loadPrices(),
       error: (err) => {
         console.error('خطأ أثناء الحذف:', err);

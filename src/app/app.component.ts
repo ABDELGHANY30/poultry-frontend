@@ -16,6 +16,7 @@ import { LoaderService } from './core/services/loading.service';
 import { LoadingScreenComponent } from './features/loading-screen/loading-screen';
 import { SplashComponent } from './features/splash/splash.component';
 import { CommonModule } from '@angular/common';
+import { App } from '@capacitor/app';
 
 @Component({
   selector: 'app-root',
@@ -65,17 +66,30 @@ export class AppComponent implements OnInit {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     this.auth.initAuth();
 
+    // ── التحكم في زرار الرجوع الفعلي (الموبايل) ──────────────
+    App.addListener('backButton', () => {
+      this.ngZone.run(() => {
+        if (this.router.url === '/'|| this.router.url === '/home'||  this.router.url === '/dashboard') {
+          App.exitApp();
+        } else if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          this.router.navigate(['/']);
+        }
+      });
+    });
+
     // ── إصلاح ارتفاع الشاشة مع ظهور الكيبورد ──────────────
     const setAppHeight = () => {
       this.ngZone.run(() => {
         const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.01;
-        document.documentElement.style.setProperty('--app-vh', `${vh}px`);
+        document.documentElement.style.setProperty('--app-vh',`${vh}px`);
       });
     };
     setAppHeight();
     window.visualViewport?.addEventListener('resize', setAppHeight);
 
-    // ── تمرير الحقل النشط فوق الكيبورد أوتوماتيك، بيتفعل لحظة أي تغيير حقيقي في ارتفاع الكيبورد (القادم من MainActivity.java) ──
+    // ── تمرير الحقل النشط فوق الكيبورد أوتوماتيك ──────────
     const kbObserver = new MutationObserver(() => {
       const kh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-height')) || 0;
       if (kh > 0) {

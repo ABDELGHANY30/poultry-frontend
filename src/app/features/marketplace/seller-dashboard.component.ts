@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
 
 @Component({
@@ -184,11 +184,6 @@ export class SellerDashboardComponent implements OnInit {
     { value: 'all' as const, label: this.lang === 'ar' ? 'كل الوقت' : 'All time' },
   ];
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
-
   ngOnInit() {
     this.loadStats();
   }
@@ -200,7 +195,7 @@ export class SellerDashboardComponent implements OnInit {
 
   loadStats() {
     this.loading.set(true);
-    this.http.get<any>(`${environment.apiUrl}/orders/stats/mine?period=${this.period()}`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/orders/stats/mine?period=${this.period()}`)
       .subscribe({
         next: res => {
           this.stats.set(res);

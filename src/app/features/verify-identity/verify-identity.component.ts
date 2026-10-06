@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
 
 @Component({
@@ -100,15 +100,11 @@ export class VerifyIdentityComponent implements OnInit {
   frontPreview = signal<string | null>(null);
   backPreview = signal<string | null>(null);
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
     this.returnTo = this.route.snapshot.queryParamMap.get('returnTo');
 
-    this.http.get<any>(`${environment.apiUrl}/identity-verification/status`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/identity-verification/status`)
       .subscribe({
         next: res => {
           const verified = res.is_verified === true;
@@ -153,13 +149,8 @@ export class VerifyIdentityComponent implements OnInit {
   formData.append('front_image', this.frontFile);
   formData.append('back_image', this.backFile);
 
-  const token = localStorage.getItem('spa_token');
-  const headers = new HttpHeaders({
-    'Authorization': `Bearer ${token}`
-    // ⚠️ لا تضع 'Content-Type' هنا نهائياً ليقوم المتصفح بإنشاء boundary الـ multipart
-  });
 
-  this.http.post(`${environment.apiUrl}/identity-verification/submit`, formData, { headers })
+  this.http.post(`${environment.apiUrl}/identity-verification/submit`, formData)
     .subscribe({
       next: () => {
         this.submitting.set(false);

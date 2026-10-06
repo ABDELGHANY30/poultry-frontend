@@ -1,6 +1,6 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
@@ -179,9 +179,7 @@ export class SubscriptionComponent implements OnInit {
   }
 
   loadStatus() {
-    const token = localStorage.getItem('spa_token');
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get(`${environment.apiUrl}/payment/status`, { headers }).subscribe({
+    this.http.get(`${environment.apiUrl}/payment/status`).subscribe({
       next: (res: any) => this.status.set(res),
       error: () => {}
     });
@@ -190,8 +188,6 @@ export class SubscriptionComponent implements OnInit {
   async subscribe(plan: string) {
     this.loadingPlan.set(plan);
     this.errorMessage.set(null);
-    const token = localStorage.getItem('spa_token');
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
     // الباك اند بيسجل الطلب عند Paymob (بربطه بحساب المستخدم ده) ويرجّع
     // رابط دفع (payment_url) مخصص للمستخدم والمبلغ ده تحديداً.
@@ -201,7 +197,7 @@ export class SubscriptionComponent implements OnInit {
     //
     // الدالة دي بقت خاصة بنسخة الموقع بس (isNative بيخفي زرار الاشتراك
     // خالص جوه التطبيق) — التطبيق نفسه مبيبدأش ولا بيدير أي عملية دفع.
-    this.http.post(`${environment.apiUrl}/payment/create-paymob`, { plan }, { headers }).subscribe({
+    this.http.post(`${environment.apiUrl}/payment/create-paymob`, { plan }).subscribe({
       next: (res: any) => {
         const paymentUrl = res.payment_url;
         if (!paymentUrl) {

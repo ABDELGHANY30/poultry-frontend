@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 @Component({
@@ -189,10 +189,6 @@ export class MyOrdersComponent implements OnInit {
     product_comment: '',
   };
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
     this.loadOrders();
@@ -206,7 +202,7 @@ export class MyOrdersComponent implements OnInit {
 
   loadOrders() {
     this.loading.set(true);
-    this.http.get<any>(`${environment.apiUrl}/orders/mine?role=${this.role()}`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/orders/mine?role=${this.role()}`)
       .subscribe({
         next: res => {
           this.orders.set(res.orders ?? []);
@@ -242,8 +238,7 @@ export class MyOrdersComponent implements OnInit {
   updateStatus(order: any, status: string) {
     this.http.patch(
       `${environment.apiUrl}/orders/${order.id}/status`,
-      { status },
-      { headers: this.headers() }
+      { status }
     ).subscribe({
       next: () => this.loadOrders(),
       error: () => alert(this.lang === 'ar' ? 'حدث خطأ أثناء تحديث الحالة' : 'Error updating status')
@@ -281,7 +276,7 @@ export class MyOrdersComponent implements OnInit {
       payload.product_comment = this.ratingForm.product_comment || null;
     }
 
-    this.http.post(`${environment.apiUrl}/ratings/`, payload, { headers: this.headers() }).subscribe({
+    this.http.post(`${environment.apiUrl}/ratings/`, payload).subscribe({
       next: () => {
         this.submittingRating.set(false);
         this.closeRatingForm();

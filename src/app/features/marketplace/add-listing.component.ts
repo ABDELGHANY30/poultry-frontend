@@ -2,8 +2,9 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-add-listing',
@@ -116,6 +117,7 @@ import { environment } from '../../../environments/environment';
 })
 export class AddListingComponent implements OnInit {
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
   private router = inject(Router);
   
   lang = localStorage.getItem('lang') ?? 'ar';
@@ -173,12 +175,10 @@ export class AddListingComponent implements OnInit {
   }
 
   private fetchUserPhone() {
-    const token = localStorage.getItem('spa_token');
-    if (!token) return;
+    if (!this.auth.isAuthenticated()) return;
 
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.get<any>(`${environment.apiUrl}/users/me`, { headers }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/users/me`).subscribe({
       next: (user) => {
         if (user.phone) {
           this.form.phone = user.phone;
@@ -201,8 +201,7 @@ export class AddListingComponent implements OnInit {
       return;
     }
 
-    const token = localStorage.getItem('spa_token');
-    if (!token) {
+    if (!this.auth.isAuthenticated()) {
       this.error.set(this.lang === 'ar' ? 'يرجى تسجيل الدخول أولاً' : 'Please login first');
       this.router.navigate(['/auth/login']);
       return;
@@ -211,9 +210,8 @@ export class AddListingComponent implements OnInit {
     this.loading.set(true);
     this.error.set('');
 
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.post(`${environment.apiUrl}/listings/`, this.form, { headers }).subscribe({
+    this.http.post(`${environment.apiUrl}/listings/`, this.form).subscribe({
       next: () => {
         this.loading.set(false);
         this.router.navigate(['/marketplace']);

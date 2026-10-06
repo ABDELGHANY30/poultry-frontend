@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 
 /**
  * صفحة قبول دعوة الانضمام لمزرعة (اللينك اللي بيتبعت للعامل/البيطري).
@@ -43,13 +44,13 @@ export class JoinFarmComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
 
   status = signal<'loading' | 'success' | 'error'>('loading');
   errorMessage = signal('');
 
   ngOnInit() {
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    if (!token) {
+    if (!this.auth.isAuthenticated()) {
       // مش عامل تسجيل دخول — نرجعله هنا بعد ما يدخل
       // ⚠️ افترضت إن صفحة اللوجن عندك /auth/login (مطابق لهيكل app_routes.ts) — عدّلها لو مختلفة
       const inviteId = this.route.snapshot.paramMap.get('id');
@@ -64,8 +65,7 @@ export class JoinFarmComponent implements OnInit {
       return;
     }
 
-    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-    this.http.post(`${environment.apiUrl}/farm-members/${inviteId}/accept`, {}, { headers }).subscribe({
+    this.http.post(`${environment.apiUrl}/farm-members/${inviteId}/accept`, {}).subscribe({
       next: () => this.status.set('success'),
       error: (err) => {
         this.status.set('error');

@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
@@ -52,14 +52,11 @@ export class MerchantFeeComponent implements OnInit {
   errorMsg = signal('');
   returnTo = '/marketplace/add-listing';
 
-  private headers() {
-    return new HttpHeaders({ Authorization: `Bearer ${localStorage.getItem('spa_token')}` });
-  }
 
   ngOnInit() {
     this.returnTo = this.route.snapshot.queryParamMap.get('returnTo') || this.returnTo;
 
-    this.http.get<any>(`${environment.apiUrl}/marketplace-payments/merchant/status`, { headers: this.headers() })
+    this.http.get<any>(`${environment.apiUrl}/marketplace-payments/merchant/status`)
       .subscribe({
         next: (res) => {
           this.fee.set(res.fee_egp ?? 200);
@@ -85,7 +82,7 @@ export class MerchantFeeComponent implements OnInit {
 
     this.loading.set(true);
     this.errorMsg.set('');
-    this.http.post<any>(`${environment.apiUrl}/marketplace-payments/merchant/checkout`, {}, { headers: this.headers() })
+    this.http.post<any>(`${environment.apiUrl}/marketplace-payments/merchant/checkout`, {})
       .subscribe({
         next: (res) => {
           if (res.payment_url) {

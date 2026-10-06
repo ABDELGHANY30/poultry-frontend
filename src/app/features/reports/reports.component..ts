@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
 // ⚠️ عدّل المسار ده حسب مكان الملف عندك
@@ -595,7 +595,7 @@ export class ReportsComponent implements OnInit {
       amount: this.txForm.amount,
       description: this.txForm.description || null,
       transaction_date: this.dailyDate,
-    }, { headers: this.headers() }).subscribe({
+    }).subscribe({
       next: () => {
         this.showTxForm = false;
         this.txForm = { type: 'expense', category: 'feed', amount: null, description: '' };
@@ -629,11 +629,6 @@ export class ReportsComponent implements OnInit {
   comparisonReport = signal<any>(null);
   benchmarkReport = signal<any>(null);
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
-
   ngOnInit() {
     this.checkProAndLoad();
     this.flockSvc.getFlocks().subscribe(list => {
@@ -663,8 +658,7 @@ export class ReportsComponent implements OnInit {
   }
 
   loadFarmSummary() {
-    this.http.get(`${environment.apiUrl}/reports/farm-summary?period=${this.farmPeriod}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/farm-summary?period=${this.farmPeriod}`
     ).subscribe({ next: (res: any) => this.farmSummary.set(res), error: () => this.farmSummary.set(null) });
   }
 
@@ -690,7 +684,7 @@ export class ReportsComponent implements OnInit {
   downloadWeeklyPdf() {
     if (!this.selectedFlockId) return;
     this.http.get(`${environment.apiUrl}/reports/weekly/pdf?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`,
-      { headers: this.headers(), responseType: 'blob' }
+      { responseType: 'blob' }
     ).subscribe({
       next: (blob) => this.triggerDownload(blob, 'تقرير_أسبوعي.pdf'),
       error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
@@ -700,7 +694,7 @@ export class ReportsComponent implements OnInit {
   downloadMonthlyPdf() {
     if (!this.selectedFlockId) return;
     this.http.get(`${environment.apiUrl}/reports/monthly/pdf?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`,
-      { headers: this.headers(), responseType: 'blob' }
+      { responseType: 'blob' }
     ).subscribe({
       next: (blob) => this.triggerDownload(blob, 'تقرير_شهري.pdf'),
       error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
@@ -710,7 +704,7 @@ export class ReportsComponent implements OnInit {
   downloadYearlyPdf() {
     if (!this.selectedFlockId) return;
     this.http.get(`${environment.apiUrl}/reports/yearly/pdf?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`,
-      { headers: this.headers(), responseType: 'blob' }
+      { responseType: 'blob' }
     ).subscribe({
       next: (blob) => this.triggerDownload(blob, 'تقرير_سنوي.pdf'),
       error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
@@ -729,24 +723,19 @@ export class ReportsComponent implements OnInit {
   loadComparison() {
     const flock = this.flocks().find(f => f.id === this.selectedFlockId);
     const flockType = flock?.type ? `?flock_type=${flock.type}` : '';
-    this.http.get(`${environment.apiUrl}/reports/cycle-comparison${flockType}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/cycle-comparison${flockType}`
     ).subscribe({ next: (res: any) => this.comparisonReport.set(res), error: () => this.comparisonReport.set(null) });
   }
 
   loadBenchmark() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/benchmark?flock_id=${this.selectedFlockId}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/benchmark?flock_id=${this.selectedFlockId}`
     ).subscribe({ next: (res: any) => this.benchmarkReport.set(res), error: () => this.benchmarkReport.set(null) });
   }
 
   downloadCyclePdf() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${this.selectedFlockId}`, {
-      headers: this.headers(),
-      responseType: 'blob',
-    }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${this.selectedFlockId}`, { responseType: 'blob' }).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -761,29 +750,25 @@ export class ReportsComponent implements OnInit {
 
   loadDaily() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/daily?flock_id=${this.selectedFlockId}&report_date=${this.dailyDate}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/daily?flock_id=${this.selectedFlockId}&report_date=${this.dailyDate}`
     ).subscribe({ next: (res: any) => this.dailyReport.set(res), error: () => this.dailyReport.set(null) });
   }
 
   loadMonthly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/monthly?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/monthly?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`
     ).subscribe({ next: (res: any) => this.monthlyReport.set(res), error: () => this.monthlyReport.set(null) });
   }
 
   loadWeekly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/weekly?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/weekly?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`
     ).subscribe({ next: (res: any) => this.weeklyReport.set(res), error: () => this.weeklyReport.set(null) });
   }
 
   loadYearly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/yearly?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/yearly?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`
     ).subscribe({ next: (res: any) => this.yearlyReport.set(res), error: () => this.yearlyReport.set(null) });
   }
 
@@ -791,8 +776,7 @@ export class ReportsComponent implements OnInit {
     if (!this.selectedFlockId) return;
     this.cycleReport.set(null);
     this.cycleLocked.set(false);
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${this.selectedFlockId}`,
-      { headers: this.headers() }
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${this.selectedFlockId}`
     ).subscribe({
       next: (res: any) => this.cycleReport.set(res),
       error: (err: any) => {
@@ -804,7 +788,7 @@ export class ReportsComponent implements OnInit {
   }
 
   checkProAndLoad() {
-    this.http.get(`${environment.apiUrl}/reports/summary`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/summary`).subscribe({
       next: (res: any) => {
         this.isPro.set(res.is_pro);
         if (res.is_pro) {
@@ -821,14 +805,14 @@ export class ReportsComponent implements OnInit {
   }
 
   loadFcr() {
-    this.http.get(`${environment.apiUrl}/reports/fcr-comparison`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/fcr-comparison`).subscribe({
       next: (res: any) => this.fcrData.set(res.flocks),
       error: () => {}
     });
   }
 
   loadMortality() {
-    this.http.get(`${environment.apiUrl}/reports/mortality-trend`, { headers: this.headers() }).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/mortality-trend`).subscribe({
       next: (res: any) => {
         this.mortalityData.set(res.data);
         const max = Math.max(...res.data.map((d: any) => d.mortality), 1);

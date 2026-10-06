@@ -2,7 +2,7 @@ import { Component, Input, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
@@ -131,17 +131,11 @@ export class DecisionSimulatorComponent {
     this.error.set(null);
     this.result.set(null);
 
-    const token = localStorage.getItem('spa_token'); // ⚠️ وحّد الاسم ده مع باقي الملفات
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    });
-
     this.http.post<DecisionResult>(`${environment.apiUrl}/ai/decision-simulator`, {
       decision: this.decisionText.trim(),
       flock_id: this.flockId || null,
       language: 'ar',
-    }, { headers }).subscribe({
+    }).subscribe({
       next: (res) => {
         this.result.set(res);
         this.loading.set(false);

@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { Observable, of, tap, map } from 'rxjs';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { Flock, FlockCreate, DailyRecord, DailyRecordCreate, FlockAnalytics } from '../models';
 
@@ -11,12 +11,6 @@ export class FlockService {
   // جعل الـ Signal يبدأ بمصفوفة فارغة تماماً للتخلص من الـ Mock
   private _flocks = signal<Flock[]>([]);
   readonly flocks = this._flocks.asReadonly();
-
-  // الحصول على التوكن لإرساله مع طلبات الكتابة والتحديث
-  private getHeaders() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   /**
    * دالة مساعدة لتحويل كائن القطيع القادم من الباكيند (Python backend format)
@@ -87,7 +81,7 @@ export class FlockService {
       housing_system: payload.housingSystem || null
     };
 
-    return this.http.post<any>(`${environment.apiUrl}/flocks/`, body, { headers: this.getHeaders() }).pipe(
+    return this.http.post<any>(`${environment.apiUrl}/flocks/`, body).pipe(
       map(raw => this.mapFlock(raw)),
       tap(newFlock => {
         this._flocks.update(prev => [newFlock, ...prev]);
@@ -99,9 +93,6 @@ export class FlockService {
   addRecord(r: any): Observable<any> {
     const rawRecord = r as any;
     const targetFlockId = rawRecord.flock_id || rawRecord.flockId;
-
-    // 1. جلب الـ Headers
-    const tokenHeaders = this.getHeaders();
 
     // 2. تجهيز الـ body بنفس الحقول المبعوثة بدون حذف الـ id
     const body: Record<string, any> = {
@@ -138,7 +129,7 @@ export class FlockService {
     // 3. إرسال الـ POST بالرابط الصحيح المخصص للقطيع المحدد
     const url = `${environment.apiUrl}/flocks/${targetFlockId}/records`;
 
-    return this.http.post<any>(url, body, { headers: tokenHeaders }).pipe(
+    return this.http.post<any>(url, body).pipe(
       tap(() => {
         const mortalityCount = body['mortality'] || 0;
         this._flocks.update(prev => prev.map(f => {

@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 
 const CATEGORIES = [
   { value: 'broiler',   label: 'بورصة الفراخ',     icon: '🐔', color: '#e8f5e9', headerColor: '#2d9e5f', unit: 'كجم' },
@@ -193,6 +194,7 @@ const CATEGORIES = [
 })
 export class PricesComponent implements OnInit {
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
 
   itemOptionsByCategory: Record<string, string[]> = {
     broiler: ["فراخ بيضاء تسمين (لحم)", "فراخ ساسو (لحم)", "فراخ بلدي (لحم)", "فراخ أمهات بيضاء"],
@@ -239,7 +241,7 @@ feed: [
   saving = signal(false);
   showAddForm = signal(false);
   prices = signal<any[]>([]);
-  isAdmin = signal(false);
+  isAdmin = computed(() => this.auth.isAdmin());
   selectedTab = signal('');
 
   categories = CATEGORIES;
@@ -261,7 +263,7 @@ feed: [
 deletePrice(priceId: number | string) {
     if (!confirm('هل أنت تأكد من حذف هذا السعر؟')) return;
 
-    this.http.delete(`${environment.apiUrl}/prices/${priceId}`, { headers: this.headers() }).subscribe({
+    this.http.delete(`${environment.apiUrl}/prices/${priceId}`).subscribe({
       next: () => {
         // إعادة تحميل الأسعار بعد الحذف
         this.loadPrices();
@@ -291,22 +293,11 @@ deletePrice(priceId: number | string) {
     return groups;
   });
 
-  private headers() {
-    const token = localStorage.getItem('spa_token');
-    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-  }
 
   ngOnInit() {
     this.loadPrices();
-    this.checkAdmin();
   }
 
-  checkAdmin() {
-    try {
-      const user = JSON.parse(localStorage.getItem('spa_user') || '{}');
-      this.isAdmin.set(user.role === 'admin');
-    } catch { }
-  }
 
   loadPrices() {
     this.loading.set(true);
@@ -326,7 +317,7 @@ deletePrice(priceId: number | string) {
     if (!this.form.item_name_ar || (!this.form.price_min && !this.form.price_max)) return;
     this.saving.set(true);
 
-    this.http.post(`${environment.apiUrl}/prices/`, this.form, { headers: this.headers() }).subscribe({
+    this.http.post(`${environment.apiUrl}/prices/`, this.form).subscribe({
       next: () => {
         this.saving.set(false);
         this.showAddForm.set(false);

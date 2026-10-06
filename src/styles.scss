@@ -103,11 +103,13 @@ input, textarea, select {
 }
 
 .card {
-  @apply bg-white rounded-2xl border border-[var(--c-border)] shadow-card p-5;
+  background-color: var(--c-surface);
+  @apply rounded-2xl border border-[var(--c-border)] shadow-card p-5;
 }
 
 .card-lg {
-  @apply bg-white rounded-3xl border border-[var(--c-border)] shadow-card p-6;
+  background-color: var(--c-surface);
+  @apply rounded-3xl border border-[var(--c-border)] shadow-card p-6;
 }
 
 .section-title {
@@ -155,7 +157,8 @@ input, textarea, select {
 }
 
 .form-input {
-  @apply w-full px-4 py-2.5 rounded-xl border border-[var(--c-border)] bg-white
+  background-color: var(--c-surface);
+  @apply w-full px-4 py-2.5 rounded-xl border border-[var(--c-border)]
          text-[var(--c-text)] text-sm outline-none transition-all duration-200
          focus:border-primary-500 focus:ring-2 focus:ring-primary-100
          placeholder:text-[var(--c-faint)];
@@ -211,13 +214,13 @@ textarea.form-input {
  
 :root {
   --keyboard-height: 0px;
-    color-scheme: light only;
+    color-scheme: light dark; /* كان 'light only' — ده اللي كان بيمنع الدارك مود */
 }
 .kb-shift {
   transition: transform .15s ease-out;
   will-change: transform;
 }
-
+.bg-white\/90 { background-color: rgba(23, 33, 27, .9); }
 body.keyboard-open .kb-shift {
   transform: translateY(calc((var(--keyboard-height) - 20px) * -1));
 }
@@ -229,6 +232,11 @@ body.keyboard-open .page-wrapper {
 input, select, textarea, button {
   scroll-margin: 16px;
   scroll-margin-bottom: calc(var(--keyboard-height) + 16px);
+}
+@media (prefers-color-scheme: dark) {
+  .overlay { background: #0e1511; }
+  .bar { background: #263329; }
+  .fill { background: #52be7f; }
 }
 /* Animations */
 @keyframes fadeIn  { from {opacity:0} to {opacity:1} }
@@ -264,3 +272,106 @@ input, select, textarea, button {
 
 .dot-pulse span:nth-child(2) { animation-delay: .2s; }
 .dot-pulse span:nth-child(3) { animation-delay: .4s; }
+
+/* ══════════════════════════════════════════════════════════════
+   🌙 Dark mode — بيتبع إعداد التليفون تلقائياً (prefers-color-scheme)
+   بيغيّر متغيرات الألوان + بيعمل override لكلاسات Tailwind الشائعة اللي في الصفحات،
+   فمش محتاج تعدّل كل صفحة. الألوان المشبعة (أخضر/أحمر/برتقالي بنص أبيض) مبتتغيرش.
+   ══════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg:          #0e1511;
+    --c-surface:     #17211b;
+    --c-border:      #263329;
+    --c-text:        #e6efe8;
+    --c-muted:       #9db5a3;
+    --c-faint:       #6b8571;
+
+    --c-primary:     #2d9e5f;
+    --c-primary-dk:  #9fe0b8;   /* بيتستخدم كلون نص (عناوين الأقسام) */
+    --c-primary-lt:  #52be7f;
+    --c-primary-pal: rgba(82, 190, 127, .16);
+
+    --c-amber-pal:   rgba(245, 158, 11, .16);
+    --c-red-pal:     rgba(220, 38, 38, .18);
+    --c-blue-pal:    rgba(59, 130, 246, .18);
+
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, .35);
+    --shadow-md: 0 4px 20px rgba(0, 0, 0, .40);
+    --shadow-lg: 0 8px 40px rgba(0, 0, 0, .50);
+  }
+
+  /* ── محايد: أبيض / رمادي / stone ── */
+  :root {
+    .bg-white { background-color: var(--c-surface); }
+    .bg-gray-50,  .bg-stone-50  { background-color: #1c281f; }
+    .bg-gray-100, .bg-stone-100 { background-color: #223027; }
+    .bg-gray-200, .bg-stone-200 { background-color: #2b3c31; }
+
+    .border-gray-50, .border-gray-100, .border-gray-200, .border-stone-200 { border-color: var(--c-border); }
+    .border-gray-300 { border-color: #334a3b; }
+
+    .text-gray-300, .text-stone-300 { color: #6f8176; }
+    .text-gray-400, .text-stone-400 { color: #8fa196; }
+    .text-gray-500, .text-stone-500 { color: #9fb0a5; }
+    .text-gray-600, .text-stone-600 { color: #b3c2b8; }
+    .text-gray-700, .text-stone-700 { color: #c9d5cd; }
+    .text-gray-800, .text-gray-900, .text-stone-800, .text-stone-900, .text-black { color: var(--c-text); }
+
+    .hover\:bg-gray-50:hover, .hover\:bg-gray-100:hover { background-color: #223027; }
+    .hover\:text-gray-600:hover { color: #b3c2b8; }
+    .hover\:bg-red-100:hover { background-color: rgba(220, 38, 38, .25); }
+    .hover\:bg-green-50:hover { background-color: rgba(34, 197, 94, .14); }
+    .hover\:bg-primary-50\/50:hover { background-color: rgba(82, 190, 127, .12); }
+    .hover\:text-primary-600:hover, .hover\:text-primary-800:hover { color: #89d9a8; }
+    .hover\:text-amber-900:hover { color: #fcd34d; }
+
+    .btn-ghost:hover   { background-color: #1c281f; }
+    .btn-outline:hover { background-color: rgba(82, 190, 127, .12); }
+  }
+
+  /* ── ألوان باستيل (خلفيات فاتحة + نص غامق) → خلفيات شفافة غامقة + نص فاتح ── */
+  @each $name, $r, $g, $b, $t4, $t3 in
+    (red 220 38 38 #f87171 #fca5a5),
+    (amber 245 158 11 #fbbf24 #fcd34d),
+    (orange 249 115 22 #fb923c #fdba74),
+    (yellow 234 179 8 #facc15 #fde047),
+    (green 34 197 94 #4ade80 #86efac),
+    (emerald 16 185 129 #34d399 #6ee7b7),
+    (blue 59 130 246 #60a5fa #93c5fd),
+    (indigo 99 102 241 #818cf8 #a5b4fc),
+    (purple 168 85 247 #c084fc #d8b4fe),
+    (primary 82 190 127 #52be7f #89d9a8)
+  {
+    :root {
+      .bg-#{$name}-50  { background-color: rgba($r, $g, $b, .10); }
+      .bg-#{$name}-100 { background-color: rgba($r, $g, $b, .16); }
+      .bg-#{$name}-200 { background-color: rgba($r, $g, $b, .22); }
+
+      .border-#{$name}-100 { border-color: rgba($r, $g, $b, .25); }
+      .border-#{$name}-200 { border-color: rgba($r, $g, $b, .35); }
+      .border-#{$name}-300 { border-color: rgba($r, $g, $b, .45); }
+
+      .text-#{$name}-500, .text-#{$name}-600 { color: $t4; }
+      .text-#{$name}-700, .text-#{$name}-800, .text-#{$name}-900, .text-#{$name}-950 { color: $t3; }
+    }
+  }
+
+  /* استثناء: نص غامق فوق خلفية مشبعة (زي شارة PRO: bg-amber-400 + text-amber-900) يفضل غامق */
+  :root {
+    [class*="bg-amber-400"], [class*="bg-amber-500"], [class*="bg-yellow-400"] {
+      &.text-amber-800, &.text-amber-900, &.text-amber-950, &.text-black { color: #451a03; }
+    }
+  }
+
+  /* ── Badges (معرّفة بـ @apply فمش بتتأثر بكلاسات الألوان فوق) ── */
+  :root {
+    .badge-critical { background-color: rgba(220, 38, 38, .20);  color: #fca5a5; }
+    .badge-high     { background-color: rgba(249, 115, 22, .20); color: #fdba74; }
+    .badge-medium   { background-color: rgba(245, 158, 11, .20); color: #fcd34d; }
+    .badge-low      { background-color: rgba(34, 197, 94, .20);  color: #86efac; }
+    .badge-info     { background-color: rgba(59, 130, 246, .20); color: #93c5fd; }
+    .badge-success  { background-color: rgba(82, 190, 127, .20); color: #89d9a8; }
+    .badge-neutral  { background-color: #223027; color: #b3c2b8; }
+  }
+}
