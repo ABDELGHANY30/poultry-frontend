@@ -121,7 +121,7 @@ export class SubscriptionComponent implements OnInit {
   tiers: { id: string; price: number; points: number; label: Record<string, string> }[] = [
     { id: 'p150', price: 150, points: 30, label: { ar: 'باقة 150', en: 'Package 150' } },
     { id: 'p200', price: 200, points: 45, label: { ar: 'باقة 200', en: 'Package 200' } },
-    { id: 'p350', price: 350, points: 100, label: { ar: 'باقة 350', en: 'Package 350' } },
+    { id: 'p350', price: 350, points: 80, label: { ar: 'باقة 350', en: 'Package 350' } },
   ];
 
   // بس بيفتح الموقع من برا — التطبيق مش بيبدأ ولا بيدير أي عملية دفع؛
