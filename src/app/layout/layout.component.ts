@@ -183,6 +183,54 @@ interface NavItem {
         : 'flex-1 p-2 lg:p-6 pb-12 lg:pb-6 max-w-7xl mx-auto w-full'">
           <router-outlet />
         </main>
+
+        <!-- Footer -->
+        <footer *ngIf="!isChatRoute()"
+                class="mt-auto border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-colors duration-300">
+          <div class="max-w-7xl mx-auto w-full px-4 lg:px-6 py-6 grid gap-6 md:grid-cols-3 text-sm">
+
+            <!-- عن الخدمة -->
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xl">🐔</span>
+                <span class="font-extrabold text-gray-900 dark:text-white">{{ 'APP.NAME' | translate }}</span>
+              </div>
+              <p class="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{{ 'APP.TAGLINE' | translate }}</p>
+            </div>
+
+            <!-- بيانات التواصل -->
+            <div>
+              <h4 class="font-bold text-gray-900 dark:text-white mb-2">تواصل معنا</h4>
+              <ul class="space-y-1.5 text-gray-600 dark:text-gray-300">
+                <li class="flex items-start gap-2">
+                  <span>📍</span>
+                  <span>{{ contact.address }}</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <span>✉️</span>
+                  <a [href]="'mailto:' + contact.email" class="hover:text-emerald-600 dark:hover:text-emerald-400 break-all">{{ contact.email }}</a>
+                </li>
+                <li class="flex items-center gap-2">
+                  <span>📞</span>
+                  <a [href]="'tel:' + contact.phoneIntl" dir="ltr" class="hover:text-emerald-600 dark:hover:text-emerald-400">{{ contact.phone }}</a>
+                </li>
+              </ul>
+            </div>
+
+            <!-- روابط سريعة -->
+            <div>
+              <h4 class="font-bold text-gray-900 dark:text-white mb-2">روابط سريعة</h4>
+              <ul class="space-y-1.5 text-gray-600 dark:text-gray-300">
+                <li><a routerLink="/subscription" class="hover:text-emerald-600 dark:hover:text-emerald-400">أسعار الخدمات والاشتراك</a></li>
+                <li><a routerLink="/dashboard" class="hover:text-emerald-600 dark:hover:text-emerald-400">لوحة التحكم</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="border-t border-gray-100 dark:border-gray-800 py-3 text-center text-[11px] text-gray-400">
+            © {{ year }} {{ 'APP.NAME' | translate }} — جميع الحقوق محفوظة
+          </div>
+        </footer>
       </div>
 
     </div>
@@ -202,6 +250,15 @@ export class LayoutComponent implements OnInit {
   private alertService = inject(AlertService);
   private translate = inject(TranslateService);
   private router = inject(Router);
+
+  // ✏️ عدّل بيانات التواصل هنا (العنوان بالذات)
+  contact = {
+    address: 'اكتب هنا عنوان النشاط: الشارع، المدينة، مصر',
+    email: 'abdelghanya2977@gmail.com',
+    phone: '01271140161',
+    phoneIntl: '+201271140161',
+  };
+  year = new Date().getFullYear();
 
   sideOpen = signal(window.innerWidth >= 1024);
   lang = signal<'ar'|'en'>('ar');
