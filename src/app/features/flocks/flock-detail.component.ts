@@ -820,8 +820,12 @@ const TURKEY_VACC = [
             <span class="font-bold">{{ inv.owner_name || 'مربي' }}</span> بيدعوك تنضم كـ
             {{ inv.role === 'vet' ? 'طبيب بيطري' : 'عامل مزرعة' }}
           </p>
+          <input type="text" [(ngModel)]="inviteCodes[inv.id]" maxlength="16" dir="ltr" autocomplete="off"
+                 placeholder="اكتب كود الدعوة اللي صاحب المزرعة بعتهولك"
+                 class="form-input text-xs w-full mb-1.5 text-center tracking-widest uppercase"/>
           <div class="flex gap-2">
-            <button type="button" (click)="acceptInviteForMe(inv)" class="flex-1 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold">✅ قبول</button>
+            <button type="button" (click)="acceptInviteForMe(inv)" [disabled]="(inviteCodes[inv.id] || '').trim().length < 6"
+                    class="flex-1 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold disabled:opacity-40">✅ قبول</button>
             <button type="button" (click)="rejectInviteForMe(inv)" class="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">✕ رفض</button>
           </div>
         </div>
@@ -832,26 +836,7 @@ const TURKEY_VACC = [
       </p>
 
       <div *ngIf="showInviteForm()" class="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
-        <!-- 🔀 طريقة الدعوة: عنده إيميل يستخدمه، ولا لسه معملش حساب على الموقع؟ -->
-        <div class="flex gap-2">
-          <button type="button" (click)="inviteMode.set('email')"
-                  class="flex-1 py-2 rounded-lg text-[11px] font-bold border"
-                  [class.bg-green-600]="inviteMode() === 'email'" [class.text-white]="inviteMode() === 'email'"
-                  [class.text-gray-500]="inviteMode() !== 'email'">
-            📧 عنده إيميل
-          </button>
-          <button type="button" (click)="inviteMode.set('link')"
-                  class="flex-1 py-2 rounded-lg text-[11px] font-bold border"
-                  [class.bg-green-600]="inviteMode() === 'link'" [class.text-white]="inviteMode() === 'link'"
-                  [class.text-gray-500]="inviteMode() !== 'link'">
-            🔗 لسه معملش حساب
-          </button>
-        </div>
-
-        <input *ngIf="inviteMode() === 'email'" type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو" class="form-input text-xs w-full"/>
-        <p *ngIf="inviteMode() === 'link'" class="text-[11px] text-gray-500 bg-white rounded-lg p-2 border">
-          💡 مش لازم تعرف إيميله دلوقتي — حدد الصلاحيات وابعتله رابط الدعوة على تليجرام أو فيسبوك مباشرة.
-        </p>
+        <input type="email" [(ngModel)]="inviteForm.invited_email" placeholder="إيميل العضو (لازم يكون عنده حساب)" class="form-input text-xs w-full"/>
         <select [(ngModel)]="inviteForm.role" class="form-input text-xs w-full">
           <option value="worker">عامل مزرعة</option>
           <option value="vet">طبيب بيطري</option>
@@ -860,24 +845,24 @@ const TURKEY_VACC = [
           <input type="checkbox" [(ngModel)]="inviteForm.can_view_financials"/>
           يقدر يشوف البيانات المالية
         </label>
-        <button type="button" (click)="sendInvite()" [disabled]="(inviteMode() === 'email' && !inviteForm.invited_email) || inviting()"
+        <button type="button" (click)="sendInvite()" [disabled]="!inviteForm.invited_email || inviting()"
                 class="w-full py-2 rounded-lg bg-green-600 text-white text-xs font-bold disabled:opacity-40">
-          {{ inviting() ? 'جاري الإرسال...' : (inviteMode() === 'link' ? '🔗 إنشاء رابط الدعوة' : 'إرسال الدعوة') }}
+          {{ inviting() ? 'جاري الإرسال...' : 'إرسال الدعوة' }}
         </button>
 
         <div *ngIf="lastInviteLink()" class="bg-white rounded-lg p-2 border">
+          <div *ngIf="lastInviteCode()" class="text-center mb-2">
+            <p class="text-[10px] text-gray-500">كود الدعوة (ابعته للعضو — مطلوب عشان يقبل):</p>
+            <p class="font-black tracking-widest text-lg" dir="ltr">{{ lastInviteCode() }}</p>
+          </div>
           <p class="text-[10px] text-gray-500 mb-2">
-            {{ inviteMode() === 'link'
-              ? 'اتسجلت الدعوة — ابعتله لينك الموقع يعمل حساب، وبعد ما يدخل هتظهرله الدعوة:'
-              : 'لو العضو عنده حساب بالإيميل ده بالفعل، هيلاقي الدعوة تلقائي جوه التطبيق (تاب "قطعاني المشتركة"). لو لسه معندوش حساب، ابعتله لينك الموقع يسجّل بنفس الإيميل:' }}
+            العضو لازم يكون عنده حساب بنفس الإيميل ده. هيلاقي الدعوة جوه التطبيق، وهيكتب الكود عشان يقبلها. ابعتله الكود:
           </p>
           <div class="flex gap-2">
             <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
                class="flex-1 py-2 rounded-lg bg-green-500 text-white text-xs font-bold text-center no-underline">📱 واتساب</a>
             <a [href]="telegramShareUrl()" target="_blank" rel="noopener"
                class="flex-1 py-2 rounded-lg bg-blue-500 text-white text-xs font-bold text-center no-underline">✈️ تيليجرام</a>
-            <a [href]="facebookShareUrl()" target="_blank" rel="noopener"
-               class="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold text-center no-underline">📘 فيسبوك</a>
           </div>
         </div>
       </div>
@@ -893,6 +878,9 @@ const TURKEY_VACC = [
                 [class.bg-gray-200]="m.status === 'revoked' || m.status === 'rejected'" [class.text-gray-500]="m.status === 'revoked' || m.status === 'rejected'">
             {{ memberStatusLabel(m.status) }}
           </span>
+          <div *ngIf="m.status === 'pending' && m.invite_code" class="text-[11px] text-gray-500 mt-1">
+            كود الدعوة: <span class="font-black tracking-widest" dir="ltr">{{ m.invite_code }}</span>
+          </div>
         </div>
         <button *ngIf="m.status !== 'revoked'" type="button" (click)="revokeMember(m)" class="text-xs text-red-500 font-bold">🗑️</button>
       </div>
@@ -1047,7 +1035,8 @@ export class FlockDetailComponent implements OnInit {
   showInviteForm = signal(false);
   inviting = signal(false);
   lastInviteLink = signal<string | null>(null);
-  inviteMode = signal<'email' | 'link'>('email'); // 📧 دعوة بإيميل معروف / 🔗 دعوة بلينك بس لحد لسه معملش حساب
+  lastInviteCode = signal<string | null>(null); // 🔑 كود الدعوة اللي الباك بيولّده (للمالك بس)
+  inviteCodes: Record<string, string> = {};      // 🔑 الكود اللي المدعو بيكتبه لكل دعوة
   pendingInvitesForMe = signal<any[]>([]); // 🔔 دعوات موجهة لإيميلي أنا (لو صاحب الحساب ده كمان مدعو من حد تاني)
   inviteForm: { invited_email: string; role: string; can_add_records: boolean; can_view_financials: boolean } = {
     invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false,
@@ -1241,25 +1230,25 @@ export class FlockDetailComponent implements OnInit {
   }
 
   sendInvite() {
-    const isLinkMode = this.inviteMode() === 'link';
-    if (!isLinkMode && !this.inviteForm.invited_email) return;
+    if (!this.inviteForm.invited_email) return;
 
     this.inviting.set(true);
-    // 🔗 وضع "لسه معملش حساب": نبعت من غير إيميل — ⚠️ الباك إند لازم يقبل invited_email = null
-    // (لسه محتاج تعديل في الـ backend، شوف ملاحظة الـ 422 اللي اتبعتت في الرد)
-    const payload = isLinkMode ? { ...this.inviteForm, invited_email: null } : this.inviteForm;
-
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, payload)
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm)
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
           // ⚠️ إرسال إيميل حقيقي مش موجود لسه — اللينك ده لازم يتبعت يدويًا للعضو
           // 🌐 لينك الموقع نفسه (مش لينك القطيع/الدعوة) — العضو يسجّل حساب وبعدين الدعوة تظهرله جوه التطبيق
           this.lastInviteLink.set(window.location.origin);
+          this.lastInviteCode.set(res?.invite_code ?? null);
           this.inviteForm = { invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false };
           this.loadFarmMembers();
         },
-        error: () => { this.inviting.set(false); alert('حصل خطأ أثناء إرسال الدعوة'); },
+        error: (err) => {
+          this.inviting.set(false);
+          const detail = err?.error?.detail;
+          alert(typeof detail === 'string' ? detail : 'حصل خطأ أثناء إرسال الدعوة');
+        },
       });
   }
 
@@ -1280,8 +1269,16 @@ export class FlockDetailComponent implements OnInit {
   }
 
   acceptInviteForMe(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {})
-      .subscribe({ next: () => this.loadPendingInvitesForMe(), error: () => alert('حصل خطأ أثناء قبول الدعوة') });
+    const code = (this.inviteCodes[inv.id] || '').trim();
+    if (code.length < 6) return;
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, { code })
+      .subscribe({
+        next: () => { delete this.inviteCodes[inv.id]; this.loadPendingInvitesForMe(); },
+        error: (err) => {
+          const detail = err?.error?.detail;
+          alert(typeof detail === 'string' ? detail : 'حصل خطأ أثناء قبول الدعوة');
+        },
+      });
   }
 
   rejectInviteForMe(inv: any) {
@@ -1291,15 +1288,13 @@ export class FlockDetailComponent implements OnInit {
 
   // 📱 مشاركة لينك الدعوة عبر واتساب/تيليجرام — مجرد رابط، مفيش API ولا حساب مدفوع مطلوب
   whatsappShareUrl(): string {
-    const text = `تمت دعوتك للانضمام كعضو في إدارة القطعان. سجّل حساب على الموقع (بنفس الإيميل اللي اتدعيت عليه) وهتلاقي الدعوة جوه التطبيق: ${this.lastInviteLink()}`;
+    const code = this.lastInviteCode();
+    const text = `تمت دعوتك للانضمام كعضو في إدارة القطعان. ادخل على حسابك (بنفس الإيميل اللي اتدعيت عليه) وهتلاقي الدعوة جوه التطبيق: ${this.lastInviteLink()}` +
+      (code ? `\nكود الدعوة: ${code}` : '');
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
   }
   telegramShareUrl(): string {
-    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تمت دعوتك للانضمام كعضو في إدارة القطعان — سجّل حساب على الموقع')}`;
-  }
-  facebookShareUrl(): string {
-    // ⚠️ فيسبوك بيتجاهل أي نص مخصص (quote) في أغلب الحالات دلوقتي — بيشارك الرابط بس
-    return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(this.lastInviteLink() || '')}`;
+    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تمت دعوتك للانضمام كعضو في إدارة القطعان — ادخل على حسابك' + (this.lastInviteCode() ? `\nكود الدعوة: ${this.lastInviteCode()}` : ''))}`;
   }
 
   // 💉 دمج الجدول الاسترشادي (أسماء/طريقة) مع حالة التنفيذ الحقيقية من الداتابيز

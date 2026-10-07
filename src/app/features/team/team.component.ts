@@ -82,7 +82,7 @@ import { environment } from '../../../environments/environment';
               <p class="font-black tracking-widest text-lg" dir="ltr">{{ lastInviteCode() }}</p>
             </div>
             <p class="text-xs text-gray-500 mb-2">
-              ⚠️ لو العضو معندوش حساب لسه، ابعتله اللينك ده يعمل حساب بيه:
+              العضو لازم يكون عنده حساب بنفس الإيميل ده، وهيكتب الكود عشان يقبل الدعوة. ابعتله الكود:
             </p>
             <div class="flex gap-2">
               <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
@@ -354,7 +354,11 @@ export class TeamComponent implements OnInit {
           this.inviteForm = { invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false };
           this.loadMembers();
         },
-        error: () => { this.inviting.set(false); alert('حصل خطأ أثناء إرسال الدعوة'); },
+        error: (err) => {
+          this.inviting.set(false);
+          const detail = err?.error?.detail;
+          alert(typeof detail === 'string' ? detail : 'حصل خطأ أثناء إرسال الدعوة');
+        },
       });
   }
 
