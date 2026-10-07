@@ -10,8 +10,8 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   template: `
-  <div class="min-h-screen flex items-center justify-center p-4"
-       style="background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
+<div class="page-wrapper min-h-screen flex items-center justify-center p-4"
+          style="background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
       <div class="text-white text-center py-7 px-6"
            style="background:linear-gradient(135deg,#1a4a2e 0%,#2d9e5f 100%)">

@@ -135,44 +135,46 @@ interface NavItem {
            [class.lg:ml-64]="!isRtl()"
            [class.lg:mr-64]="isRtl()">
 
-        <!-- Topbar -->
-        <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-[var(--c-border)] flex items-center gap-3 px-4 lg:px-6" style="height:60px">
-          <button class="text-gray-500 text-2xl lg:hidden" (click)="sideOpen.set(!sideOpen())">☰</button>
-<a 
-  routerLink="/dashboard" 
-  class="group flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-300
-         hover:bg-emerald-500/10 focus:outline-none cursor-pointer">
+      <!-- Topbar -->
+<header class="sticky top-0 z-30 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 px-4 lg:px-6 transition-colors duration-300" style="height:60px">
   
-  <!-- أيقونة الشعار (Logo Icon Container) -->
-  <div class="flex items-center justify-center w-8 h-8 rounded-lg 
-              bg-gradient-to-tr from-emerald-600 to-green-500 
-              text-white shadow-md shadow-emerald-500/20 
-              group-hover:scale-110 transition-transform duration-300">
-    <!-- أيقونة طائر / مزرعة تعبر عن دواجن بلس -->
-    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-5l6 2.5-6 2.5zm0-8.5 6 2.5-6 2.5V8z"/>
-    </svg>
+  <!-- زر القائمة الجانبية (Mobile Menu Button) -->
+  <button class="text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-2xl lg:hidden focus:outline-none transition-colors" (click)="sideOpen.set(!sideOpen())">
+    ☰
+  </button>
+
+  <!-- الشعار والاسم -->
+  <a routerLink="/dashboard" 
+     class="group flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-300 hover:bg-emerald-500/10 focus:outline-none cursor-pointer">
+    
+    <!-- أيقونة الشعار (Logo Icon) -->
+    <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-600 to-green-500 text-white shadow-md shadow-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
+      <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-5l6 2.5-6 2.5zm0-8.5 6 2.5-6 2.5V8z"/>
+      </svg>
+    </div>
+
+    <!-- نص الشعار -->
+    <span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300 text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+      {{ 'APP.NAME' | translate }}
+    </span>
+  </a>
+
+  <div class="hidden lg:block flex-1"></div>
+
+  <!-- قسم التنبيهات -->
+  <div class="flex items-center gap-2 ms-auto">
+    <a routerLink="/alerts" 
+       class="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 transition-colors text-xl">
+      🔔
+      <span *ngIf="activeAlertCount() > 0"
+            class="absolute top-1 end-1 w-4 h-4 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+        {{ activeAlertCount() }}
+      </span>
+    </a>
   </div>
 
-  <!-- نص الشعار (Logo Text & Dark Mode Support) -->
-<span class="font-extrabold text-base tracking-wide leading-tight truncate transition-colors duration-300
-             text-gray-900 dark:text-emerald-200 
-             group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-  {{ 'APP.NAME' | translate }}
-</span>
-
-</a>
-          <div class="hidden lg:block flex-1"></div>
-          <div class="flex items-center gap-2 ms-auto">
-            <a routerLink="/alerts" class="relative p-2 rounded-xl hover:bg-gray-100 transition-colors text-xl">
-              🔔
-              <span *ngIf="activeAlertCount() > 0"
-                    class="absolute top-1 end-1 w-4 h-4 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center">
-                {{ activeAlertCount() }}
-              </span>
-            </a>
-          </div>
-        </header>
+</header>
 
         <!-- Page content -->
         <!-- صفحة الشات (ai-assistant) بتاخد المساحة كاملة من غير padding — باقي

@@ -10,7 +10,7 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   template: `
-  <div class="min-h-screen flex items-center justify-center p-4"
+  <div class="page-wrapper min-h-screen flex items-center justify-center p-4"
        style="background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
 
     <!-- Decorative circles -->
@@ -56,7 +56,7 @@ import { AuthService } from '../../core/services/auth.service';
         </p>
       </div>
     </div>
-  </div>
+  </>
   `,
 })
 export class LoginComponent {
