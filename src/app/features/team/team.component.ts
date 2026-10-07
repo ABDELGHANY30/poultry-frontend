@@ -24,8 +24,12 @@ import { environment } from '../../../environments/environment';
           <span class="font-bold">{{ inv.role === 'vet' ? 'طبيب بيطري' : 'عامل مزرعة' }}</span>
           {{ inv.can_add_records ? '(تقدر تسجل بيانات)' : '(عرض بس)' }}
         </p>
+        <input type="text" [(ngModel)]="inviteCodes[inv.id]" maxlength="16" dir="ltr" autocomplete="off"
+               placeholder="اكتب كود الدعوة اللي صاحب المزرعة بعتهولك"
+               class="form-input w-full mb-2 text-center tracking-widest uppercase"/>
         <div class="flex gap-2">
-          <button (click)="acceptInvite(inv)" class="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm font-bold">✅ قبول</button>
+          <button (click)="acceptInvite(inv)" [disabled]="(inviteCodes[inv.id] || '').trim().length < 6"
+                  class="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm font-bold disabled:opacity-40">✅ قبول</button>
           <button (click)="rejectInvite(inv)" class="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-bold">✕ رفض</button>
         </div>
       </div>
@@ -73,6 +77,10 @@ import { environment } from '../../../environments/environment';
             {{ inviting() ? 'جاري الإرسال...' : 'إرسال الدعوة' }}
           </button>
           <div *ngIf="lastInviteLink()" class="bg-gray-50 rounded-lg p-2">
+            <div *ngIf="lastInviteCode()" class="text-center mb-2">
+              <p class="text-xs text-gray-500">كود الدعوة (ابعته للعضو — مطلوب عشان يقبل):</p>
+              <p class="font-black tracking-widest text-lg" dir="ltr">{{ lastInviteCode() }}</p>
+            </div>
             <p class="text-xs text-gray-500 mb-2">
               ⚠️ لو العضو معندوش حساب لسه، ابعتله اللينك ده يعمل حساب بيه:
             </p>
@@ -104,6 +112,9 @@ import { environment } from '../../../environments/environment';
                     [class.bg-gray-200]="m.status === 'revoked' || m.status === 'rejected'" [class.text-gray-500]="m.status === 'revoked' || m.status === 'rejected'">
                 {{ statusLabel(m.status) }}
               </span>
+              <div *ngIf="m.status === 'pending' && m.invite_code" class="text-[11px] text-gray-500 mt-1">
+                كود الدعوة: <span class="font-black tracking-widest" dir="ltr">{{ m.invite_code }}</span>
+              </div>
             </div>
             <div class="flex gap-2 flex-shrink-0">
               <button *ngIf="m.status !== 'revoked'" (click)="openEditMember(m)" class="text-xs text-blue-600 font-bold">✏️ تعديل</button>
@@ -199,6 +210,7 @@ export class TeamComponent implements OnInit {
   pendingInvites = signal<any[]>([]);
   inviting = signal(false);
   lastInviteLink = signal<string | null>(null);
+  lastInviteCode = signal<string | null>(null);
 
   // ✏️ تعديل صلاحيات/تقييد قطعان عضو موجود
   editingMemberId = signal<string | null>(null);
@@ -280,11 +292,23 @@ export class TeamComponent implements OnInit {
       .subscribe({ next: (res) => this.pendingInvites.set(res || []), error: () => this.pendingInvites.set([]) });
   }
 
+  // كود الدعوة اللي المدعو بيكتبه لكل دعوة (الباك بيطلبه عشان القبول)
+  inviteCodes: Record<string, string> = {};
+
   acceptInvite(inv: any) {
-    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, {})
+    const code = (this.inviteCodes[inv.id] || '').trim();
+    if (code.length < 6) return;
+    this.http.post(`${environment.apiUrl}/farm-members/${inv.id}/accept`, { code })
       .subscribe({
-        next: () => { this.loadPendingInvites(); this.loadSharedFlocks(); },
-        error: () => alert('حصل خطأ أثناء قبول الدعوة'),
+        next: () => {
+          delete this.inviteCodes[inv.id];
+          this.loadPendingInvites();
+          this.loadSharedFlocks();
+        },
+        error: (err) => {
+          const detail = err?.error?.detail;
+          alert(typeof detail === 'string' ? detail : 'حصل خطأ أثناء قبول الدعوة');
+        },
       });
   }
 
@@ -295,13 +319,15 @@ export class TeamComponent implements OnInit {
 
   // 📱 مشاركة لينك الدعوة عبر واتساب/تيليجرام — مجرد رابط، مفيش API ولا حساب مدفوع مطلوب
   private shareText(): string {
-    return `تم دعوتك للانضمام كعضو مشارك في إدارة القطعان. اضغط الرابط عشان توافق: ${this.lastInviteLink()}`;
+    const code = this.lastInviteCode();
+    return `تم دعوتك للانضمام كعضو مشارك في إدارة القطعان. اضغط الرابط عشان توافق: ${this.lastInviteLink()}` +
+      (code ? `\nكود الدعوة: ${code}` : '');
   }
   whatsappShareUrl(): string {
     return `https://wa.me/?text=${encodeURIComponent(this.shareText())}`;
   }
   telegramShareUrl(): string {
-    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان')}`;
+    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تم دعوتك للانضمام كعضو مشارك في إدارة القطعان' + (this.lastInviteCode() ? `\nكود الدعوة: ${this.lastInviteCode()}` : ''))}`;
   }
 
 
@@ -324,6 +350,7 @@ export class TeamComponent implements OnInit {
           this.inviting.set(false);
           // ⚠️ ده لينك افتراضي لحد ما تربطه بمسار /join-farm فعلي عندك + إرسال إيميل حقيقي
           this.lastInviteLink.set(`${window.location.origin}/join-farm/${res.id}`);
+          this.lastInviteCode.set(res?.invite_code ?? null);
           this.inviteForm = { invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false };
           this.loadMembers();
         },
