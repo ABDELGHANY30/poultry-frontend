@@ -184,77 +184,68 @@ interface NavItem {
           <router-outlet />
         </main>
 
-        <!-- Footer (الصفحة الرئيسية / لوحة التحكم فقط) -->
-        <div *ngIf="isDashboardRoute()" class="w-full max-w-7xl mx-auto px-2 lg:px-6 pb-4 lg:pb-6">
-          <footer class="rounded-3xl overflow-hidden text-white" style="background:#0d1a12;">
+        <!-- Footer (لوحة التحكم / الصفحة الرئيسية فقط) -->
+        <footer *ngIf="isDashboardRoute()" class="mt-8 text-white" style="background:#111;">
+          <div class="max-w-7xl mx-auto px-6 lg:px-10 pt-10 pb-8">
 
-            <!-- بانر الاقتباس -->
-            <div class="relative h-44 sm:h-52 flex items-center justify-center text-center px-6"
-                 [style.background]="bannerBg">
-              <div class="absolute inset-0 bg-black/30"></div>
-              <div class="relative max-w-xl">
-                <p class="text-base sm:text-lg font-semibold leading-relaxed">{{ quote.text }}</p>
-                <p class="text-xs text-white/70 mt-3">{{ quote.author }}</p>
+            <!-- الشعار + الأعمدة -->
+            <div class="grid gap-8 lg:grid-cols-12">
+
+              <div class="lg:col-span-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">🐔</span>
+                  <span class="text-2xl font-extrabold tracking-wide">{{ 'APP.NAME' | translate }}</span>
+                </div>
+                <p class="text-xs text-white/60 mt-1.5">{{ 'APP.TAGLINE' | translate }}</p>
+              </div>
+
+              <div class="lg:col-span-9 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-8 text-xs tracking-wide">
+
+                <ul class="space-y-2">
+                  <li><a routerLink="/flocks" class="hover:text-emerald-300">القطعان</a></li>
+                  <li><a routerLink="/market-hub" class="hover:text-emerald-300">السوق</a></li>
+                  <li><a routerLink="/learning" class="hover:text-emerald-300">التعلّم</a></li>
+                  <li><a routerLink="/calculator" class="hover:text-emerald-300">الحاسبة</a></li>
+                </ul>
+
+                <ul class="space-y-2">
+                  <li><a routerLink="/ai-assistant" class="hover:text-emerald-300">المساعد الذكي</a></li>
+                  <li><a routerLink="/alerts" class="hover:text-emerald-300">التنبيهات</a></li>
+                  <li><a routerLink="/team" class="hover:text-emerald-300">الفريق</a></li>
+                </ul>
+
+                <ul class="space-y-2">
+                  <li><a routerLink="/subscription" class="hover:text-emerald-300">أسعار الخدمات</a></li>
+                  <li><a routerLink="/subscription" class="hover:text-emerald-300">الاشتراك</a></li>
+                </ul>
+
+                <ul class="space-y-2">
+                  <li>{{ contact.address }}</li>
+                  <li><a [href]="'mailto:' + contact.email" class="hover:text-emerald-300 break-all">{{ contact.email }}</a></li>
+                  <li><a [href]="'tel:' + contact.phoneIntl" dir="ltr" class="hover:text-emerald-300 inline-block">{{ contact.phone }}</a></li>
+                </ul>
               </div>
             </div>
 
-            <div class="px-6 sm:px-10 py-8">
+            <div class="border-t border-white/30 mt-8"></div>
 
-              <!-- الصف العلوي: الشعار + التواصل -->
-              <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
-                <div>
-                  <div class="flex items-center gap-2.5">
-                    <span class="text-2xl">🐔</span>
-                    <span class="text-2xl font-extrabold tracking-wide">{{ 'APP.NAME' | translate }}</span>
-                  </div>
-                  <p class="text-[11px] text-white/50 mt-1.5">{{ 'APP.TAGLINE' | translate }}</p>
-                </div>
-                <div class="text-sm space-y-1 sm:text-end">
-                  <a [href]="'tel:' + contact.phoneIntl" dir="ltr" class="block text-white/90 hover:text-emerald-300 transition-colors">{{ contact.phone }}</a>
-                  <a [href]="'mailto:' + contact.email" class="block text-white/90 hover:text-emerald-300 transition-colors break-all">{{ contact.email }}</a>
-                </div>
+            <!-- أيقونات التواصل + الحقوق -->
+            <div class="flex flex-col items-center gap-5 pt-8">
+              <div class="flex items-center gap-3">
+                <a [href]="'mailto:' + contact.email" title="الإيميل" class="w-9 h-9 rounded-full border border-white/70 flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                </a>
+                <a [href]="'tel:' + contact.phoneIntl" title="اتصل بنا" class="w-9 h-9 rounded-full border border-white/70 flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" /></svg>
+                </a>
+                <span title="{{ contact.address }}" class="w-9 h-9 rounded-full border border-white/70 flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                </span>
               </div>
-
-              <div class="border-t border-white/10 my-7"></div>
-
-              <!-- الأعمدة -->
-              <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-7 text-xs">
-                <div>
-                  <h5 class="font-bold text-sm mb-3">عن الخدمة</h5>
-                  <p class="text-white/50 leading-relaxed">منصة متكاملة لإدارة مزارع الدواجن: متابعة القطعان، التنبيهات، المساعد الذكي والسوق.</p>
-                </div>
-                <div>
-                  <h5 class="font-bold text-sm mb-3">روابط سريعة</h5>
-                  <ul class="space-y-1.5 text-white/50">
-                    <li><a routerLink="/flocks" class="hover:text-emerald-300">القطعان</a></li>
-                    <li><a routerLink="/market-hub" class="hover:text-emerald-300">السوق</a></li>
-                    <li><a routerLink="/learning" class="hover:text-emerald-300">التعلّم</a></li>
-                    <li><a routerLink="/calculator" class="hover:text-emerald-300">الحاسبة</a></li>
-                  </ul>
-                </div>
-                <div>
-                  <h5 class="font-bold text-sm mb-3">العنوان</h5>
-                  <p class="text-white/50 leading-relaxed">{{ contact.address }}</p>
-                </div>
-                <div>
-                  <h5 class="font-bold text-sm mb-3">الأسعار</h5>
-                  <ul class="space-y-1.5 text-white/50">
-                    <li><a routerLink="/subscription" class="hover:text-emerald-300">أسعار الخدمات</a></li>
-                    <li><a routerLink="/subscription" class="hover:text-emerald-300">الاشتراك</a></li>
-                  </ul>
-                </div>
-              </div>
-
-              <div class="border-t border-white/10 mt-8 pt-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-white/40">
-                <span>© {{ year }} {{ 'APP.NAME' | translate }} — جميع الحقوق محفوظة</span>
-                <div class="flex gap-4">
-                  <a routerLink="/subscription" class="hover:text-white">الأسعار</a>
-                  <a [href]="'mailto:' + contact.email" class="hover:text-white">تواصل معنا</a>
-                </div>
-              </div>
+              <p class="text-[11px] text-white/70">© {{ year }} {{ 'APP.NAME' | translate }} — جميع الحقوق محفوظة.</p>
             </div>
-          </footer>
-        </div>
+          </div>
+        </footer>
       </div>
 
     </div>
@@ -284,10 +275,6 @@ export class LayoutComponent implements OnInit {
   };
   year = new Date().getFullYear();
 
-  // ✏️ اقتباس البانر (غيّره براحتك)
-  quote = { text: 'القرارات الناجحة في المزرعة تبدأ من بيانات دقيقة ومتابعة يومية.', author: 'فريق العمل' };
-  // لو عايز صورة بدل التدرج: 'url(assets/footer.jpg) center/cover'
-  bannerBg = 'repeating-linear-gradient(90deg,#3f6b2a 0 18px,#5d8a3a 18px 24px,#2f5320 24px 44px,#6f9a45 44px 50px)';
 
   sideOpen = signal(window.innerWidth >= 1024);
   lang = signal<'ar'|'en'>('ar');
