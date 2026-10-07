@@ -211,7 +211,8 @@
       "TEMPERATURE":"درجة الحرارة",
       "REPORT_EVENT":"تقريري",
       "VACCINATION":"تحصينات",
-      "MORTALITY":"النفوق"
+      "MORTALITY":"النفوق",
+      "FARM_INVITE":"دعوة انضمام"
     }
   },
 

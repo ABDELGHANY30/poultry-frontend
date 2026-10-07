@@ -21,7 +21,7 @@ import { environment } from '../../../environments/environment';
       <div *ngFor="let inv of pendingInvites()" class="bg-white rounded-xl p-3 mb-2 last:mb-0">
         <p class="text-sm mb-2">
           <span class="font-bold">{{ inv.owner_name || 'مربي' }}</span> بيدعوك تنضم كـ
-          <span class="font-bold">{{ inv.role === 'vet' ? 'طبيب بيطري' : 'عامل مزرعة' }}</span>
+          <span class="font-bold">{{ roleLabel(inv.role, true) }}</span>
           {{ inv.can_add_records ? '(تقدر تسجل بيانات)' : '(عرض بس)' }}
         </p>
         <input type="text" [(ngModel)]="inviteCodes[inv.id]" maxlength="16" dir="ltr" autocomplete="off"
@@ -63,6 +63,7 @@ import { environment } from '../../../environments/environment';
           <select [(ngModel)]="inviteForm.role" class="form-input text-sm w-full">
             <option value="worker">عامل مزرعة</option>
             <option value="vet">طبيب بيطري</option>
+            <option value="engineer">مهندس</option>
           </select>
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" [(ngModel)]="inviteForm.can_add_records"/>
@@ -105,7 +106,7 @@ import { environment } from '../../../environments/environment';
           <div class="flex items-center justify-between text-sm">
             <div>
               <span class="font-bold">{{ m.invited_email }}</span>
-              <span class="text-[var(--c-muted)] text-xs"> — {{ m.role === 'vet' ? 'بيطري' : 'عامل' }}</span>
+              <span class="text-[var(--c-muted)] text-xs"> — {{ roleLabel(m.role) }}</span>
               <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold mr-1"
                     [class.bg-amber-100]="m.status === 'pending'" [class.text-amber-700]="m.status === 'pending'"
                     [class.bg-green-100]="m.status === 'active'" [class.text-green-700]="m.status === 'active'"
@@ -127,6 +128,7 @@ import { environment } from '../../../environments/environment';
             <select [(ngModel)]="editForm.role" class="form-input text-xs w-full">
               <option value="worker">عامل مزرعة</option>
               <option value="vet">طبيب بيطري</option>
+            <option value="engineer">مهندس</option>
             </select>
             <label class="flex items-center gap-2 text-xs">
               <input type="checkbox" [(ngModel)]="editForm.can_add_records"/> يقدر يسجل بيانات يومية
@@ -370,6 +372,14 @@ export class TeamComponent implements OnInit {
 
   openSharedFlock(f: any) {
     this.router.navigate(['/flocks', f.id]);
+  }
+
+  // 🧑‍🔧 اسم الدور بالعربي (long = للجمل، المختصر للقوايم)
+  roleLabel(role: string, long = false): string {
+    const m: Record<string, [string, string]> = {
+      worker: ['عامل', 'عامل مزرعة'], vet: ['بيطري', 'طبيب بيطري'], engineer: ['مهندس', 'مهندس'],
+    };
+    return (m[role] ?? [role, role])[long ? 1 : 0];
   }
 
   statusLabel(status: string): string {

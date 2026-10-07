@@ -334,7 +334,7 @@ const TURKEY_VACC = [
       <div class="card mb-4">
         <div class="flex items-center justify-between mb-3">
           <h2 class="section-title">✅ مهام اليوم</h2>
-          <button type="button" *ngIf="myAccess()?.is_owner !== false" (click)="showTaskForm.set(!showTaskForm())" class="text-xs font-bold text-green-600">
+          <button type="button" *ngIf="myAccess()?.is_owner !== false || myAccess()?.can_add_records" (click)="showTaskForm.set(!showTaskForm())" class="text-xs font-bold text-green-600">
             {{ showTaskForm() ? 'إلغاء' : '+ مهمة جديدة' }}
           </button>
         </div>
@@ -818,7 +818,7 @@ const TURKEY_VACC = [
         <div *ngFor="let inv of pendingInvitesForMe()" class="text-sm mb-2 last:mb-0">
           <p class="mb-1.5">
             <span class="font-bold">{{ inv.owner_name || 'مربي' }}</span> بيدعوك تنضم كـ
-            {{ inv.role === 'vet' ? 'طبيب بيطري' : 'عامل مزرعة' }}
+            {{ roleLabel(inv.role, true) }}
           </p>
           <input type="text" [(ngModel)]="inviteCodes[inv.id]" maxlength="16" dir="ltr" autocomplete="off"
                  placeholder="اكتب كود الدعوة اللي صاحب المزرعة بعتهولك"
@@ -840,6 +840,7 @@ const TURKEY_VACC = [
         <select [(ngModel)]="inviteForm.role" class="form-input text-xs w-full">
           <option value="worker">عامل مزرعة</option>
           <option value="vet">طبيب بيطري</option>
+          <option value="engineer">مهندس</option>
         </select>
         <label class="flex items-center gap-2 text-xs">
           <input type="checkbox" [(ngModel)]="inviteForm.can_view_financials"/>
@@ -871,7 +872,7 @@ const TURKEY_VACC = [
       <div *ngFor="let m of farmMembers()" class="flex items-center justify-between text-sm bg-gray-50 rounded-lg px-3 py-2 mb-1.5">
         <div>
           <span class="font-bold">{{ m.invited_email || '🔗 دعوة بلينك (لسه بدون إيميل)' }}</span>
-          <span class="text-[var(--c-muted)] text-xs"> — {{ m.role === 'vet' ? 'بيطري' : 'عامل' }}</span>
+          <span class="text-[var(--c-muted)] text-xs"> — {{ roleLabel(m.role) }}</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold mr-1"
                 [class.bg-amber-100]="m.status === 'pending'" [class.text-amber-700]="m.status === 'pending'"
                 [class.bg-green-100]="m.status === 'active'" [class.text-green-700]="m.status === 'active'"
@@ -1256,6 +1257,14 @@ export class FlockDetailComponent implements OnInit {
     if (!confirm(`متأكد إنك عايز تلغي صلاحية ${m.invited_email}؟`)) return;
     this.http.delete(`${environment.apiUrl}/farm-members/${m.id}`)
       .subscribe({ next: () => this.loadFarmMembers(), error: () => alert('حصل خطأ أثناء الإلغاء') });
+  }
+
+  // 🧑‍🔧 اسم الدور بالعربي (long = للجمل، المختصر للقوايم)
+  roleLabel(role: string, long = false): string {
+    const m: Record<string, [string, string]> = {
+      worker: ['عامل', 'عامل مزرعة'], vet: ['بيطري', 'طبيب بيطري'], engineer: ['مهندس', 'مهندس'],
+    };
+    return (m[role] ?? [role, role])[long ? 1 : 0];
   }
 
   memberStatusLabel(status: string): string {
