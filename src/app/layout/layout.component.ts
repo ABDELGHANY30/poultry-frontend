@@ -186,49 +186,68 @@ interface NavItem {
 
         <!-- Footer -->
         <footer *ngIf="!isChatRoute()"
-                class="mt-auto border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-colors duration-300">
-          <div class="max-w-7xl mx-auto w-full px-4 lg:px-6 py-6 grid gap-6 md:grid-cols-3 text-sm">
+                class="mt-8 relative overflow-hidden border-t border-emerald-100 dark:border-white/10 text-gray-800 dark:text-white bg-gradient-to-br from-emerald-50 via-white to-green-50 dark:from-[#0f2d1a] dark:via-[#1a4a2e] dark:to-[#16392a] transition-colors duration-300">
+          <div class="absolute -top-24 -end-24 w-72 h-72 rounded-full bg-emerald-300/20 dark:bg-emerald-400/10 blur-3xl pointer-events-none"></div>
+          <div class="absolute -bottom-24 -start-24 w-72 h-72 rounded-full bg-green-300/20 dark:bg-green-300/10 blur-3xl pointer-events-none"></div>
 
-            <!-- عن الخدمة -->
-            <div>
-              <div class="flex items-center gap-2 mb-2">
-                <span class="text-xl">🐔</span>
-                <span class="font-extrabold text-gray-900 dark:text-white">{{ 'APP.NAME' | translate }}</span>
+          <div class="relative max-w-7xl mx-auto px-4 lg:px-6 pt-10 pb-6">
+            <div class="grid gap-8 lg:grid-cols-12">
+
+              <!-- العلامة -->
+              <div class="lg:col-span-4">
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-400/15 border border-emerald-200 dark:border-emerald-300/30 flex items-center justify-center text-2xl">🐔</div>
+                  <span class="font-extrabold text-lg text-gray-900 dark:text-white">{{ 'APP.NAME' | translate }}</span>
+                </div>
+                <p class="text-gray-500 dark:text-white/60 text-sm leading-relaxed max-w-sm">{{ 'APP.TAGLINE' | translate }}</p>
+                <a routerLink="/subscription"
+                   class="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all active:scale-95">
+                  ⭐ أسعار الخدمات والاشتراك
+                </a>
               </div>
-              <p class="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{{ 'APP.TAGLINE' | translate }}</p>
+
+              <!-- التواصل -->
+              <div class="lg:col-span-8">
+                <h4 class="text-sm font-bold text-emerald-700 dark:text-emerald-300 mb-3">تواصل معنا</h4>
+                <div class="grid gap-3 sm:grid-cols-3">
+
+                  <div class="flex items-start gap-3 p-3 rounded-2xl bg-white dark:bg-white/5 border border-emerald-100 dark:border-white/10 shadow-sm dark:shadow-none">
+                    <div class="w-9 h-9 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-400/15 flex items-center justify-center">📍</div>
+                    <div class="min-w-0">
+                      <p class="text-[11px] text-gray-400 dark:text-white/40 mb-0.5">العنوان</p>
+                      <p class="text-sm text-gray-800 dark:text-white/90 leading-snug">{{ contact.address }}</p>
+                    </div>
+                  </div>
+
+                  <a [href]="'mailto:' + contact.email"
+                     class="flex items-start gap-3 p-3 rounded-2xl bg-white dark:bg-white/5 border border-emerald-100 dark:border-white/10 shadow-sm dark:shadow-none hover:border-emerald-300 dark:hover:bg-white/10 dark:hover:border-emerald-300/40 transition-all">
+                    <div class="w-9 h-9 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-400/15 flex items-center justify-center">✉️</div>
+                    <div class="min-w-0">
+                      <p class="text-[11px] text-gray-400 dark:text-white/40 mb-0.5">الإيميل</p>
+                      <p class="text-sm text-gray-800 dark:text-white/90 break-all">{{ contact.email }}</p>
+                    </div>
+                  </a>
+
+                  <a [href]="'tel:' + contact.phoneIntl"
+                     class="flex items-start gap-3 p-3 rounded-2xl bg-white dark:bg-white/5 border border-emerald-100 dark:border-white/10 shadow-sm dark:shadow-none hover:border-emerald-300 dark:hover:bg-white/10 dark:hover:border-emerald-300/40 transition-all">
+                    <div class="w-9 h-9 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-400/15 flex items-center justify-center">📞</div>
+                    <div class="min-w-0">
+                      <p class="text-[11px] text-gray-400 dark:text-white/40 mb-0.5">رقم التواصل</p>
+                      <p class="text-sm text-gray-800 dark:text-white/90" dir="ltr" style="text-align:start">{{ contact.phone }}</p>
+                    </div>
+                  </a>
+
+                </div>
+              </div>
             </div>
 
-            <!-- بيانات التواصل -->
-            <div>
-              <h4 class="font-bold text-gray-900 dark:text-white mb-2">تواصل معنا</h4>
-              <ul class="space-y-1.5 text-gray-600 dark:text-gray-300">
-                <li class="flex items-start gap-2">
-                  <span>📍</span>
-                  <span>{{ contact.address }}</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <span>✉️</span>
-                  <a [href]="'mailto:' + contact.email" class="hover:text-emerald-600 dark:hover:text-emerald-400 break-all">{{ contact.email }}</a>
-                </li>
-                <li class="flex items-center gap-2">
-                  <span>📞</span>
-                  <a [href]="'tel:' + contact.phoneIntl" dir="ltr" class="hover:text-emerald-600 dark:hover:text-emerald-400">{{ contact.phone }}</a>
-                </li>
-              </ul>
+            <div class="mt-8 pt-4 border-t border-emerald-100 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-white/40">
+              <span>© {{ year }} {{ 'APP.NAME' | translate }} — جميع الحقوق محفوظة</span>
+              <div class="flex gap-4">
+                <a routerLink="/dashboard" class="hover:text-emerald-600 dark:hover:text-white">لوحة التحكم</a>
+                <a routerLink="/subscription" class="hover:text-emerald-600 dark:hover:text-white">الأسعار</a>
+              </div>
             </div>
-
-            <!-- روابط سريعة -->
-            <div>
-              <h4 class="font-bold text-gray-900 dark:text-white mb-2">روابط سريعة</h4>
-              <ul class="space-y-1.5 text-gray-600 dark:text-gray-300">
-                <li><a routerLink="/subscription" class="hover:text-emerald-600 dark:hover:text-emerald-400">أسعار الخدمات والاشتراك</a></li>
-                <li><a routerLink="/dashboard" class="hover:text-emerald-600 dark:hover:text-emerald-400">لوحة التحكم</a></li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="border-t border-gray-100 dark:border-gray-800 py-3 text-center text-[11px] text-gray-400">
-            © {{ year }} {{ 'APP.NAME' | translate }} — جميع الحقوق محفوظة
           </div>
         </footer>
       </div>
@@ -253,7 +272,7 @@ export class LayoutComponent implements OnInit {
 
   // ✏️ عدّل بيانات التواصل هنا (العنوان بالذات)
   contact = {
-    address: 'اكتب هنا عنوان النشاط: الشارع، المدينة، مصر',
+    address: 'القاهرة، مصر',
     email: 'abdelghanya2977@gmail.com',
     phone: '01271140161',
     phoneIntl: '+201271140161',
