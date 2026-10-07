@@ -135,8 +135,7 @@ interface NavItem {
            [class.lg:ml-64]="!isRtl()"
            [class.lg:mr-64]="isRtl()">
 
-      <!-- Topbar -->
-<header class="sticky top-0 z-30 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 px-4 lg:px-6 transition-colors duration-300" style="height:60px">
+ <header class="sticky top-0 z-30 bg-white dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 flex items-center py-2 gap-3 px-4 lg:px-6 transition-colors duration-300" style="height:60px">
   
   <!-- زر القائمة الجانبية (Mobile Menu Button) -->
   <button class="text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-2xl lg:hidden focus:outline-none transition-colors" (click)="sideOpen.set(!sideOpen())">

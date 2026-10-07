@@ -56,7 +56,7 @@ import { AuthService } from '../../core/services/auth.service';
         </p>
       </div>
     </div>
-  </>
+</div>
   `,
 })
 export class LoginComponent {
