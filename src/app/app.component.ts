@@ -60,20 +60,21 @@ export class AppComponent implements OnInit {
       }
     }, 10000);
 
-    this.router.events.subscribe(e => {
-      if (e instanceof NavigationStart) {
-        // أول تنقل (وقت ظهور الـ splash) مفيهوش loading — الـ loading للتنقل بين الصفحات بس
-        if (this.initialNavDone) this.loader.start();
-      } else if (
-        e instanceof NavigationEnd ||
-        e instanceof NavigationCancel ||
-        e instanceof NavigationError
-      ) {
-        this.loader.stop();
-        this.initialNavDone = true;
-      }
-    });
-
+   this.router.events.subscribe(e => {
+  if (e instanceof NavigationStart) {
+    if (this.initialNavDone) this.loader.start();
+  } else if (e instanceof NavigationEnd) {
+    this.loader.stop();
+    this.initialNavDone = true;
+  } else if (e instanceof NavigationCancel || e instanceof NavigationError) {
+    // لو لسه في مرحلة التحميل الأولي، الـ Cancel ده غالبًا مجرد redirect داخلي
+    // من guard زي dailyRecordGuard — منعتبروش نهاية المرحلة، ننتظر الـ
+    // NavigationEnd الحقيقي اللي جاي بعده (أو الـ safety timeout لو اتعطل).
+    if (this.initialNavDone) {
+      this.loader.stop();
+    }
+  }
+});
     this.adsService.init();
     this.offlineSync.init();
 
