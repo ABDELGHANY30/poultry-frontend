@@ -5,6 +5,7 @@ import {
   NavigationEnd,
   NavigationCancel,
   NavigationError,
+  NavigationCancellationCode,
   Router,
   RouterOutlet
 } from "@angular/router";
@@ -17,18 +18,19 @@ import { LoadingScreenComponent } from './features/loading-screen/loading-screen
 import { SplashComponent } from './features/splash/splash.component';
 import { CommonModule } from '@angular/common';
 import { App } from '@capacitor/app';
+import { BehaviorSubject, combineLatest } from 'rxjs';
+import { debounceTime, filter, take } from 'rxjs/operators';
+import { HttpActivityService } from './core/interceptors/http-activity';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [CommonModule, RouterOutlet, LoadingScreenComponent, SplashComponent],
   template: `
-    <app-splash *ngIf="!splashDone" [ready]="initialNavDone" (finished)="onSplashFinished()"></app-splash>
+    <app-splash *ngIf="!splashDone" [ready]="ready" (finished)="onSplashFinished()"></app-splash>
 
-    <ng-container *ngIf="splashDone">
-      <app-loading-screen/>
-      <div class="app-shell"><router-outlet /></div>
-    </ng-container>`
+    <app-loading-screen/>
+    <div class="app-shell"><router-outlet /></div>`
   })
 export class AppComponent implements OnInit {
   private translate = inject(TranslateService);
@@ -38,10 +40,15 @@ export class AppComponent implements OnInit {
   private router = inject(Router);
   private ngZone = inject(NgZone);
 
+  private activity = inject(HttpActivityService);
+
   splashDone = false;
 
-  // true لما أول تنقل يخلص → الـ splash يكمّل الشريط 100% ويقفل (فالـ loading مايظهرش بعده)
-  initialNavDone = false;
+  // true لما أول تنقل يخلص
+  private navDone$ = new BehaviorSubject(false);
+
+  // true لما التنقل يخلص ومفيش requests شغالة → الـ splash يكمّل 100% ويقفل
+  ready = false;
 
   constructor(private adsService: AdsService) {}
 
@@ -49,32 +56,34 @@ export class AppComponent implements OnInit {
     SplashScreen.hide({ fadeOutDuration: 200 });
 
     // لو أول تنقل خلص قبل ما نوصل هنا
-    if (this.router.navigated) this.initialNavDone = true;
+    if (this.router.navigated) this.navDone$.next(true);
 
-    // أمان: لو أول تنقل علق (سيرفر نايم/guard بطيء) منسيبش الـ splash ثابت للأبد —
-    // بعد 10 ثواني نقفله ونظهر الـ loading لحد ما الصفحة تجهز
-    setTimeout(() => {
-      if (!this.initialNavDone) {
-        this.initialNavDone = true;
-        this.loader.start();
+    // الـ splash يقفل لما التنقل يخلص ومفيش requests شغالة لمدة 250ms
+    combineLatest([this.navDone$, this.activity.pending$]).pipe(
+      debounceTime(250),
+      filter(([nav, pending]) => nav && pending === 0),
+      take(1)
+    ).subscribe(() => (this.ready = true));
+
+    // أمان: لو السيرفر نايم/guard بطيء منسيبش الـ splash ثابت للأبد
+    setTimeout(() => (this.ready = true), 8000);
+
+    this.router.events.subscribe(e => {
+      if (e instanceof NavigationStart) {
+        // أول تنقل مفيهوش loading — الـ loading للتنقل بين الصفحات بس
+        if (this.navDone$.value) this.loader.start();
+      } else if (e instanceof NavigationCancel && e.code === NavigationCancellationCode.Redirect) {
+        return; // redirect من guard (زي dailyRecordGuard) — التنقل لسه مكمّل
+      } else if (
+        e instanceof NavigationEnd ||
+        e instanceof NavigationCancel ||
+        e instanceof NavigationError
+      ) {
+        this.loader.stop();
+        this.navDone$.next(true);
       }
-    }, 10000);
+    });
 
-   this.router.events.subscribe(e => {
-  if (e instanceof NavigationStart) {
-    if (this.initialNavDone) this.loader.start();
-  } else if (e instanceof NavigationEnd) {
-    this.loader.stop();
-    this.initialNavDone = true;
-  } else if (e instanceof NavigationCancel || e instanceof NavigationError) {
-    // لو لسه في مرحلة التحميل الأولي، الـ Cancel ده غالبًا مجرد redirect داخلي
-    // من guard زي dailyRecordGuard — منعتبروش نهاية المرحلة، ننتظر الـ
-    // NavigationEnd الحقيقي اللي جاي بعده (أو الـ safety timeout لو اتعطل).
-    if (this.initialNavDone) {
-      this.loader.stop();
-    }
-  }
-});
     this.adsService.init();
     this.offlineSync.init();
 

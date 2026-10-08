@@ -6,6 +6,7 @@ import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
 import { TranslateHttpLoader } from '@ngx-translate/http-loader';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { httpActivityInterceptor } from './core/interceptors/http-activity';
 // import { loaderInterceptor } from './core/interceptors/loading.interceptor';
 
 export function createTranslateLoader(http: HttpClient) {
@@ -15,7 +16,7 @@ export function createTranslateLoader(http: HttpClient) {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes, withViewTransitions()),
-    provideHttpClient(withInterceptors([authInterceptor,])),
+    provideHttpClient(withInterceptors([authInterceptor, httpActivityInterceptor])),
     provideAnimations(),
     importProvidersFrom(
       TranslateModule.forRoot({
