@@ -269,7 +269,7 @@ export class LayoutComponent implements OnInit {
   // ✏️ عدّل بيانات التواصل هنا (العنوان بالذات)
   contact = {
     address: 'القاهرة، مصر',
-    email: 'abdelghanya2977@gmail.com',
+    email: 'mazar3.ko@gmail.com',
     phone: '01271140161',
     phoneIntl: '+201271140161',
   };
