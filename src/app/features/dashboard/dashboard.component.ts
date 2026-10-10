@@ -73,7 +73,7 @@ const CATEGORIES = [
    <!-- شبكة تعوض الكروت: كل Category كارت مستقل بذاته -->
 <!-- شبكة الكروت: كل Category في كارت مستقل -->
 <ng-template #pricesBlock>
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5" *ngIf="prices() && prices().length > 0">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5" *ngIf="visiblePrices().length > 0">
 
   <!-- Loop على كل Category بعد الترتيب -->
   <div *ngFor="let group of groupedPrices"
@@ -499,7 +499,7 @@ categoryNamesAr: { [key: string]: string } = {
 categoryOrder = ['poultry', 'broiler', 'chicks', 'feed', 'eggs'];
 
 get groupedPrices() {
-  const pricesList = this.prices() || [];
+  const pricesList = this.visiblePrices() || [];
   const groups: { [key: string]: any[] } = {};
 
   // تجميع الأسعار حسب الفئة
@@ -602,9 +602,43 @@ getCategoryNameAr(categoryKey: string): string {
 
   prices = signal<any[]>([]);
 
+  // 📌 المسجّل اللي عنده قطيع: 5 أسعار بسيطة بس (صنف واحد من كل قسم، وعلف واحد بس)
+  // 🌐 غير المسجّل أو من غير قطيع: كل الأسعار زي صفحة /prices
+  private compactOrder = ['broiler', 'eggs', 'chicks', 'breeders', 'feed'];
+  private compactPreferred: Record<string, string> = {
+    broiler: 'الفراخ البيضاء',
+    eggs: 'بيض أبيض',
+    chicks: 'كتكوت أبيض أهالي',
+  };
+
+  visiblePrices = computed(() => {
+    const all = this.prices() || [];
+    if (!this.fullAccess()) return all;
+
+    const catOf = (p: any) => (p.category || '').toLowerCase();
+    const picked: any[] = [];
+
+    for (const cat of this.compactOrder) {
+      const inCat = all.filter(p => catOf(p) === cat);
+      if (!inCat.length) continue;
+      const pref = this.compactPreferred[cat];
+      picked.push(inCat.find(p => (p.item_name_ar || '').trim() === pref) ?? inCat[0]);
+    }
+
+    // لو فيه أقسام ناقصة، كمّل من باقي الأقسام (رومي / بط ...) لحد 5
+    if (picked.length < 5) {
+      const used = new Set(picked.map(catOf));
+      for (const p of all) {
+        if (picked.length >= 5) break;
+        if (!used.has(catOf(p))) { picked.push(p); used.add(catOf(p)); }
+      }
+    }
+    return picked.slice(0, 5);
+  });
+
   loadPrices() {
     this.http.get<any>(`${environment.apiUrl}/prices/latest`).subscribe({
-      next: res => this.prices.set(res.prices?.slice(0, 6) ?? []),
+      next: res => this.prices.set(res.prices ?? []),
       error: () => {}
     });
   }
