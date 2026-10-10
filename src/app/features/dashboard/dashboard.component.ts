@@ -132,7 +132,93 @@ const CATEGORIES = [
 
     <!-- الأسعار تظهر فوق (تحت البانر) لغير المسجلين، وتنزل تحت مساحة Pro للمسجلين اللي عندهم قطيع -->
     <ng-container *ngIf="!fullAccess()">
-      <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
+      <div class="mb-5">
+
+        <!-- عنوان -->
+        <div class="flex items-center justify-between mb-3 px-1">
+          <h2 class="text-base font-black text-gray-800 mb-0">📈 أسعار السوق</h2>
+          <span class="text-[11px] text-gray-400">{{ priceDate() }}</span>
+        </div>
+
+        <!-- تابات الأقسام (زي صفحة الأسعار) -->
+        <div class="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+          <button type="button" (click)="selectedPriceTab.set('')"
+                  class="flex-shrink-0 px-4 py-2 rounded-2xl text-xs font-bold border transition"
+                  [class.bg-green-600]="selectedPriceTab() === ''"
+                  [class.text-white]="selectedPriceTab() === ''"
+                  [class.border-green-600]="selectedPriceTab() === ''"
+                  [class.bg-white]="selectedPriceTab() !== ''"
+                  [class.border-gray-200]="selectedPriceTab() !== ''"
+                  [class.text-gray-600]="selectedPriceTab() !== ''">
+            🌟 الكل
+          </button>
+          <button type="button" *ngFor="let c of priceCategories"
+                  (click)="selectedPriceTab.set(c.value)"
+                  class="flex-shrink-0 px-4 py-2 rounded-2xl text-xs font-bold border transition"
+                  [class.text-white]="selectedPriceTab() === c.value"
+                  [class.bg-white]="selectedPriceTab() !== c.value"
+                  [class.border-gray-200]="selectedPriceTab() !== c.value"
+                  [class.text-gray-600]="selectedPriceTab() !== c.value"
+                  [style.background-color]="selectedPriceTab() === c.value ? c.headerColor : ''"
+                  [style.border-color]="selectedPriceTab() === c.value ? c.headerColor : ''">
+            {{ c.icon }} {{ c.label }}
+          </button>
+        </div>
+
+        <!-- الأسعار مجمّعة بالقسم -->
+        <div class="space-y-4">
+          <div *ngFor="let group of guestGroups()">
+
+            <!-- هيدر القسم -->
+            <div class="rounded-2xl px-5 py-3 flex items-center justify-between text-white font-black text-base"
+                 [style.background-color]="getCategoryColor(group.category, 'header')">
+              <span>{{ getCategoryLabel(group.category) }}</span>
+              <span class="text-2xl">{{ getCategoryIcon(group.category) }}</span>
+            </div>
+
+            <!-- كروت الأسعار -->
+            <div class="space-y-2 px-1">
+              <div *ngFor="let price of group.items"
+                   class="rounded-2xl border p-4 relative"
+                   [style.background-color]="getCategoryColor(group.category, 'bg')"
+                   style="border-color: #e0e0e0">
+
+                <div class="flex items-center justify-between mb-3">
+                  <p class="font-black text-base mb-0" style="color:#1f2937">{{ price.item_name_ar }}</p>
+                  <span class="text-lg">{{ getCategoryIcon(group.category) }}</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-white rounded-xl p-3 text-center shadow-sm">
+                    <p class="text-xs text-gray-400 mb-1">سعر التنفيذ</p>
+                    <p class="font-black text-green-600 text-xl mb-0">{{ price.price_min | number }}</p>
+                    <p class="text-[10px] text-gray-400 mb-0">جنيه</p>
+                  </div>
+                  <div class="bg-white rounded-xl p-3 text-center shadow-sm border border-blue-100">
+                    <p class="text-xs text-blue-400 mb-1">السعر المعلن</p>
+                    <p class="font-black text-blue-600 text-xl mb-0">{{ price.price_max | number }}</p>
+                    <p class="text-[10px] text-gray-400 mb-0">جنيه</p>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2">
+                  <p *ngIf="price.notes" class="text-[10px] text-gray-400 mb-0">📍 {{ price.notes }}</p>
+                  <p class="text-[10px] text-gray-300 mr-auto mb-0">{{ price.created_at | date:'dd/MM' }}</p>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <!-- لا توجد أسعار -->
+          <div *ngIf="guestGroups().length === 0" class="text-center py-12 text-gray-400">
+            <p class="text-4xl mb-2">📊</p>
+            <p class="font-semibold">لا توجد أسعار بعد</p>
+          </div>
+        </div>
+
+      </div>
     </ng-container>
 
     <!-- 🔒 كارت توجيه لغير المكتملين: يظهر لحد ما يسجّل دخول ويضيف أول قطيع -->
@@ -601,6 +687,36 @@ getCategoryNameAr(categoryKey: string): string {
   }
 
   prices = signal<any[]>([]);
+
+  // 🌐 عرض الزوار / من غير قطيع (نفس منطق صفحة /prices)
+  priceCategories = CATEGORIES;
+  selectedPriceTab = signal('');
+
+  guestGroups = computed(() => {
+    const tab = this.selectedPriceTab();
+    const map = new Map<string, any[]>();
+
+    for (const p of this.prices() || []) {
+      const cat = (p.category || '').toLowerCase();
+      if (tab && cat !== tab) continue;
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(p);
+    }
+
+    const groups: { category: string; items: any[] }[] = [];
+    for (const c of CATEGORIES) {
+      if (map.has(c.value)) groups.push({ category: c.value, items: map.get(c.value)! });
+    }
+    // أي قسم مش معرّف في CATEGORIES يظهر في الآخر
+    for (const [cat, items] of map) {
+      if (!CATEGORIES.some(c => c.value === cat)) groups.push({ category: cat, items });
+    }
+    return groups;
+  });
+
+  getCategoryLabel(cat: string): string {
+    return CATEGORIES.find(c => c.value === cat)?.label ?? cat;
+  }
 
   // 📌 المسجّل اللي عنده قطيع: 5 أسعار بسيطة بس (صنف واحد من كل قسم، وعلف واحد بس)
   // 🌐 غير المسجّل أو من غير قطيع: كل الأسعار زي صفحة /prices
