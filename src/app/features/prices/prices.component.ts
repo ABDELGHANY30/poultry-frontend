@@ -37,6 +37,10 @@ const CATEGORIES = [
                 class="bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-2xl hover:bg-white/30 transition">
           {{ showAddForm() ? '✕' : '+ تحديث' }}
         </button>
+        <button *ngIf="isAdmin()" (click)="syncPrices()" [disabled]="syncing()"
+                class="bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-2xl hover:bg-white/30 transition disabled:opacity-50">
+          {{ syncing() ? '⏳' : '🔄 مزامنة' }}
+        </button>
       </div>
     </div>
 
@@ -239,6 +243,7 @@ feed: [
   loading = signal(false);
   saving = signal(false);
   showAddForm = signal(false);
+  syncing = signal(false);
   prices = signal<any[]>([]);
   isAdmin = computed(() => this.auth.isAdmin());
   selectedTab = signal('');
@@ -259,6 +264,24 @@ feed: [
     if (!p.length) return new Date();
     return new Date(p[0].created_at);
   });
+syncPrices() {
+    this.syncing.set(true);
+    this.http.post<any>(`${environment.apiUrl}/prices/sync`, {}).subscribe({
+      next: (res) => {
+        this.syncing.set(false);
+        console.log('نتيجة المزامنة:', res);
+        this.loadPrices();
+      },
+      error: (err) => {
+        this.syncing.set(false);
+        console.error('خطأ أثناء المزامنة:', err);
+        alert(err?.status === 404
+          ? 'السيرفر مفيهوش /prices/sync — حدّث prices.py وأعد تشغيله'
+          : 'فشل التحديث من المصدر');
+      }
+    });
+  }
+
 deletePrice(priceId: number | string) {
     if (!confirm('هل أنت تأكد من حذف هذا السعر؟')) return;
 
