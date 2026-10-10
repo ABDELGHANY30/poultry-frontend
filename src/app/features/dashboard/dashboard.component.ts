@@ -725,6 +725,7 @@ getCategoryNameAr(categoryKey: string): string {
     broiler: 'الفراخ البيضاء',
     eggs: 'بيض أبيض',
     chicks: 'كتكوت أبيض أهالي',
+    breeders:'أمهات',
   };
 
   visiblePrices = computed(() => {

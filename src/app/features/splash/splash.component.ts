@@ -131,7 +131,7 @@ export class SplashComponent implements OnInit, OnDestroy {
   isFlipping = false;
 
   // ko يظهر الأول، وبعدين الحيوانات بتلف باستمرار
-  private sequence = ['ko', '🐓', '🦃','🐇',  '🐦' ,'🦆']; // بط، أرنب، رومي، ديك، سمان(بديل)
+  private sequence = ['ko', '🐓', '🦃','🐇' ,'🦆']; // بط، أرنب، رومي، ديك، سمان(بديل)
   private seqIndex = 0;
   displayValue = this.sequence[0];
   private progressTimer: any;
