@@ -222,7 +222,7 @@ textarea.form-input {
 }
 .bg-white\/90 { background-color: rgba(23, 33, 27, .9); }
 body.keyboard-open .kb-shift {
-  transform: translateY(calc((var(--keyboard-height) - 20px) * -1));
+  transform: translateY(calc((var(--keyboard-height)) * -1));
 }
 /* مساحة إضافية تحت أي صفحة عادية (غير الشات) لما الكيبورد يفتح، عشان العناصر في آخر الصفحة تبقى قابلة للتمرير ليها */
 body.keyboard-open .page-wrapper {
@@ -230,8 +230,8 @@ body.keyboard-open .page-wrapper {
 }
 
 input, select, textarea, button {
-  scroll-margin: 16px;
-  scroll-margin-bottom: calc(var(--keyboard-height) + 16px);
+  scroll-margin: 12px;
+  scroll-margin-bottom: calc(var(--keyboard-height) + 10px);
 }
 @media (prefers-color-scheme: dark) {
   .overlay { background: #0e1511; }

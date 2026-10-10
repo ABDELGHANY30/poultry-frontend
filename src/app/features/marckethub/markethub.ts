@@ -51,6 +51,10 @@ const PRICE_CATEGORIES = [
               class="bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-2xl hover:bg-white/30 transition">
         {{ showAddForm() ? '✕' : (lang === 'ar' ? '+ تحديث' : '+ Update') }}
       </button>
+      <button *ngIf="activeTab() === 'prices' && isAdmin()" (click)="syncPrices()" [disabled]="syncingPrices()"
+              class="bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-2xl hover:bg-white/30 transition disabled:opacity-50">
+        {{ syncingPrices() ? '⏳' : (lang === 'ar' ? '🔄 مزامنة' : '🔄 Sync') }}
+      </button>
     </div>
 
     <!-- Tab Switcher: السوق / الأسعار / طلباتي -->
@@ -523,6 +527,7 @@ export class MarketHubComponent implements OnInit {
   loadingPrices = signal(false);
   savingPrice = signal(false);
   showAddForm = signal(false);
+  syncingPrices = signal(false);
   prices = signal<any[]>([]);
   isAdmin = computed(() => this.auth.isAdmin());
   selectedPriceTab = signal('');
@@ -790,6 +795,21 @@ export class MarketHubComponent implements OnInit {
         this.loadPrices();
       },
       error: () => this.savingPrice.set(false)
+    });
+  }
+
+  syncPrices() {
+    this.syncingPrices.set(true);
+    this.http.post(`${environment.apiUrl}/prices/sync`, {}).subscribe({
+      next: () => {
+        this.syncingPrices.set(false);
+        this.loadPrices();
+      },
+      error: (err) => {
+        this.syncingPrices.set(false);
+        console.error('خطأ أثناء المزامنة:', err);
+        alert('فشل التحديث من المصدر');
+      }
     });
   }
 
