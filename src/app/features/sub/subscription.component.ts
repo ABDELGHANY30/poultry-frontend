@@ -135,33 +135,40 @@ export class SubscriptionComponent implements OnInit {
     this.loadStatus();
     this.errorMessage.set(null); // مسح أي رسالة خطأ قديمة قبل ما نتشيك من جديد
 
-    // لما Paymob يرجّع المستخدم من صفحة الدفع (نجاح أو فشل)، بيحط
-    // query params على نفس الرابط. نستخدمها بس عشان نعمل refresh
-    // للحالة ونوري رسالة مناسبة — التفعيل الفعلي بيحصل من الـ webhook
-    // في الباك اند، مش من هنا (مينفعش نثق في القيم دي وحدها).
+    // لما XPay يرجّع المستخدم من صفحة الدفع بيضيف ?session=cs_... على الرابط.
+    // الرجوع ده مش دليل على نجاح الدفع (ممكن يقفل الصفحة أو يفتح الرابط بالغلط)،
+    // فبنستخدمه بس عشان نعمل refresh للحالة لحد ما الـ webhook يفعّل الاشتراك.
     const params = this.route.snapshot.queryParamMap;
-    if (params.has('success') || params.has('payment_status')) {
-      this.loadStatus();
-      if (params.get('success') === 'true' || params.get('payment_status') === 'success') {
-        this.errorMessage.set(null);
-      } else {
-        this.errorMessage.set(
-          this.lang === 'ar'
-            ? 'لم تكتمل عملية الدفع، حاول مرة أخرى'
-            : 'Payment was not completed, please try again'
-        );
-      }
-      // بنمسح الـ query params عن طريق Router نفسه (مش window.history
-      // مباشرة) عشان حالة الـ Router جوه Angular تتحدث هي كمان — لو
-      // عدّلنا الرابط من غيره، Angular ممكن يرجّع نفس الـ params دي تاني
-      // لما تتنقل بعيد عن الصفحة وترجعلها تاني (السبب الأرجح للمشكلة
-      // اللي كانت بتحصل).
+    if (params.has('session')) {
+      this.pollStatusAfterPayment();
+      // مسح الـ query params عن طريق Router عشان حالته تتحدث هي كمان
       this.router.navigate([], {
         relativeTo: this.route,
         queryParams: {},
         replaceUrl: true,
       });
     }
+  }
+
+  // الـ webhook ممكن يتأخر ثواني (أو أكتر مع Fawry)، فبنسأل عن الحالة كذا مرة
+  private pollStatusAfterPayment(attempt = 0) {
+    this.http.get(`${environment.apiUrl}/payment/status`).subscribe({
+      next: (res: any) => {
+        this.status.set(res);
+        if (res?.is_pro) {
+          this.errorMessage.set(null);
+        } else if (attempt < 6) {
+          setTimeout(() => this.pollStatusAfterPayment(attempt + 1), 3000);
+        } else {
+          this.errorMessage.set(
+            this.lang === 'ar'
+              ? 'لسه بنأكد عملية الدفع، لو اتخصم منك المبلغ هيتفعل اشتراكك خلال دقايق'
+              : 'We are still confirming your payment. If you were charged, your plan will activate within minutes'
+          );
+        }
+      },
+      error: () => {}
+    });
   }
 
   // بيتأكد إن الباقة دي هي الفعلية بالظبط (p150/p200/p350)، مش بس
@@ -189,15 +196,15 @@ export class SubscriptionComponent implements OnInit {
     this.loadingPlan.set(plan);
     this.errorMessage.set(null);
 
-    // الباك اند بيسجل الطلب عند Paymob (بربطه بحساب المستخدم ده) ويرجّع
-    // رابط دفع (payment_url) مخصص للمستخدم والمبلغ ده تحديداً.
-    // التفعيل الفعلي للاشتراك بيحصل لاحقاً عن طريق webhook من Paymob
-    // للباك اند (/payment/paymob-webhook) بعد نجاح الدفع فعلياً —
+    // الباك اند بينشئ Checkout Session عند XPay (بيربطها بحساب المستخدم ده)
+    // ويرجّع رابط دفع (payment_url) مخصص للمستخدم والمبلغ ده تحديداً.
+    // التفعيل الفعلي للاشتراك بيحصل لاحقاً عن طريق webhook من XPay
+    // للباك اند (/payment/xpay-webhook) بعد نجاح الدفع فعلياً —
     // مش من هنا، عشان محدش يقدر يفعّل نفسه من غير ما يدفع فعلاً.
     //
     // الدالة دي بقت خاصة بنسخة الموقع بس (isNative بيخفي زرار الاشتراك
     // خالص جوه التطبيق) — التطبيق نفسه مبيبدأش ولا بيدير أي عملية دفع.
-    this.http.post(`${environment.apiUrl}/payment/create-paymob`, { plan }).subscribe({
+    this.http.post(`${environment.apiUrl}/payment/create-checkout`, { plan }).subscribe({
       next: (res: any) => {
         const paymentUrl = res.payment_url;
         if (!paymentUrl) {
