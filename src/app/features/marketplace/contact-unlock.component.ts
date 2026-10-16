@@ -41,7 +41,9 @@ import { AuthService } from '../../core/services/auth.service';
       <div *ngIf="errorMsg()" class="text-xs text-red-600 mb-2">{{ errorMsg() }}</div>
       <button (click)="unlock()" [disabled]="loading()"
               class="w-full py-2 rounded-xl bg-gray-800 text-white text-sm font-bold">
-        {{ loading() ? '...' : (lang === 'ar' ? '🔓 اعرض الرقم — 50 جنيه' : '🔓 Show number — 50 EGP') }}
+        {{ loading() ? '...' : (isNative
+          ? (lang === 'ar' ? '🔓 اعرض الرقم — أكمل من الموقع' : '🔓 Show number — continue on website')
+          : (lang === 'ar' ? '🔓 اعرض الرقم — 50 جنيه' : '🔓 Show number — 50 EGP')) }}
       </button>
       <p class="text-[10px] text-gray-400 text-center mt-1.5">
         {{ lang === 'ar' ? 'دفع مرة واحدة لهذا الإعلان — اتصال أو واتساب' : 'One-time payment for this listing — call or WhatsApp' }}
@@ -59,6 +61,7 @@ export class ContactUnlockComponent {
   private router = inject(Router);
 
   lang = localStorage.getItem('lang') ?? 'ar';
+  isNative = Capacitor.isNativePlatform();
   loading = signal(false);
   errorMsg = signal('');
 
@@ -74,7 +77,7 @@ export class ContactUnlockComponent {
 
     // التطبيق مبيبدأش دفع — بيفتح الموقع والمستخدم يكمّل من هناك (نفس سياسة الاشتراك)
     if (Capacitor.isNativePlatform()) {
-      Browser.open({ url: environment.websiteUrl + '/market-hub' });
+      Browser.open({ url: `${environment.websiteUrl}/market-hub?unlock=${encodeURIComponent(this.listing.id)}` });
       return;
     }
 

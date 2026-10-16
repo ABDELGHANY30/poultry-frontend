@@ -12,6 +12,7 @@ import { AuthService } from '../../core/services/auth.service';
 // ⚠️ عدّل المسار ده لو اسم/مكان الملف مختلف عندك
 import { FlockService } from '../../core/services/flock.service';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
@@ -19,8 +20,6 @@ const uid = () => Math.random().toString(36).slice(2);
 const GUEST_QUESTION_LIMIT = 3;
 const GUEST_COUNT_KEY = 'spa_guest_questions';
 
-// ⚠️ عدّل الرابط ده لرابط موقعك الحقيقي (صفحة اختيار الباقة)
-const WEBSITE_SUBSCRIPTION_URL = 'https://your-website.com/subscription';
 
 interface Plan {
   id: string;
@@ -469,9 +468,10 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
   /** يفتح صفحة الاشتراك على الموقع مع الباقة المختارة */
   choosePlan(plan: Plan) {
     this.showUpgradeModal.set(false);
-    const url = `${WEBSITE_SUBSCRIPTION_URL}?plan=${encodeURIComponent(plan.id)}`;
-    // على الموبايل (Capacitor) بيفتح في متصفح الجهاز، وعلى الويب في تاب جديد
-    window.open(url, '_blank', 'noopener');
+    const url = `${environment.websiteUrl}/subscription?plan=${encodeURIComponent(plan.id)}`;
+    // الدفع بيتم على الموقع بس — التطبيق بيفتح الموقع والمستخدم يكمّل من هناك
+    if (Capacitor.isNativePlatform()) Browser.open({ url });
+    else window.open(url, '_blank', 'noopener');
   }
 
 
