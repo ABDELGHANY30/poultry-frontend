@@ -5,7 +5,6 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
@@ -19,6 +18,34 @@ import { TextToSpeech } from '@capacitor-community/text-to-speech';
 const uid = () => Math.random().toString(36).slice(2);
 const GUEST_QUESTION_LIMIT = 3;
 const GUEST_COUNT_KEY = 'spa_guest_questions';
+
+// ⚠️ عدّل الرابط ده لرابط موقعك الحقيقي (صفحة اختيار الباقة)
+const WEBSITE_SUBSCRIPTION_URL = 'https://your-website.com/subscription';
+
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  period: string;
+  badge?: string;
+  features: string[];
+}
+
+// ⚠️ عدّل الأسعار والباقات دي حسب باقاتك الفعلية
+const PLANS: Plan[] = [
+  {
+    id: 'monthly', name: 'شهري', price: 150, period: 'جنيه / شهر',
+    features: ['أسئلة غير محدودة', 'تحليل صور الطيور', 'التسجيل والرد الصوتي', 'تقارير متقدمة'],
+  },
+  {
+    id: 'quarterly', name: '3 شهور', price: 400, period: 'جنيه / 3 شهور', badge: 'الأكثر طلباً',
+    features: ['كل مميزات الباقة الشهرية', 'وفّر 50 جنيه'],
+  },
+  {
+    id: 'yearly', name: 'سنوي', price: 1400, period: 'جنيه / سنة', badge: 'أفضل قيمة',
+    features: ['كل مميزات الباقة الشهرية', 'وفّر 400 جنيه'],
+  },
+];
 
 interface Message {
   id: string;
@@ -54,7 +81,65 @@ const SUGGESTIONS_AR = [
   // h-full جوا التمبلت بتحسب نسبة من أب مالوش ارتفاع محدد — النتيجة إن
   // الصفحة كلها بتكبر مع المحتوى بدل ما الشات الداخلي بس يعمل scroll
   host: { class: 'flex-1 flex flex-col overflow-hidden min-h-0' },
-  imports: [CommonModule, FormsModule, TranslateModule, RouterLink],
+  imports: [CommonModule, FormsModule, TranslateModule],
+  // ألوان الإدخال والمودال بتتحكم فيها هنا صراحةً عشان الدارك مود مايعملش أبيض على أبيض
+  styles: [`
+    .ai-input-wrap { background: #f9fafb; border-color: #e5e7eb; }
+    .ai-input-wrap:focus-within { background: #ffffff; border-color: #d1d5db; }
+    .ai-input-text {
+      color: #111827; -webkit-text-fill-color: #111827; caret-color: #111827;
+      background: transparent;
+    }
+    .ai-input-text::placeholder { color: #9ca3af; -webkit-text-fill-color: #9ca3af; opacity: 1; }
+    .ai-modal-card { background: #ffffff; color: #111827; }
+    .ai-plan { border-color: #e5e7eb; background: #ffffff; color: #111827; }
+    .ai-plan-sub { color: #6b7280; }
+
+    :host-context(.dark) .ai-input-wrap,
+    :host-context(.dark-mode) .ai-input-wrap,
+    :host-context(.theme-dark) .ai-input-wrap,
+    :host-context([data-theme='dark']) .ai-input-wrap,
+    :host-context([data-bs-theme='dark']) .ai-input-wrap { background: #1f2937; border-color: #374151; }
+
+    :host-context(.dark) .ai-input-wrap:focus-within,
+    :host-context(.dark-mode) .ai-input-wrap:focus-within,
+    :host-context(.theme-dark) .ai-input-wrap:focus-within,
+    :host-context([data-theme='dark']) .ai-input-wrap:focus-within,
+    :host-context([data-bs-theme='dark']) .ai-input-wrap:focus-within { background: #111827; border-color: #4b5563; }
+
+    :host-context(.dark) .ai-input-text,
+    :host-context(.dark-mode) .ai-input-text,
+    :host-context(.theme-dark) .ai-input-text,
+    :host-context([data-theme='dark']) .ai-input-text,
+    :host-context([data-bs-theme='dark']) .ai-input-text {
+      color: #f9fafb; -webkit-text-fill-color: #f9fafb; caret-color: #f9fafb;
+    }
+    :host-context(.dark) .ai-input-text::placeholder,
+    :host-context(.dark-mode) .ai-input-text::placeholder,
+    :host-context(.theme-dark) .ai-input-text::placeholder,
+    :host-context([data-theme='dark']) .ai-input-text::placeholder,
+    :host-context([data-bs-theme='dark']) .ai-input-text::placeholder {
+      color: #9ca3af; -webkit-text-fill-color: #9ca3af;
+    }
+
+    :host-context(.dark) .ai-modal-card,
+    :host-context(.dark-mode) .ai-modal-card,
+    :host-context(.theme-dark) .ai-modal-card,
+    :host-context([data-theme='dark']) .ai-modal-card,
+    :host-context([data-bs-theme='dark']) .ai-modal-card { background: #1f2937; color: #f9fafb; }
+
+    :host-context(.dark) .ai-plan,
+    :host-context(.dark-mode) .ai-plan,
+    :host-context(.theme-dark) .ai-plan,
+    :host-context([data-theme='dark']) .ai-plan,
+    :host-context([data-bs-theme='dark']) .ai-plan { background: #111827; border-color: #374151; color: #f9fafb; }
+
+    :host-context(.dark) .ai-plan-sub,
+    :host-context(.dark-mode) .ai-plan-sub,
+    :host-context(.theme-dark) .ai-plan-sub,
+    :host-context([data-theme='dark']) .ai-plan-sub,
+    :host-context([data-bs-theme='dark']) .ai-plan-sub { color: #9ca3af; }
+  `],
   template: `
   <div class="flex flex-col h-full min-h-0">
 
@@ -68,6 +153,10 @@ const SUGGESTIONS_AR = [
         </div>
       </div>
       <div *ngIf="isPro()" class="text-amber-700 bg-amber-50 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0">Pro</div>
+      <button *ngIf="!isPro()" type="button" (click)="showUpgradeModal.set(true)"
+              class="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0 bg-green-600 text-white">
+        ⭐ الباقات
+      </button>
     </div>
 
     <!-- Flock Selector — اختياري بالكامل، المستخدم هو اللي بيقرر لو عايز
@@ -258,8 +347,7 @@ const SUGGESTIONS_AR = [
 
       <!-- Input -->
       <div class="border-t border-gray-100 p-3 bg-transparent">
-        <div class="flex items-end gap-1 bg-gray-50 border border-gray-200 rounded-[1.75rem] px-2 py-1.5
-                    focus-within:border-gray-300 focus-within:bg-white transition-colors"
+        <div class="ai-input-wrap flex items-end gap-1 border rounded-[1.75rem] px-2 py-1.5 transition-colors"
              style="transform: translateZ(0);">
 
           <!-- Image button (Pro only) -->
@@ -296,7 +384,7 @@ const SUGGESTIONS_AR = [
             [disabled]="loading()"
             rows="1"
             dir="rtl"
-            class="flex-1 bg-transparent border-0 px-2 py-2 text-sm text-gray-900 placeholder:text-gray-400 resize-none max-h-28 focus:outline-none focus:ring-0"
+            class="ai-input-text flex-1 border-0 px-2 py-2 text-sm resize-none max-h-28 focus:outline-none focus:ring-0"
             style="min-height:36px; transform: translateZ(0); -webkit-transform: translateZ(0); backface-visibility: hidden;">
           </textarea>
 
@@ -313,27 +401,36 @@ const SUGGESTIONS_AR = [
     </div>
   </div>
 
-  <!-- Upgrade Modal -->
+  <!-- Subscription Plans Modal -->
   <div *ngIf="showUpgradeModal()"
-       class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
+       class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+       (click)="showUpgradeModal.set(false)">
+    <div class="ai-modal-card rounded-3xl p-5 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+         (click)="$event.stopPropagation()">
       <div class="text-center mb-4">
-        <div class="text-5xl mb-2">🚀</div>
-        <h2 class="text-xl font-bold">ترقية إلى Pro</h2>
-        <p class="text-gray-500 text-sm mt-1">استنفدت حد الأسئلة اليومي</p>
+        <div class="text-4xl mb-1">🚀</div>
+        <h2 class="text-xl font-bold">باقات الاشتراك</h2>
+        <p class="ai-plan-sub text-sm mt-1">اختر الباقة المناسبة وهننقلك للموقع تكمل الاشتراك</p>
       </div>
-      <div class="space-y-2 mb-5">
-        <div class="flex items-center gap-2 text-sm">✅ <span>أسئلة غير محدودة</span></div>
-        <div class="flex items-center gap-2 text-sm">✅ <span>تحليل صور الطيور 📷</span></div>
-        <div class="flex items-center gap-2 text-sm">✅ <span>التسجيل الصوتي 🎤</span></div>
-        <div class="flex items-center gap-2 text-sm">✅ <span>الرد الصوتي 🔊</span></div>
-        <div class="flex items-center gap-2 text-sm">✅ <span>تقارير متقدمة</span></div>
+
+      <div class="space-y-2.5 mb-4">
+        <button *ngFor="let p of plans" type="button" (click)="choosePlan(p)"
+                class="ai-plan w-full text-start border-2 rounded-2xl p-3 transition hover:border-green-500">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold text-base">{{ p.name }}</span>
+            <span *ngIf="p.badge" class="text-[10px] font-bold bg-green-600 text-white px-2 py-0.5 rounded-full">{{ p.badge }}</span>
+          </div>
+          <div class="mt-0.5">
+            <span class="text-green-600 font-extrabold text-lg">{{ p.price }}</span>
+            <span class="ai-plan-sub text-xs"> {{ p.period }}</span>
+          </div>
+          <ul class="ai-plan-sub text-xs mt-1.5 space-y-0.5">
+            <li *ngFor="let f of p.features">✅ {{ f }}</li>
+          </ul>
+        </button>
       </div>
-      <a routerLink="/subscription" (click)="showUpgradeModal.set(false)"
-         class="block w-full bg-green-600 text-white py-3 rounded-2xl font-bold text-center">
-        اشترك الآن — 150 جنيه/شهر
-      </a>
-      <button class="w-full text-gray-400 text-sm py-2 mt-2" (click)="showUpgradeModal.set(false)">
+
+      <button type="button" class="ai-plan-sub w-full text-sm py-2" (click)="showUpgradeModal.set(false)">
         ليس الآن
       </button>
     </div>
@@ -367,6 +464,15 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
   private conversationHistory: {role: string, content: string}[] = [];
 
   suggestions = SUGGESTIONS_AR;
+  plans = PLANS;
+
+  /** يفتح صفحة الاشتراك على الموقع مع الباقة المختارة */
+  choosePlan(plan: Plan) {
+    this.showUpgradeModal.set(false);
+    const url = `${WEBSITE_SUBSCRIPTION_URL}?plan=${encodeURIComponent(plan.id)}`;
+    // على الموبايل (Capacitor) بيفتح في متصفح الجهاز، وعلى الويب في تاب جديد
+    window.open(url, '_blank', 'noopener');
+  }
 
 
   ngOnInit() {
