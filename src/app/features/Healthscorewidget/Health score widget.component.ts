@@ -70,71 +70,65 @@ interface HealthScoreData {
       </div>
     </div>
 
-    <!-- View: قطيع واحد بالتفصيل -->
-    <div *ngIf="viewMode() === 'single' && !loading() && data() as d" class="rounded-2xl border-2 overflow-hidden bg-white shadow-sm"
-         [class]="borderClass(d.status)">
+    <!-- View: قطيع واحد: كارت واحد فيه الصحة والإحصائيات -->
+    <div *ngIf="viewMode() === 'single' && !loading() && data() as d"
+         class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 mb-5">
 
-      <!-- شريط علوي ملوّن حسب الحالة -->
-      <div class="h-1.5" [class]="barClass(d.status)"></div>
+      <div class="text-sm text-gray-500 mb-3">{{ d.flock_name }}</div>
 
-      <div class="p-4">
-        <!-- الهيدر: اسم القطيع + badge الحالة -->
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <div class="text-[11px] text-gray-400 font-medium">صحة القطيع</div>
-            <div class="text-sm font-black text-gray-800">{{ d.flock_name }}</div>
-          </div>
-          <span class="text-[11px] font-black px-2.5 py-1 rounded-full" [class]="badgeClass(d.status)">
-            {{ statusLabel(d.status) }}
-          </span>
-        </div>
-
-        <!-- العداد الدائري + النجوم -->
-        <div class="flex items-center gap-4 mb-4">
-          <div class="relative w-20 h-20 flex-shrink-0">
-            <svg class="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="#f1f5f9" stroke-width="8"/>
-              <circle cx="40" cy="40" r="34" fill="none" [attr.stroke]="ringColor(d.status)"
-                      stroke-width="8" stroke-linecap="round"
-                      [attr.stroke-dasharray]="213.6"
-                      [attr.stroke-dashoffset]="213.6 - (213.6 * d.score / 100)"
-                      style="transition: stroke-dashoffset 0.6s ease"/>
-            </svg>
-            <div class="absolute inset-0 flex items-center justify-center">
-              <span class="text-xl font-black" [class]="textClass(d.status)">{{ d.score }}</span>
-            </div>
-          </div>
-
-          <div class="flex-1">
-            <div class="text-lg leading-none mb-1">{{ '⭐'.repeat(d.stars) }}{{ '☆'.repeat(5 - d.stars) }}</div>
-            <div class="text-[11px] text-gray-400">من 100 نقطة</div>
+      <div class="flex items-center gap-2">
+        <!-- الدايرة -->
+        <div class="relative w-20 h-20 flex-shrink-0">
+          <svg class="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#f1f5f9" stroke-width="7"/>
+            <circle cx="40" cy="40" r="34" fill="none" [attr.stroke]="ringColor(d.status)"
+                    stroke-width="7" stroke-linecap="round"
+                    [attr.stroke-dasharray]="213.6"
+                    [attr.stroke-dashoffset]="213.6 - (213.6 * d.score / 100)"
+                    style="transition: stroke-dashoffset 0.6s ease"/>
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <span class="text-2xl font-medium" [class]="textClass(d.status)">{{ d.score }}</span>
           </div>
         </div>
 
-        <!-- 🔎 زرار عرض أسباب النقص -->
-        <div *ngIf="d.factors.length" class="border-t pt-3">
-          <button type="button" (click)="showFactors.set(!showFactors())"
-                  class="w-full flex items-center justify-between text-xs font-black text-red-600 bg-red-50 rounded-lg px-2.5 py-2">
-            <span>⚠️ في {{ d.factors.length }} سبب نقص {{ 100 - d.score }} درجة</span>
-            <span>{{ showFactors() ? 'إخفاء ▲' : 'عرض التفاصيل ▼' }}</span>
+        <!-- الإحصائيات -->
+        <div class="flex-1 bg-gray-50 rounded-xl py-3 text-center">
+          <div class="text-base leading-none mb-1">🐣</div>
+          <div class="text-lg font-medium text-gray-800 leading-tight">{{ birds !== null ? (birds | number) : '—' }}</div>
+          <div class="text-[11px] text-gray-400">إجمالي الطيور</div>
+        </div>
+        <div class="flex-1 bg-gray-50 rounded-xl py-3 text-center">
+          <div class="text-base leading-none mb-1">📉</div>
+          <div class="text-lg font-medium text-red-600 leading-tight">{{ dead !== null ? (dead | number) : '—' }}</div>
+          <div class="text-[11px] text-gray-400">النفوق</div>
+        </div>
+        <div class="flex-1 bg-gray-50 rounded-xl py-3 text-center">
+          <div class="text-base leading-none mb-1">🌡️</div>
+          <div class="text-lg font-medium text-gray-800 leading-tight">{{ temp !== null ? temp + '°' : '—' }}</div>
+          <div class="text-[11px] text-gray-400">الحرارة</div>
+        </div>
+      </div>
+
+      <div class="text-xs mt-2" [class]="textClass(d.status)">صحة القطيع</div>
+
+      <!-- 🔎 أسباب النقص -->
+      <div *ngIf="d.factors.length" class="border-t border-gray-100 pt-3 mt-3">
+        <button type="button" (click)="showFactors.set(!showFactors())"
+                class="w-full flex items-center justify-between text-xs font-medium text-red-600 bg-red-50 rounded-lg px-2.5 py-2">
+          <span>⚠️ في {{ d.factors.length }} سبب نقص {{ 100 - d.score }} درجة</span>
+          <span>{{ showFactors() ? 'إخفاء ▲' : 'عرض التفاصيل ▼' }}</span>
+        </button>
+
+        <div *ngIf="showFactors()" class="space-y-1.5 mt-2">
+          <button *ngFor="let f of d.factors" type="button" (click)="factorClick.emit(f)"
+                  class="w-full flex items-center justify-between text-xs bg-red-50 hover:bg-red-100 transition-colors rounded-lg px-2.5 py-1.5 text-right">
+            <span class="text-gray-700 font-medium">{{ f.label }}</span>
+            <span class="flex items-center gap-1 flex-shrink-0">
+              <span class="text-red-500 font-black">{{ f.impact }}</span>
+              <span class="text-red-300">←</span>
+            </span>
           </button>
-
-          <!-- الأسباب: كل سبب زرار بيودّيك للمكان اللي المشكلة ظاهرة فيه -->
-          <div *ngIf="showFactors()" class="space-y-1.5 mt-2">
-            <button *ngFor="let f of d.factors" type="button" (click)="factorClick.emit(f)"
-                    class="w-full flex items-center justify-between text-xs bg-red-50 hover:bg-red-100 transition-colors rounded-lg px-2.5 py-1.5 text-right">
-              <span class="text-gray-700 font-medium">{{ f.label }}</span>
-              <span class="flex items-center gap-1 flex-shrink-0">
-                <span class="text-red-500 font-black">{{ f.impact }}</span>
-                <span class="text-red-300">←</span>
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <div *ngIf="!d.factors.length" class="flex items-center gap-2 text-xs text-green-700 font-black bg-green-50 rounded-lg px-3 py-2.5 border-t-0">
-          <span class="text-base">✅</span>
-          <span>مفيش أي مشاكل مسجلة — القطيع في أحسن حال</span>
         </div>
       </div>
     </div>
@@ -163,6 +157,14 @@ export class HealthScoreWidgetComponent implements OnInit {
 
   /** بينبعت لما المستخدم يدوس على سبب نقص معين — الصفحة الأب هي اللي تقرر تودّيه فين بالظبط */
   @Output() factorClick = new EventEmitter<HealthFactor>();
+
+  /** بيتبعت لما القطيع المعروض يتغيّر، عشان الصفحة الأب تجيب إحصائياته */
+  @Output() flockSelected = new EventEmitter<string>();
+
+  /** إحصائيات القطيع المعروض (بتجيلها من الصفحة الأب) */
+  @Input() birds: number | null = null;
+  @Input() dead: number | null = null;
+  @Input() temp: number | null = null;
 
   private http = inject(HttpClient);
   data = signal<HealthScoreData | null>(null);
@@ -253,6 +255,7 @@ export class HealthScoreWidgetComponent implements OnInit {
     this.error.set(false);
     this.showFactors.set(false); // نقفل تفاصيل الأسباب لما نغيّر القطيع/نعيد التحميل
     const id = this.selectedFlockId();
+    if (id) this.flockSelected.emit(id);
     const params = id ? `?flock_id=${id}` : '';
 
     this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score${params}`).subscribe({

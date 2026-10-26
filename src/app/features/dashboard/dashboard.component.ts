@@ -155,100 +155,16 @@ const CATEGORIES = [
     <ng-container *ngIf="fullAccess()">
 
       <!-- 💚 صحة القطيع النشط -->
-      <app-health-score-widget></app-health-score-widget>
+      <app-health-score-widget
+        [birds]="flockStats().birds"
+        [dead]="flockStats().dead"
+        [temp]="flockStats().temp"
+        (flockSelected)="selectedFlockId.set($event)">
+      </app-health-score-widget>
 
       <!-- 📈 الأسعار تحت صحة القطيع مباشرة -->
       <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
 
-
-      <!-- محول القطيع: يظهر بس لو فيه أكتر من قطيع -->
-      <div *ngIf="flocks().length > 1" class="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-3">
-        <button *ngFor="let f of flocks()" type="button"
-                (click)="selectedFlockId.set(f.id)"
-                class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap"
-                [class.bg-primary-600]="currentFlockId() === f.id"
-                [class.text-white]="currentFlockId() === f.id"
-                [class.border-primary-600]="currentFlockId() === f.id"
-                [class.bg-white]="currentFlockId() !== f.id"
-                [class.text-gray-600]="currentFlockId() !== f.id"
-                [class.border-gray-200]="currentFlockId() !== f.id">
-          {{ f.type === 'broiler' ? '🐔' : '🥚' }} {{ f.name }}
-        </button>
-      </div>
-
-      <!-- Stats Grid: بيانات القطيع المختار بس -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" *ngIf="currentFlock(); else noSelectedFlock">
-        <div class="stat-card animate-in" *ngFor="let s of stats()">
-          <div class="stat-icon" [style.background]="s.bg">{{ s.icon }}</div>
-          <div>
-            <p class="text-xl font-bold leading-none" [style.color]="s.color">{{ s.value }}</p>
-            <p class="text-xs text-[var(--c-muted)] mt-1.5 font-medium">{{ s.label | translate }}</p>
-          </div>
-        </div>
-      </div>
-      <ng-template #noSelectedFlock>
-        <div class="card text-center py-6 text-[var(--c-muted)]">
-          <p class="text-3xl mb-2">🐣</p>
-          <p class="text-sm">{{ 'DASH.NO_FLOCKS' | translate }}</p>
-        </div>
-      </ng-template>
-
-      <!-- 2. باقي الكروت (القطعان والتنبيهات) تأتي تحت الأسعار في عمودين بجانب بعضهما -->
-      <div class="grid grid-cols-1 gap-5">
-
-        <!-- Flock Health -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="section-title mb-0">🐔 {{ 'DASH.FLOCKS' | translate }}</h2>
-            <a routerLink="/flocks" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
-              {{ 'COMMON.VIEW_ALL' | translate }} →
-            </a>
-          </div>
-          <div class="space-y-3">
-            <a *ngFor="let f of flocks() | slice:0:3" [routerLink]="['/flocks', f.id]"
-               class="flex items-center gap-3 p-3 rounded-xl border border-transparent
-                      hover:border-primary-200 hover:bg-primary-50/50 transition-all group no-underline">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                   [class.bg-primary-100]="f.type==='broiler'" [class.bg-purple-100]="f.type==='layer'">
-                {{ f.type === 'broiler' ? '🐔' : '🥚' }}
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold text-[var(--c-text)] truncate">{{ f.name }}</p>
-                <div class="flex items-center gap-2 mt-1">
-                  <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div class="h-full rounded-full transition-all duration-700"
-                         [class.bg-primary-500]="f.ageInDays/42 < 0.8"
-                         [class.bg-amber-400]="f.ageInDays/42 >= 0.8"
-                         [style.width]="Math.min(100, f.ageInDays/(f.type==='broiler'?42:160)*100) + '%'">
-                    </div>
-                  </div>
-                  <span class="text-xs font-medium text-[var(--c-muted)] flex-shrink-0">{{ f.ageInDays }}d</span>
-                </div>
-              </div>
-              <div class="text-end flex-shrink-0">
-                <p class="text-sm font-bold"
-                   [class.text-green-600]="f.mortalityRate<=2"
-                   [class.text-amber-600]="f.mortalityRate>2 && f.mortalityRate<=4"
-                   [class.text-red-600]="f.mortalityRate>4">
-                  {{ f.mortalityRate | number:'1.1-1' }}%
-                </p>
-                <p class="text-xs text-[var(--c-faint)]">{{ 'FLOCK.MORTALITY' | translate }}</p>
-                <p *ngIf="todayTemps()[f.id] as t" class="text-xs font-semibold text-blue-600 mt-0.5">
-                  🌡️ {{ t.temperature_celsius ?? '—' }}°
-                </p>
-              </div>
-            </a>
-            <div *ngIf="flocks().length === 0" class="text-center py-6 text-[var(--c-muted)]">
-              <p class="text-3xl mb-2">🐣</p>
-              <p class="text-sm">{{ 'DASH.NO_FLOCKS' | translate }}</p>
-              <a routerLink="/flocks" class="btn-primary btn mt-3 btn-sm inline-flex">
-                + {{ 'FLOCK.ADD' | translate }}
-              </a>
-            </div>
-          </div>
-        </div>
-
-      </div>
 
       <!-- ادعُ صديق -->
       <app-referral-card></app-referral-card>
@@ -616,6 +532,16 @@ getCategoryNameAr(categoryKey: string): string {
   const key = categoryKey ? categoryKey.toLowerCase() : '';
   return this.categoryNamesAr[key] || categoryKey;
 }
+  // إحصائيات القطيع المعروض في كارت الصحة (الطيور / النفوق / حرارة اليوم)
+  flockStats = computed(() => {
+    const f: any = this.currentFlock();
+    if (!f) return { birds: null as number | null, dead: null as number | null, temp: null as number | null };
+    const current = Number(f.currentCount ?? f.current_count ?? 0);
+    const initial = Number(f.initialCount ?? f.initial_count ?? 0);
+    const t = this.todayTemps()[f.id]?.temperature_celsius;
+    return { birds: current, dead: Math.max(0, initial - current), temp: t ?? null };
+  });
+
   stats = computed(() => {
     const flock: any = this.currentFlock();
     if (!flock) return [];
