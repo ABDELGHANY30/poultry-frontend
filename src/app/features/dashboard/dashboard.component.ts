@@ -130,14 +130,12 @@ const CATEGORIES = [
       </div>
     </ng-template>
 
-    <!-- زائر / من غير قطيع: الأسعار تحت البانر مباشرة -->
-    <ng-container *ngIf="!fullAccess()">
-      <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
-      <div *ngIf="prices().length === 0" class="text-center py-12 text-gray-400">
-        <p class="text-4xl mb-2">📊</p>
-        <p class="font-semibold">لا توجد أسعار بعد</p>
-      </div>
-    </ng-container>
+    <!-- 📈 الأسعار تحت البانر مباشرة للكل (زائر / مسجّل) -->
+    <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
+    <div *ngIf="prices().length === 0" class="text-center py-12 text-gray-400">
+      <p class="text-4xl mb-2">📊</p>
+      <p class="font-semibold">لا توجد أسعار بعد</p>
+    </div>
 
     <!-- 🔒 كارت توجيه لغير المكتملين: يظهر لحد ما يسجّل دخول ويضيف أول قطيع -->
     <div *ngIf="isLoggedIn() && !hasFlock()" class="card text-center py-8 px-5"
@@ -162,10 +160,6 @@ const CATEGORIES = [
         [temp]="flockStats().temp"
         (flockSelected)="selectedFlockId.set($event)">
       </app-health-score-widget>
-
-      <!-- 📈 الأسعار تحت صحة القطيع مباشرة -->
-      <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
-
 
       <!-- ادعُ صديق -->
       <app-referral-card></app-referral-card>
