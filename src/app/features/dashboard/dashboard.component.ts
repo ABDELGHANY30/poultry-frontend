@@ -790,7 +790,7 @@ getCategoryNameAr(categoryKey: string): string {
     } catch { /* نسخة تالفة: نتجاهلها */ }
 
     const params: any = governorate ? { governorate } : {};
-    this.http.get<any>(`${environment.apiUrl}/weather/summary`, { params }).subscribe({
+    this.http.get<any>(`${environment.apiUrl}/weather-widget/summary`, { params }).subscribe({
       next: (res) => {
         if (res?.today && res?.tomorrow) {
           this.weather.set(res);
