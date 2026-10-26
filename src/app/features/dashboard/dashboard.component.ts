@@ -130,12 +130,88 @@ const CATEGORIES = [
       </div>
     </ng-template>
 
-    <!-- 📈 الأسعار تحت البانر مباشرة للكل (زائر / مسجّل) -->
-    <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
-    <div *ngIf="prices().length === 0" class="text-center py-12 text-gray-400">
-      <p class="text-4xl mb-2">📊</p>
-      <p class="font-semibold">لا توجد أسعار بعد</p>
-    </div>
+    <!-- 📈 المسجّل: كل الأسعار بنفس شكل صفحة السوق (الكل + أقسام بكروت ملونة) -->
+    <ng-template #allPricesBlock>
+      <div *ngIf="prices().length > 0" class="mb-5">
+
+        <div class="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+          <button type="button" (click)="selectedPriceTab.set('')"
+                  class="flex-shrink-0 px-4 py-2 rounded-2xl text-xs font-bold border transition"
+                  [class.bg-green-600]="selectedPriceTab() === ''"
+                  [class.text-white]="selectedPriceTab() === ''"
+                  [class.border-green-600]="selectedPriceTab() === ''"
+                  [class.bg-white]="selectedPriceTab() !== ''"
+                  [class.border-gray-200]="selectedPriceTab() !== ''"
+                  [class.text-gray-600]="selectedPriceTab() !== ''">
+            🌟 الكل
+          </button>
+          <button type="button" *ngFor="let c of availableTabs()"
+                  (click)="selectedPriceTab.set(c.value)"
+                  class="flex-shrink-0 px-4 py-2 rounded-2xl text-xs font-bold border transition"
+                  [class.text-white]="selectedPriceTab() === c.value"
+                  [class.bg-white]="selectedPriceTab() !== c.value"
+                  [class.border-gray-200]="selectedPriceTab() !== c.value"
+                  [class.text-gray-600]="selectedPriceTab() !== c.value"
+                  [style.background-color]="selectedPriceTab() === c.value ? c.headerColor : ''"
+                  [style.border-color]="selectedPriceTab() === c.value ? c.headerColor : ''">
+            {{ c.icon }} {{ c.label }}
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div *ngFor="let group of guestGroups()">
+
+            <div class="rounded-2xl px-5 py-3 flex items-center justify-between text-white font-black text-base"
+                 [style.background-color]="getCategoryColor(group.category, 'header')">
+              <span>{{ getCategoryLabel(group.category) }}</span>
+              <span class="text-2xl">{{ getCategoryIcon(group.category) }}</span>
+            </div>
+
+            <div class="space-y-2 px-1 mt-2">
+              <div *ngFor="let price of group.items"
+                   class="rounded-2xl border p-4"
+                   [style.background-color]="getCategoryColor(group.category, 'bg')"
+                   style="border-color:#e0e0e0">
+
+                <div class="flex items-center justify-between mb-3">
+                  <p class="font-black text-base mb-0" style="color:#1f2937">{{ price.item_name_ar }}</p>
+                  <span class="text-lg">{{ getCategoryIcon(group.category) }}</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-white rounded-xl p-3 text-center shadow-sm">
+                    <p class="text-xs text-gray-400 mb-1">سعر التنفيذ</p>
+                    <p class="font-black text-green-600 text-xl mb-0">{{ price.price_min | number }}</p>
+                    <p class="text-[10px] text-gray-400 mb-0">جنيه</p>
+                  </div>
+                  <div class="bg-white rounded-xl p-3 text-center shadow-sm border border-blue-100">
+                    <p class="text-xs text-blue-400 mb-1">السعر المعلن</p>
+                    <p class="font-black text-blue-600 text-xl mb-0">{{ price.price_max | number }}</p>
+                    <p class="text-[10px] text-gray-400 mb-0">جنيه</p>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2">
+                  <p *ngIf="price.notes" class="text-[10px] text-gray-400 mb-0">📍 {{ price.notes }}</p>
+                  <p class="text-[10px] text-gray-300 mr-auto mb-0">{{ price.created_at | date:'dd/MM' }}</p>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <!-- زائر / من غير قطيع: كل الأسعار بشكل السوق تحت البانر مباشرة -->
+    <ng-container *ngIf="!fullAccess()">
+      <ng-container *ngTemplateOutlet="allPricesBlock"></ng-container>
+      <div *ngIf="prices().length === 0" class="text-center py-12 text-gray-400">
+        <p class="text-4xl mb-2">📊</p>
+        <p class="font-semibold">لا توجد أسعار بعد</p>
+      </div>
+    </ng-container>
 
     <!-- 🔒 كارت توجيه لغير المكتملين: يظهر لحد ما يسجّل دخول ويضيف أول قطيع -->
     <div *ngIf="isLoggedIn() && !hasFlock()" class="card text-center py-8 px-5"
@@ -160,6 +236,9 @@ const CATEGORIES = [
         [temp]="flockStats().temp"
         (flockSelected)="selectedFlockId.set($event)">
       </app-health-score-widget>
+
+      <!-- 📈 صاحب القطيع: الأسعار المختصرة تحت صحة القطيع مباشرة -->
+      <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
 
       <!-- ادعُ صديق -->
       <app-referral-card></app-referral-card>
