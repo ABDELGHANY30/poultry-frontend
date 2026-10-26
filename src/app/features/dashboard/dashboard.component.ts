@@ -32,79 +32,61 @@ const CATEGORIES = [
   <div class="page-wrapper" dir="rtl">
 
     <!-- Welcome Banner -->
-    <div class="relative overflow-hidden rounded-3xl text-white"
-         style="background:linear-gradient(135deg,#0f2d1a 0%,#1e7d48 60%,#2d9e5f 100%)">
-      <div class="absolute inset-0 opacity-10"
-            style="background:repeating-linear-gradient(45deg,transparent,transparent 30px,rgba(255,255,255,.05) 30px,rgba(255,255,255,.05) 60px)"></div>
-      <div class="relative px-6 py-7">
-        <div class="flex items-start gap-3">
-          <div class="flex-1 min-w-0">
-            <!-- مسجّل: الترحيب + الاسم + عدد مرات التسجيل المتتالية -->
-            <ng-container *ngIf="isLoggedIn(); else guestBanner">
-              <p class="text-white/60 text-sm font-medium mb-1">{{ 'DASHBOARD.WELCOME' | translate }},</p>
-              <h1 class="text-2xl font-bold leading-tight">{{ userName() }} 👋</h1>
-              <div *ngIf="bannerStreakText() as text" class="mt-3">
-                <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                            bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
-                  <span class="text-base leading-none">🔥</span>
-                  <span class="text-white text-xs font-black leading-tight">{{ text }}</span>
-                </div>
+    <div class="relative overflow-hidden rounded-3xl text-white px-6 py-6"
+         style="background:#1f7d4e">
+      <div class="flex items-center justify-between gap-4">
+
+        <!-- الترحيب + الاسم + PRO -->
+        <div class="flex-1 min-w-0">
+          <ng-container *ngIf="isLoggedIn(); else guestBanner">
+            <p class="mb-1 text-sm font-medium" style="color:rgba(255,255,255,.62)">{{ 'DASHBOARD.WELCOME' | translate }},</p>
+            <h1 class="text-2xl font-bold leading-tight mb-0 truncate">{{ userName() }}</h1>
+
+            <span *ngIf="isPro()"
+                  class="inline-block mt-4 px-4 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-900">
+              PRO
+            </span>
+
+            <div *ngIf="bannerStreakText() as text" class="mt-3">
+              <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                          bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
+                <span class="text-base leading-none">🔥</span>
+                <span class="text-white text-xs font-black leading-tight">{{ text }}</span>
               </div>
-            </ng-container>
+            </div>
+          </ng-container>
 
-            <!-- غير مسجّل: زرار تسجيل الدخول جوه البانر -->
-            <ng-template #guestBanner>
-              <p class="text-white/60 text-sm font-medium mb-1">أهلاً بيك 👋</p>
-              <h1 class="text-xl font-bold leading-tight mb-3">سجّل دخولك عشان تفتح كل المميزات</h1>
-              <a routerLink="/auth/login"
-                 class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white text-green-800 font-bold text-sm no-underline shadow-md active:scale-95 transition-all">
-                تسجيل الدخول
-              </a>
-            </ng-template>
-          </div>
-          <!-- Pro Badge -->
-          <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-3 py-1.5 rounded-2xl flex-shrink-0">
-            ⭐ PRO
-          </div>
+          <!-- غير مسجّل: زرار تسجيل الدخول جوه البانر -->
+          <ng-template #guestBanner>
+            <p class="mb-1 text-sm font-medium" style="color:rgba(255,255,255,.62)">أهلاً بيك</p>
+            <h1 class="text-xl font-bold leading-tight mb-3">سجّل دخولك عشان تفتح كل المميزات</h1>
+            <a routerLink="/auth/login"
+               class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white text-green-800 font-bold text-sm no-underline shadow-md active:scale-95 transition-all">
+              تسجيل الدخول
+            </a>
+          </ng-template>
         </div>
 
-        <!-- 🌤️ الطقس: النهارده وبكره (بيتحدّث كل 8 ساعات من السيرفر) -->
-        <div *ngIf="weather() as w"
-             class="mt-5 grid grid-cols-2 sm:max-w-md rounded-2xl overflow-hidden"
-             style="background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.13)">
+        <!-- 🌤️ الطقس: الشكل التاني (من غير مربع)، اضغط عليه تبدّل بين النهارده وبكره -->
+        <button *ngIf="activeWeather() as w" type="button" (click)="toggleWeather()"
+                class="flex-shrink-0 flex items-center gap-3 text-white active:scale-95 transition-all"
+                style="direction:ltr;background:none;border:none;padding:0"
+                aria-label="اضغط لتبديل الطقس بين النهارده وبكره">
 
-          <!-- النهارده -->
-          <div class="flex items-center gap-3 px-4 py-3">
-            <span class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                  style="background:rgba(255,255,255,.12)">
-              <img *ngIf="w.today.icon" [src]="iconUrl(w.today.icon)" alt="" class="w-9 h-9 object-contain">
-            </span>
-            <div class="min-w-0 leading-tight">
-              <p class="mb-0.5" style="font-size:11px;color:rgba(255,255,255,.62)">النهارده</p>
-              <p class="mb-0 flex items-baseline gap-1.5">
-                <span class="text-xl font-bold" style="color:rgba(255,255,255,.95)">{{ w.today.max }}°</span>
-                <span class="text-xs" style="color:rgba(255,255,255,.55)">{{ w.today.min }}°</span>
-              </p>
-              <p class="mb-0 mt-0.5 truncate" style="font-size:11px;color:rgba(255,255,255,.68)">{{ w.today.condition }}</p>
-            </div>
+          <div class="text-center leading-tight">
+            <div style="font-size:11px;color:rgba(255,255,255,.75)">{{ weatherDay() === 'today' ? 'النهارده' : 'بكره' }}</div>
+            <p class="mb-0 flex items-baseline justify-center gap-1">
+              <span class="text-3xl font-bold">{{ w.max }}°</span>
+              <span class="text-xs" style="color:rgba(255,255,255,.7)">{{ w.min }}°</span>
+            </p>
+            <p class="mb-0 mt-0.5 truncate max-w-[90px]" style="font-size:11px;color:rgba(255,255,255,.8)">{{ w.condition }}</p>
           </div>
 
-          <!-- بكره -->
-          <div class="flex items-center gap-3 px-4 py-3" style="border-inline-start:1px solid rgba(255,255,255,.12)">
-            <span class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                  style="background:rgba(255,255,255,.08)">
-              <img *ngIf="w.tomorrow.icon" [src]="iconUrl(w.tomorrow.icon)" alt="" class="w-7 h-7 object-contain">
-            </span>
-            <div class="min-w-0 leading-tight">
-              <p class="mb-0.5" style="font-size:11px;color:rgba(255,255,255,.62)">بكره</p>
-              <p class="mb-0 flex items-baseline gap-1.5">
-                <span class="text-base font-semibold" style="color:rgba(255,255,255,.88)">{{ w.tomorrow.max }}°</span>
-                <span class="text-xs" style="color:rgba(255,255,255,.5)">{{ w.tomorrow.min }}°</span>
-              </p>
-              <p class="mb-0 mt-0.5 truncate" style="font-size:11px;color:rgba(255,255,255,.62)">{{ w.tomorrow.condition }}</p>
-            </div>
-          </div>
-        </div>
+          <span style="width:1px;align-self:stretch;background:rgba(255,255,255,.3)"></span>
+
+          <span class="text-4xl leading-none flex-shrink-0">{{ weatherIcon(w) }}</span>
+        </button>
+
       </div>
     </div>
 
@@ -313,7 +295,7 @@ const CATEGORIES = [
       </ng-template>
 
       <!-- 2. باقي الكروت (القطعان والتنبيهات) تأتي تحت الأسعار في عمودين بجانب بعضهما -->
-      <div class="grid lg:grid-cols-2 gap-5">
+      <div class="grid grid-cols-1 gap-5">
 
         <!-- Flock Health -->
         <div class="card">
@@ -364,67 +346,6 @@ const CATEGORIES = [
                 + {{ 'FLOCK.ADD' | translate }}
               </a>
             </div>
-          </div>
-        </div>
-
-        <!-- 📋 تقرير الدورة (مكان التنبيهات النشطة) — بيتبع القطيع المختار -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="section-title mb-0">📋 تقرير الدورة</h2>
-            <a routerLink="/reports" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
-              التفاصيل الكاملة →
-            </a>
-          </div>
-
-          <!-- 🔒 دورة منتهية والمستخدم مش Pro -->
-          <div *ngIf="cycleLocked()" class="text-center py-4">
-            <div class="text-3xl mb-2">🔒</div>
-            <p class="text-sm font-bold text-gray-800 mb-1">تقرير الدورة المنتهية لمشتركي Pro فقط</p>
-            <p class="text-xs text-[var(--c-muted)] mb-3">التقرير متاح مجاناً طول ما الدورة شغالة.</p>
-            <a routerLink="/subscription" class="btn-primary btn btn-sm inline-flex">⭐ ترقية لـ Pro</a>
-          </div>
-
-          <ng-container *ngIf="cycleReport() as r">
-            <p class="text-xs text-[var(--c-muted)] mb-3">🐔 {{ r.flock_name }}</p>
-            <div class="grid grid-cols-2 gap-2 text-sm mb-3">
-              <div class="bg-gray-50 rounded-xl p-2.5">
-                <div class="text-[11px] text-gray-400">مدة الدورة</div>
-                <div class="font-black">{{ r.cycle_days ?? '—' }} يوم</div>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-2.5">
-                <div class="text-[11px] text-gray-400">نسبة النفوق</div>
-                <div class="font-black text-red-600">{{ r.mortality_rate }}%</div>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-2.5">
-                <div class="text-[11px] text-gray-400">FCR</div>
-                <div class="font-black">{{ r.fcr ?? '—' }}</div>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-2.5">
-                <div class="text-[11px] text-gray-400">التحصينات</div>
-                <div class="font-black">{{ r.vaccinations_completed }}</div>
-              </div>
-            </div>
-
-            <div *ngIf="r.financial as fin" class="flex items-baseline justify-between border-t pt-3 mb-3">
-              <span class="text-xs text-gray-500">💰 صافي الربح التقديري</span>
-              <span class="font-black"
-                    [class.text-green-600]="fin.net_profit >= 0" [class.text-red-600]="fin.net_profit < 0">
-                {{ fin.net_profit >= 0 ? '+' : '' }}{{ fin.net_profit | number:'1.0-0' }} ج
-              </span>
-            </div>
-
-            <div *ngIf="!reportsIsPro()" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2 mb-3">
-              ⏳ متاح لك مجاناً طول ما الدورة شغالة، وبعد ما تنتهي محتاج اشتراك Pro.
-            </div>
-
-            <button (click)="downloadCyclePdf()"
-                    class="w-full py-2 rounded-xl bg-gray-800 text-white text-xs font-bold">
-              ⬇️ تحميل PDF
-            </button>
-          </ng-container>
-
-          <div *ngIf="!cycleReport() && !cycleLocked()" class="text-center py-6 text-[var(--c-muted)] text-sm">
-            {{ cycleLoading() ? 'جاري تحميل التقرير...' : 'لا توجد بيانات كافية بعد' }}
           </div>
         </div>
 
@@ -482,6 +403,68 @@ const CATEGORIES = [
         <!-- محاكاة القرار -->
         <div class="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
           <app-decision-simulator></app-decision-simulator>
+        </div>
+      </div>
+
+
+      <!-- 📋 تقرير الدورة (مكان التنبيهات النشطة) — بيتبع القطيع المختار -->
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="section-title mb-0">📋 تقرير الدورة</h2>
+          <a routerLink="/reports" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
+            التفاصيل الكاملة →
+          </a>
+        </div>
+
+        <!-- 🔒 دورة منتهية والمستخدم مش Pro -->
+        <div *ngIf="cycleLocked()" class="text-center py-4">
+          <div class="text-3xl mb-2">🔒</div>
+          <p class="text-sm font-bold text-gray-800 mb-1">تقرير الدورة المنتهية لمشتركي Pro فقط</p>
+          <p class="text-xs text-[var(--c-muted)] mb-3">التقرير متاح مجاناً طول ما الدورة شغالة.</p>
+          <a routerLink="/subscription" class="btn-primary btn btn-sm inline-flex">⭐ ترقية لـ Pro</a>
+        </div>
+
+        <ng-container *ngIf="cycleReport() as r">
+          <p class="text-xs text-[var(--c-muted)] mb-3">🐔 {{ r.flock_name }}</p>
+          <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+            <div class="bg-gray-50 rounded-xl p-2.5">
+              <div class="text-[11px] text-gray-400">مدة الدورة</div>
+              <div class="font-black">{{ r.cycle_days ?? '—' }} يوم</div>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-2.5">
+              <div class="text-[11px] text-gray-400">نسبة النفوق</div>
+              <div class="font-black text-red-600">{{ r.mortality_rate }}%</div>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-2.5">
+              <div class="text-[11px] text-gray-400">FCR</div>
+              <div class="font-black">{{ r.fcr ?? '—' }}</div>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-2.5">
+              <div class="text-[11px] text-gray-400">التحصينات</div>
+              <div class="font-black">{{ r.vaccinations_completed }}</div>
+            </div>
+          </div>
+
+          <div *ngIf="r.financial as fin" class="flex items-baseline justify-between border-t pt-3 mb-3">
+            <span class="text-xs text-gray-500">💰 صافي الربح التقديري</span>
+            <span class="font-black"
+                  [class.text-green-600]="fin.net_profit >= 0" [class.text-red-600]="fin.net_profit < 0">
+              {{ fin.net_profit >= 0 ? '+' : '' }}{{ fin.net_profit | number:'1.0-0' }} ج
+            </span>
+          </div>
+
+          <div *ngIf="!reportsIsPro()" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2 mb-3">
+            ⏳ متاح لك مجاناً طول ما الدورة شغالة، وبعد ما تنتهي محتاج اشتراك Pro.
+          </div>
+
+          <button (click)="downloadCyclePdf()"
+                  class="w-full py-2 rounded-xl bg-gray-800 text-white text-xs font-bold">
+            ⬇️ تحميل PDF
+          </button>
+        </ng-container>
+
+        <div *ngIf="!cycleReport() && !cycleLocked()" class="text-center py-6 text-[var(--c-muted)] text-sm">
+          {{ cycleLoading() ? 'جاري تحميل التقرير...' : 'لا توجد بيانات كافية بعد' }}
         </div>
       </div>
 
@@ -806,6 +789,35 @@ getCategoryNameAr(categoryKey: string): string {
   // بعض الـ APIs بترجّع روابط الأيقونات من غير https (//cdn...)
   iconUrl(u: string): string {
     return u?.startsWith('//') ? 'https:' + u : u;
+  }
+
+  // 🔄 تبديل النهارده / بكره في كارت الطقس
+  weatherDay = signal<'today' | 'tomorrow'>('today');
+  activeWeather = computed(() => this.weather()?.[this.weatherDay()] ?? null);
+  toggleWeather() {
+    this.weatherDay.update(d => (d === 'today' ? 'tomorrow' : 'today'));
+  }
+
+  // 🌡️ الأيقونة بتتغير مع الدرجة نفسها
+  // أولاً: لو الحالة مطر / عاصفة / ثلج / شبورة / غيوم بتغلب على الدرجة
+  // ثانياً: غير كده الأيقونة بتتحدد من الدرجة العظمى
+  weatherIcon(w: { max: number; condition?: string }): string {
+    const c = (w.condition || '').toLowerCase();
+    if (/عاصف|عواصف|رعد|storm|thunder/.test(c)) return '⛈️';
+    if (/ثلج|snow/.test(c)) return '❄️';
+    if (/مطر|أمطار|rain|drizzle/.test(c)) return '🌧️';
+    if (/شبورة|ضباب|fog|mist/.test(c)) return '🌫️';
+    if (/غائم جزئ|partly/.test(c)) return '⛅';
+    if (/غائم|غيوم|سحاب|cloud|overcast/.test(c)) return '☁️';
+
+    const t = Number(w.max);
+    if (isNaN(t)) return '☀️';
+    if (t >= 38) return '🥵';   // حر شديد
+    if (t >= 30) return '☀️';   // حر / صافي
+    if (t >= 22) return '🌤️';  // معتدل دافي
+    if (t >= 15) return '⛅';   // معتدل
+    if (t >= 8)  return '☁️';   // بارد
+    return '🥶';                // برد شديد
   }
 
   loadWeather(governorate: string) {
