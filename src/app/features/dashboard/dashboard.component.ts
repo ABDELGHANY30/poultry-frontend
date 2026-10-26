@@ -95,15 +95,15 @@ const CATEGORIES = [
       <div class="card mb-5" *ngIf="prices().length > 0">
 
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-base font-bold text-gray-800 mb-0">أسعار السوق</h2>
-          <span class="text-[11px] text-gray-400">{{ priceDate() }}</span>
+          <h2 class="text-sm font-normal text-gray-500 mb-0">أسعار السوق</h2>
+          <span class="text-sm text-gray-600">{{ priceDate() }}</span>
         </div>
 
         <!-- تابات الأقسام -->
         <div class="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
           <button type="button" *ngFor="let c of availableTabs()"
                   (click)="selectedPriceTab.set(c.value)"
-                  class="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold border transition"
+                  class="flex-shrink-0 px-4 py-2 rounded-lg text-[13px] border transition"
                   [class.text-white]="activePriceTab() === c.value"
                   [class.bg-white]="activePriceTab() !== c.value"
                   [class.border-gray-200]="activePriceTab() !== c.value"
@@ -117,18 +117,12 @@ const CATEGORIES = [
         <!-- صفوف الأسعار -->
         <div class="flex flex-col gap-2">
           <div *ngFor="let p of tabPrices()"
-               class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5">
-            <span class="text-sm font-semibold text-gray-800 truncate">{{ p.item_name_ar }}</span>
-            <div class="flex items-center gap-3 flex-shrink-0 text-[11px] text-gray-400">
-              <span class="flex flex-col items-center leading-tight">
-                المعلن
-                <b class="text-base font-bold text-gray-800">{{ p.price_max ? (p.price_max | number) : '—' }}</b>
-              </span>
-              <span class="flex flex-col items-center leading-tight">
-                التنفيذ
-                <b class="text-base font-bold text-green-700">{{ p.price_min | number }}</b>
-              </span>
-            </div>
+               class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2.5">
+            <span class="text-sm text-gray-800 truncate">{{ p.item_name_ar }}</span>
+            <span class="flex-shrink-0 text-xs text-gray-400">
+              المعلن <b class="text-sm font-medium text-gray-800">{{ p.price_max ? (p.price_max | number) : '—' }}</b>
+              · التنفيذ <b class="text-sm font-medium text-green-700">{{ p.price_min | number }}</b>
+            </span>
           </div>
         </div>
 
@@ -439,7 +433,7 @@ export class DashboardComponent implements OnInit {
   isPro = signal(false);
   planInfo = signal<any>(null);
   dailyPrices = signal<any[]>([]);
-  priceDate = computed(() => new Date().toLocaleDateString(this.lang === 'ar' ? 'ar-EG' : 'en-GB'));
+  priceDate = computed(() => new Date().toLocaleDateString('en-GB'));
   todayTemps = signal<Record<string, { temperature_celsius: number | null; record_date: string }>>({});
   avgFcr = signal<number | null>(null);
   recentMortalityTotal = signal<number | null>(null);
