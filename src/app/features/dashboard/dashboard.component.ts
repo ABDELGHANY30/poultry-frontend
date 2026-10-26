@@ -115,9 +115,10 @@ const CATEGORIES = [
         </div>
 
         <!-- صفوف الأسعار -->
-        <div class="flex flex-col gap-2">
+        <!-- 3 صفوف ظاهرة بس (148px)، والباقي بسكرول جوه الكارت من غير ما حجمه يتغير -->
+        <div class="flex flex-col gap-2 h-[148px] overflow-y-auto overscroll-contain pe-1">
           <div *ngFor="let p of tabPrices()"
-               class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2.5">
+               class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 h-11 flex-shrink-0">
             <span class="text-sm text-gray-800 truncate">{{ p.item_name_ar }}</span>
             <span class="flex-shrink-0 text-xs text-gray-400">
               المعلن <b class="text-sm font-medium text-gray-800">{{ p.price_max ? (p.price_max | number) : '—' }}</b>
@@ -736,8 +737,19 @@ getCategoryNameAr(categoryKey: string): string {
 
   tabPrices = computed(() => {
     const tab = this.activePriceTab();
-    return (this.prices() || []).filter((p: any) => (p.category || '').toLowerCase() === tab);
+    const rank = (p: any) => {
+      const i = this.pinnedPriceNames.findIndex(k => (p.item_name_ar || '').includes(k));
+      return i === -1 ? 99 : i;
+    };
+    // الأصناف المهمة (الفراخ البيضاء / ساسو / روزي) الأول، والباقي بترتيبه
+    return (this.prices() || [])
+      .filter((p: any) => (p.category || '').toLowerCase() === tab)
+      .map((p: any, i: number) => ({ p, i }))
+      .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+      .map(x => x.p);
   });
+
+  private pinnedPriceNames = ['الفراخ البيضاء', 'ساسو', 'روزي'];
 
   getCategoryLabel(cat: string): string {
     return CATEGORIES.find(c => c.value === cat)?.label ?? cat;
