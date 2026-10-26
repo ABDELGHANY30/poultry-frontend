@@ -7,7 +7,6 @@ import { AuthService } from '../../core/services/auth.service';
 
 type Field = 'name' | 'email' | 'password' | 'phone';
 
-// أخطاء شائعة في كتابة الإيميل → التصحيح المقترح
 const EMAIL_TYPOS: Record<string, string> = {
   'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gamil.com': 'gmail.com',
   'gmal.com': 'gmail.com', 'gmil.com': 'gmail.com', 'gnail.com': 'gmail.com',
@@ -75,12 +74,12 @@ const COMMON_PASSWORDS = [
               <input class="form-input w-full" [type]="showPassword() ? 'text' : 'password'"
                      [(ngModel)]="form.password" placeholder="••••••••"
                      autocomplete="new-password" dir="ltr"
-                     style="padding-inline-end:44px"
+                     style="padding-inline-start:44px"
                      (blur)="touch('password')"
                      [style.border-color]="shown('password') ? '#f87171' : ''" />
-              <button type="button"
+                     <button type="button"
                       class="absolute top-1/2 -translate-y-1/2 text-lg leading-none"
-                      style="inset-inline-end:12px"
+                      style="inset-inline-start:12px"
                       (click)="showPassword.set(!showPassword())"
                       [attr.aria-label]="showPassword() ? 'إخفاء كلمة السر' : 'إظهار كلمة السر'">
                 {{ showPassword() ? '🙈' : '👁️' }}
@@ -166,8 +165,6 @@ export class RegisterComponent {
     this.touched.update(t => ({ ...t, [f]: true }));
   }
 
-  // ─────────────── قواعد التحقق ───────────────
-
   nameError(): string {
     const v = this.form.name.trim();
     if (!v) return 'اكتب اسمك';
@@ -196,7 +193,6 @@ export class RegisterComponent {
   applyEmailSuggestion() {
     this.form.email = this.emailSuggestion();
   }
-
   passwordError(): string {
     const v = this.form.password;
     if (!v) return 'اكتب كلمة السر';
@@ -210,7 +206,6 @@ export class RegisterComponent {
     return '';
   }
 
-  /** 0 = فاضية، 1 = ضعيفة، 2 = متوسطة، 3 = قوية */
   passwordStrength(): number {
     const v = this.form.password;
     if (!v) return 0;
@@ -232,17 +227,12 @@ export class RegisterComponent {
     }
   }
 
-  /** الرسالة بتظهر بعد ما المستخدم يسيب الحقل، أو بعد أول محاولة تسجيل */
   shown(f: Field): string {
     return this.touched()[f] || this.submitted() ? this.errorOf(f) : '';
   }
 
-  // ─────────────── الموبايل ───────────────
-
-  // التحقق إن الرقم مصري صح (010 / 011 / 012 / 015 و11 رقم)
   onPhoneInput(event: Event) {
     const raw = (event.target as HTMLInputElement).value;
-    // تحويل الأرقام العربية (٠١٢...) لإنجليزي قبل ما نشيل أي حاجة تانية
     const latin = raw.replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660));
     const onlyNumbers = latin.replace(/\D/g, '');
     this.form.phone = onlyNumbers;
@@ -254,24 +244,20 @@ export class RegisterComponent {
     } else if (onlyNumbers.length === 11 || onlyNumbers.length === 0) {
       this.phoneError.set('');
     } else if (onlyNumbers.length >= 3) {
-      // لسه بيكتب: نحذّره بس لو سابه ناقص (يتأكد عند الإرسال)
       this.phoneError.set('');
     }
   }
-
-  // ─────────────── الإرسال ───────────────
 
   register() {
     this.submitted.set(true);
     this.errorMsg.set('');
 
-    // الموبايل اختياري، لكن لو كتبه لازم يكون كامل
     if (this.form.phone && this.form.phone.length !== 11) {
       this.phoneError.set('رقم الموبايل لازم يكون 11 رقم');
     }
 
     const hasErrors =
-      !!this.nameError() || !!this.emailError() || !!this.passwordError() || !!this.phoneError();
+      !!this.nameError() ||  !!this.emailError() || !!this.passwordError() || !!this.phoneError();
     if (hasErrors) {
       this.errorMsg.set('فيه بيانات غلط، راجع الحقول اللي عليها ⚠️');
       return;

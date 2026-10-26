@@ -23,7 +23,7 @@ import { HttpActivityService } from './core/interceptors/http-activity';
   selector: 'app-root',
   standalone: true,
   imports: [CommonModule, RouterOutlet, SplashComponent],
-  template: `
+  template:` 
     <app-splash *ngIf="!splashDone" [ready]="ready" (finished)="onSplashFinished()"></app-splash>
 
     <div class="app-shell"><router-outlet /></div>`
@@ -39,10 +39,8 @@ export class AppComponent implements OnInit {
 
   splashDone = false;
 
-  // true لما أول تنقل يخلص
   private navDone$ = new BehaviorSubject(false);
 
-  // true لما التنقل يخلص ومفيش requests شغالة → الـ splash يكمّل 100% ويقفل
   ready = false;
 
   constructor(private adsService: AdsService) {}
@@ -50,22 +48,19 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     SplashScreen.hide({ fadeOutDuration: 200 });
 
-    // لو أول تنقل خلص قبل ما نوصل هنا
     if (this.router.navigated) this.navDone$.next(true);
 
-    // الـ splash يقفل لما التنقل يخلص ومفيش requests شغالة لمدة 250ms
     combineLatest([this.navDone$, this.activity.pending$]).pipe(
       debounceTime(250),
       filter(([nav, pending]) => nav && pending === 0),
       take(1)
     ).subscribe(() => (this.ready = true));
 
-    // أمان: لو السيرفر نايم/guard بطيء منسيبش الـ splash ثابت للأبد
     setTimeout(() => (this.ready = true), 8000);
 
     this.router.events.subscribe(e => {
       if (e instanceof NavigationCancel && e.code === NavigationCancellationCode.Redirect) {
-        return; // redirect من guard (زي dailyRecordGuard) — التنقل لسه مكمّل
+        return;
       } else if (
         e instanceof NavigationEnd ||
         e instanceof NavigationCancel ||
@@ -84,10 +79,9 @@ export class AppComponent implements OnInit {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     this.auth.initAuth();
 
-    // ── التحكم في زرار الرجوع الفعلي (الموبايل) ──────────────
     App.addListener('backButton', () => {
       this.ngZone.run(() => {
-        if (this.router.url === '/'|| this.router.url === '/home'||  this.router.url === '/dashboard') {
+        if (this.router.url === '/'|| this.router.url === '/home' || this.router.url === '/dashboard') {
           App.exitApp();
         } else if (window.history.length > 1) {
           window.history.back();
@@ -97,7 +91,6 @@ export class AppComponent implements OnInit {
       });
     });
 
-    // ── إصلاح ارتفاع الشاشة مع ظهور الكيبورد ──────────────
     const setAppHeight = () => {
       this.ngZone.run(() => {
         const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.01;
@@ -107,18 +100,29 @@ export class AppComponent implements OnInit {
     setAppHeight();
     window.visualViewport?.addEventListener('resize', setAppHeight);
 
-    // ── تمرير الحقل النشط فوق الكيبورد أوتوماتيك ──────────
-    const kbObserver = new MutationObserver(() => {
-      const kh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-height')) || 0;
-      if (kh > 0) {
-        const active = document.activeElement as HTMLElement;
-        if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) {
-          requestAnimationFrame(() => {
-            active.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          });
-        }
-      }
-    });
+    // ── تعويض مكان الكيبورد ──
+    // ارتفاع الصفحة (--app-vh) بيتبع visualViewport، يعني بيتصغّر لوحده لما الكيبورد يفتح.
+    // فالرفع الإضافي (kb-shift) لازم يبقى بس الجزء اللي لسه مغطّيه الكيبورد = الكيبورد - اللي اتصغّر فعلاً.
+    // (على أندرويد 14/15 الصفحة بتتصغّر بالكامل، فالناتج صفر ومفيش مسافة زيادة.)
+    let baseH = Math.max(window.innerHeight, window.visualViewport?.height ?? 0);
+    const readKh = () =>
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-height')) || 0;
+
+    const updateKbShift = () => {
+      const kh = readKh();
+      const vvH = window.visualViewport?.height ?? window.innerHeight;
+      if (kh <= 0) baseH = Math.max(window.innerHeight, vvH); // الكيبورد مقفول: نحدّث ارتفاع الشاشة الأصلي
+      const alreadyShrunk = Math.max(0, baseH - vvH);
+      const shift = Math.max(0, kh - alreadyShrunk);
+      document.body.style.setProperty('--kb-shift', `${shift}px`);
+    };
+    updateKbShift();
+    window.visualViewport?.addEventListener('resize', updateKbShift);
+    window.addEventListener('orientationchange', () => setTimeout(updateKbShift, 400));
+
+    // مفيش سكرول يدوي عند فتح الكيبورد: بس بنحدّث --kb-shift
+    // (المتصفح بيسكرول من نفسه لو الحقل فعلاً متغطّي، وبأقل حركة ممكنة)
+    const kbObserver = new MutationObserver(() => updateKbShift());
     kbObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   }
 

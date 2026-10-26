@@ -730,18 +730,45 @@ export class MarketHubComponent implements OnInit {
   }
 
 
+  // 💾 آخر أسعار وصلت بتتحفظ على الجهاز وتفضل معروضة لحد ما أسعار جديدة توصل
+  // (نفس المفتاح مشترك بين الداشبورد وسوق التجار)
+  private readonly PRICES_CACHE_KEY = 'prices_latest_cache_v1';
+
+  private readCachedPrices(): any[] {
+    try {
+      const raw = localStorage.getItem(this.PRICES_CACHE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeCachedPrices(data: any[]): void {
+    try {
+      localStorage.setItem(this.PRICES_CACHE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('تعذّر حفظ الأسعار محلياً:', e);
+    }
+  }
+
   loadPrices() {
-    this.loadingPrices.set(true);
+    // عرض آخر أسعار محفوظة فوراً (من غير سبينر) لحد ما توصل الجديدة
+    const cached = this.readCachedPrices();
+    if (cached.length) this.prices.set(cached);
+    this.loadingPrices.set(!cached.length);
+
     this.http.get<any>(`${environment.apiUrl}/prices/latest`).subscribe({
       next: res => {
         const data = Array.isArray(res) ? res : (res?.prices ?? []);
         this.prices.set(data);
+        this.writeCachedPrices(data);
         this.loadingPrices.set(false);
         this.pricesLoadedOnce = true;
       },
       error: (err) => {
         console.error('Error loading prices:', err);
-        this.loadingPrices.set(false);
+        this.loadingPrices.set(false); // بنسيب آخر أسعار محفوظة معروضة
       }
     });
   }

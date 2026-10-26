@@ -36,8 +36,17 @@ import { AuthService } from '../../core/services/auth.service';
         </div>
         <div class="mb-6">
           <label class="form-label">{{ 'AUTH.PASSWORD' | translate }}</label>
-          <input class="form-input" type="password" [(ngModel)]="password"
-                 placeholder="••••••••" (keydown.enter)="login()" />
+          <div class="relative">
+            <input class="form-input w-full pe-12" [type]="showPassword() ? 'text' : 'password'"
+                   [(ngModel)]="password" placeholder="••••••••" (keydown.enter)="login()" />
+            <button type="button"
+                    class="absolute inset-y-0 end-0 px-3 flex items-center text-lg opacity-60 hover:opacity-100"
+                    (click)="showPassword.set(!showPassword())"
+                    [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+                    tabindex="-1">
+              {{ showPassword() ? '🙈' : '👁️' }}
+            </button>
+          </div>
         </div>
 
         <div *ngIf="error()" class="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
@@ -65,6 +74,7 @@ export class LoginComponent {
 
   email = ''; password = '';
   loading = signal(false);
+  showPassword = signal(false);
   error   = signal('');
 
   login() {

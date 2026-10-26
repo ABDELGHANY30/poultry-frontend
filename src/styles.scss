@@ -7,7 +7,8 @@
 /* ── CSS Custom Properties ─────────────────────────────────── */
 :root {
   --sidebar-w:    264px;
-  --topbar-h:     60px;
+  --topbar-h:     64px;
+  --hdr-gap:      2px;   /* مسافة فوق الهيدر */
   --bottomnav-h:  68px;
   --radius:       14px;
   --radius-lg:    20px;
@@ -40,7 +41,7 @@
 /* ── Base ──────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: auto; }  /* كان smooth: بيخلي قفزة الفوكس مع الكيبورد أعنف */
 
 /*
   ملحوظة: خليت height:100dvh بس شلت overflow:hidden اللي كان هنا —
@@ -56,12 +57,21 @@ html, body {
 .h-dvh, .min-h-dvh, .max-h-dvh,
 .h-svh, .min-h-svh, .max-h-svh,
 .h-lvh, .min-h-lvh, .max-h-lvh {
-  height: calc(var(--app-vh, 1vh) * 100) !important;
-  min-height: calc(var(--app-vh, 1vh) * 100) !important;
+  height: calc(var(--app-vh, 1vh) * 100 - var(--sat) - var(--sab) - var(--hdr-h)) !important;
+  min-height: calc(var(--app-vh, 1vh) * 100 - var(--sat) - var(--sab) - var(--hdr-h)) !important;
 }
+/*
+  الـ safe-area بتتطبق هنا مرة واحدة على الـ app-root كله (مش على header بس):
+  - قاعدة `header {padding-top}` القديمة كانت بتخسر قدام كلاسات Tailwind (pt-*, py-*)
+    وكمان env(safe-area-inset-top, 24px) الـ fallback بتاعها عمره ما اشتغل لأن الـ WebView بيرجّع 0 مش "undefined".
+*/
 app-root {
   display: block;
   height: 100%;
+  padding-top: calc(var(--sat) + var(--hdr-h));
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
 }
 
 body {
@@ -72,6 +82,31 @@ body {
   margin: 0;
   overflow-y: auto;
 }
+/* لو عندك عنصر position:fixed أو sticky في أعلى الشاشة، ضيفله الكلاس ده */
+.safe-top-fixed { top: var(--sat) !important; }
+.safe-bottom-fixed { bottom: var(--sab) !important; }
+
+/*
+  هيدر ثابت: ضيف class="app-header" على عنصر <header> بتاع الـ navbar.
+  - بيتثبت فوق خالص (position:fixed) والـ padding-top بتاع الـ status bar جواه،
+    فلونه بيغطي منطقة الـ status bar والمحتوى مبيظهرش تحته وإنت بتسكرول.
+  - ارتفاعه = الـ status bar + --topbar-h (60px)، والـ app-root بيتزحزح بنفس المقدار.
+*/
+header.app-header {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  box-sizing: border-box;
+  height: calc(var(--sat) + var(--hdr-gap) + var(--topbar-h)) !important;
+  padding-top: calc(var(--sat) + var(--hdr-gap)) !important;
+  padding-bottom: 0 !important;  /* عشان py-2 ميزحزحش المحتوى لفوق شوية */
+  display: flex;
+  align-items: center;
+}
+:where(header.app-header) { background-color: var(--c-surface); }  /* specificity صفر: أي bg-* عندك يكسب */
+app-root:has(header.app-header) { --hdr-h: calc(var(--topbar-h) + var(--hdr-gap)); }
 
 /*
   إصلاح عام لباج معروف في WebView أندرويد: عناصر الإدخال (input/textarea/select)
@@ -214,25 +249,106 @@ textarea.form-input {
  
 :root {
   --keyboard-height: 0px;
-    color-scheme: light dark; /* كان 'light only' — ده اللي كان بيمنع الدارك مود */
+  color-scheme: light dark; /* كان 'light only' — ده اللي كان بيمنع الدارك مود */
+
+  /* أي مصدر يدّي قيمة يكسب: env بتاع الـ WebView أو متغيرات Capacitor (--safe-area-inset-*) */
+  /* حد أدنى مضمون لمسافة الـ status bar لو الموبايل/الـ WebView رجّع 0 (عدّل الرقم أو خليه 0px لو ظهرت مسافة زيادة على موبايلات قديمة) */
+  --hdr-h: 0px; /* بيبقى = --topbar-h لما فيه header.app-header */
+  --sat-min: 24px;
+  --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px), var(--sat-min));
+  --sab: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --sal: max(env(safe-area-inset-left, 0px),   var(--safe-area-inset-left, 0px));
+  --sar: max(env(safe-area-inset-right, 0px),  var(--safe-area-inset-right, 0px));
 }
+
+/* الكيبورد بيغطي الـ navigation bar، فمفيش داعي لمسافته تحت */
+body.keyboard-open { --sab: 0px; }
+
+/*
+  الـ WebView مبيتصغّرش لما الكيبورد يفتح (الكيبورد بيتحط فوقه)، فلازم آلية واحدة بس تعوّض مكانه:
+  - الشات: .kb-shift بيترفع بمقدار الكيبورد + 8px هوا فوقه.
+  - باقي الصفحات: مساحة تحت المحتوى + scroll-margin عشان العنصر اللي فيه الفوكس يطلع فوق الكيبورد.
+  (قبل كده الاتنين كانوا شغالين على الشات مع بعض = رفع مرتين، وبعدين لما شلت واحد فيهم اختفت الخانة.)
+*/
 .kb-shift {
   transition: transform .15s ease-out;
   will-change: transform;
 }
+/* اتشال رفع الشات بالـ transform: الـ WebView نفسه بيتصغّر مع الكيبورد (native resize) فالرفع كان بيتعمل مرتين */
 .bg-white\/90 { background-color: rgba(23, 33, 27, .9); }
-body.keyboard-open .kb-shift {
-  transform: translateY(calc((var(--keyboard-height)) * -1));
+
+/* مساحة تحت الصفحات العادية (مش الشات) عشان آخر العناصر تتسكرول فوق الكيبورد */
+/* اتشال padding-bottom بتاع الكيبورد: نفس السبب، الـ WebView بيعوّض لوحده */
+/* ===== هوية Mazar3.ko في الهيدر =====
+   ضيف الكتلة دي في آخر src/styles.scss (وامسح كتلة .brand-name القديمة لو كنت ضفتها) */
+
+/* شعار الحظيرة */
+.brand-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  transition: transform 0.3s;
 }
-/* مساحة إضافية تحت أي صفحة عادية (غير الشات) لما الكيبورد يفتح، عشان العناصر في آخر الصفحة تبقى قابلة للتمرير ليها */
-body.keyboard-open .page-wrapper {
-  padding-bottom: var(--keyboard-height);
+.brand-mark .bm-bg   { fill: #0F3D2E; }
+.brand-mark .bm-fg   { fill: #FFC93C; }
+.brand-mark .bm-line { stroke: #FFC93C; }
+
+/* الاسم */
+.brand-name {
+  display: inline-flex;
+  align-items: center;
+  direction: ltr;
+  white-space: nowrap;
+  font-family: 'Baloo 2', 'Nunito', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #0F3D2E;
+}
+.brand-word { text-shadow: 0 2px 0 rgba(15, 61, 46, 0.25), 0 5px 10px rgba(15, 61, 46, 0.22); }
+.brand-3 { color: #F2A900; }
+.brand-ko {
+  margin-left: 0.14em;
+  padding: 0.14em 0.42em;
+  border-radius: 999px;
+  font-size: 0.68em;
+  letter-spacing: 0;
+  background: #0F3D2E;
+  color: #FFF6E0;
+  box-shadow: 0 4px 10px rgba(15, 61, 46, 0.32);
 }
 
-input, select, textarea, button {
-  scroll-margin: 12px;
-  scroll-margin-bottom: calc(var(--keyboard-height) + 10px);
+/* الدارك */
+.dark .brand-mark .bm-bg   { fill: #FFC93C; }
+.dark .brand-mark .bm-fg   { fill: #0F3D2E; }
+.dark .brand-mark .bm-line { stroke: #0F3D2E; }
+.dark .brand-name { color: #FFF6E0; }
+.dark .brand-word { text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 5px 10px rgba(0, 0, 0, 0.4); }
+.dark .brand-3 { color: #FFC93C; }
+.dark .brand-ko { background: #FFC93C; color: #0F3D2E; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); }
+
+/* الشاشات الصغيرة */
+@media (max-width: 380px) {
+  .brand-name { font-size: 1.45rem; }
+  .brand-mark { width: 2.2rem; height: 2.2rem; }
 }
+
+/* اتشال بلوك scroll-margin-bottom: كان بيرفع الحقل بمقدار الكيبورد فوق الـ padding والـ kb-shift = تعويض مكرر */
+/* تقليل السكرول وقت الكيبورد: بدون smooth، والشات بيتمرر في حاويته بس */
+body.keyboard-open { scroll-behavior: auto; }
+/* حماية: لو أي JS حط overflow:hidden أو position:fixed (inline) على html/body وقت الكيبورد، الـ !important هنا بيكسبه ويرجّع السكرول */
+html:has(body.keyboard-open),
+body.keyboard-open {
+  overflow-y: auto !important;
+  position: static !important;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+}
+body.keyboard-open :is(main, .overflow-y-auto, .overflow-auto) {
+  touch-action: pan-y;
+}
+/* اتشال قفل الـ overflow: كان بيوقف السكرول لما الكيبورد مفتوح */
 @media (prefers-color-scheme: dark) {
   .overlay { background: #0e1511; }
   .bar { background: #263329; }
@@ -240,7 +356,7 @@ input, select, textarea, button {
 }
 /* Animations */
 @keyframes fadeIn  { from {opacity:0} to {opacity:1} }
-@keyframes slideUp { from {opacity:0;transform:translateY(14px)} to {opacity:1;tnsform:translateY(0)} }
+@keyframes slideUp { from {opacity:0;transform:translateY(14px)} to {opacity:1;transform:translateY(0)} }
 @keyframes spin    { to {transform:rotate(360deg)} }
 @keyframes typing  { 0%,100%{opacity:.3} 50%{opacity:1} }
 

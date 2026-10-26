@@ -1,12 +1,11 @@
 
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
+import { LEARNING_BUNDLE } from './learning-data';
 
 // ══════════════════════════════════════════════════════════════
-// البيانات دلوقتي بتتجاب من الباك اند عبر /learning/ui-bundle
+// البيانات مدمجة مع التطبيق في ملف learning-data.ts (مفيش API ولا نت مطلوب)
 // (كانت قبل كده Hardcoded هنا: POULTRY_TYPES, PROGRAMS, DISEASES, TIPS)
 // ══════════════════════════════════════════════════════════════
 
@@ -24,11 +23,6 @@ import { environment } from '../../../environments/environment';
            style="background:repeating-linear-gradient(45deg,transparent,transparent 20px,white 20px,white 21px)"></div>
     </div>
 
-    <!-- 📦 بانر يظهر لما البيانات المعروضة تكون من نسخة الأوفلاين المخزنة محلياً مش من السيرفر -->
-    <div *ngIf="isOffline()"
-         class="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold rounded-2xl px-4 py-2 mb-4">
-      <span>📴</span> لا يوجد اتصال بالسيرفر — بتشوف آخر نسخة محفوظة على جهازك
-    </div>
 
     <!-- Main Tabs -->
     <div class="grid grid-cols-4 gap-2 mb-4">
@@ -446,15 +440,9 @@ export class LearningComponent implements OnInit {
     { id: 'rabbit',  label: 'أرانب',  icon: '🐇' },
   ];
 
-  // ── الاتصال بالباك اند ──────────────────────────────────
-  private http = inject(HttpClient);
-  private apiBase = `${environment.apiUrl}/learning`; // ✅ مؤكد من الـ Swagger
+  // ── البيانات المحلية ─────────────────────────────────────
   private dataLoaded = signal(false); // بيتحول true لما البيانات توصل، يخلي الـ computed تعيد الحساب
 
-  // 📦 مفتاح تخزين نسخة الأوفلاين من بيانات صفحة التعلّم (lessons/diseases/programs/tips)
-  // بيتخزن في localStorage الجهاز بعد أول تحميل ناجح من السيرفر، وبيتقرأ منه لو مفيش نت
-  private readonly OFFLINE_CACHE_KEY = 'learning_ui_bundle_cache_v1';
-  isOffline = signal(false); // true لو البيانات المعروضة جايه من الكاش المحلي مش من السيرفر دلوقتي
 
   poultryTypes: any[] = [];
   tips: any[] = [];
@@ -532,52 +520,17 @@ export class LearningComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.http.get<any>(`${this.apiBase}/ui-bundle`).subscribe({
-      next: (data) => {
-        this.applyBundle(data);
-        this.isOffline.set(false);
-
-        // 📦 [تخزين الأوفلاين] بعد أي تحميل ناجح من السيرفر، بنخزن نسخة كاملة من البيانات
-        // في localStorage الجهاز عشان لو النت قطع بعد كده نقدر نعرضها بدل ما تظهر شاشة فاضية/إيرور
-        try {
-          localStorage.setItem(this.OFFLINE_CACHE_KEY, JSON.stringify(data));
-        } catch (e) {
-          console.warn('تعذّر حفظ نسخة الأوفلاين محلياً:', e);
-        }
-      },
-      error: (err) => {
-        console.error('فشل تحميل بيانات صفحة التعلّم من الباك اند:', err);
-
-        // 📦 [قراءة الأوفلاين] لو فشل الاتصال بالسيرفر (مفيش نت / السيرفر واقع)،
-        // بنحاول نجيب آخر نسخة اتخزنت في localStorage ونعرضها بدل ما نسيب المستخدم من غير بيانات
-        const cached = this.loadOfflineCache();
-        if (cached) {
-          this.applyBundle(cached);
-          this.isOffline.set(true);
-        }
-      }
-    });
+    this.applyBundle(LEARNING_BUNDLE);
   }
 
-  // بيوزع بيانات الـ ui-bundle (جايه من السيرفر أو من الكاش المحلي) على متغيرات الكومبوننت
+  // بيوزع بيانات مركز التعلم المدمجة على متغيرات الكومبوننت
   private applyBundle(data: any): void {
     this.poultryTypes = data.poultry_types || [];
     this.tips = data.tips || [];
     this.lessons = data.lessons || [];
     this.programsData = data.programs || {};
     this.diseasesData = data.diseases || [];
-    this.dataLoaded.set(true); // يخلي currentType/currentPrograms/filteredDiseases تعيد الحساب بالبيانات الجديدة
-  }
-
-  // 📦 [قراءة الأوفلاين] بيرجع آخر نسخة متخزنة من ui-bundle من localStorage، أو null لو مفيش
-  private loadOfflineCache(): any | null {
-    try {
-      const raw = localStorage.getItem(this.OFFLINE_CACHE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      console.warn('تعذّر قراءة نسخة الأوفلاين المحلية:', e);
-      return null;
-    }
+    this.dataLoaded.set(true);
   }
 
   typeIcon(type: string): string {

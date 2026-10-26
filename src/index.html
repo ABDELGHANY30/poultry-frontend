@@ -26,32 +26,35 @@
   <link rel="icon" type="image/x-icon" href="assets/i18n/photo_2026-07-28_21-29-01.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@800&family=Playfair+Display:wght@700;900&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet" />
 </head>
 <body class="antialiased">
   <app-root>
     <!-- نسخة خفيفة من الـ splash (HTML/CSS بس) بتظهر فوراً قبل ما أنجولار يتحمّل،
-         وأنجولار بيستبدلها بالـ splash الحقيقي بنفس الشكل أول ما يشتغل -->
+         وأنجولار بيستبدلها بالـ splash الحقيقي بنفس الشكل أول ما يشتغل.
+         لازم تفضل مطابقة لـ splash_component.ts (نفس الأحجام والألوان) -->
     <div class="boot">
-      <svg class="boot-hill" viewBox="0 0 1280 300" preserveAspectRatio="none">
-        <path d="M0,120 C300,40 900,180 1280,90 L1280,300 L0,300 Z" fill="#f3dfb8"/>
+      <svg class="boot-hill" viewBox="0 0 1280 300" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0,120 C300,40 900,180 1280,90 L1280,300 L0,300 Z" class="boot-hill-fill"/>
       </svg>
-      <svg class="boot-plants" viewBox="0 0 200 200">
+      <svg class="boot-plants" viewBox="0 0 200 200" aria-hidden="true">
         <path d="M20,180 Q10,120 40,90 Q30,130 50,150 Q35,110 60,80 Q55,125 75,140 Q60,100 85,70"
-              fill="none" stroke="#e9c98e" stroke-width="6" stroke-linecap="round"/>
+              fill="none" class="boot-plant-stroke" stroke-width="6" stroke-linecap="round"/>
       </svg>
-      <svg class="boot-barn" viewBox="0 0 220 180">
-        <polygon points="30,90 110,30 190,90" fill="#f0d4a3"/>
-        <rect x="40" y="90" width="140" height="80" fill="#f0d4a3"/>
-        <rect x="90" y="120" width="40" height="50" fill="#e9c98e"/>
-        <circle cx="110" cy="140" r="3" fill="#f3dfb8"/>
-        <line x1="40" y1="170" x2="180" y2="170" stroke="#e9c98e" stroke-width="4"/>
-      </svg>
-      <svg class="boot-sparkle" viewBox="0 0 40 40">
-        <path d="M20,0 L24,16 L40,20 L24,24 L20,40 L16,24 L0,20 L16,16 Z" fill="#f0d4a3"/>
+      <svg class="boot-sparkle" viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M20,0 L24,16 L40,20 L24,24 L20,40 L16,24 L0,20 L16,16 Z" class="boot-plant-fill"/>
       </svg>
       <div class="boot-center">
-        <div class="boot-logo"><span>mazar3.</span><span class="boot-ko">ko</span></div>
+        <svg class="boot-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="29" class="boot-mark-bg"/>
+          <path d="M13 52V29l19-15 19 15v23z" class="boot-mark-fg"/>
+          <rect x="24" y="35" width="16" height="17" class="boot-mark-bg"/>
+          <path d="M24 35l16 17M40 35L24 52" class="boot-mark-line" stroke-width="2" fill="none"/>
+        </svg>
+        <div class="boot-logo">
+          <span class="boot-word">Mazar<span class="boot-three">3</span>.</span>
+          <span class="boot-ko">ko</span>
+        </div>
         <div class="boot-bar"></div>
       </div>
     </div>
@@ -59,25 +62,82 @@
 
   <style>
     .boot {
+      /* الوضع العادي */
+      --bg: #FFF6E0;
+      --ink: #0F3D2E;
+      --accent: #F2A900;
+      --pill-bg: #0F3D2E;
+      --pill-ink: #FFF6E0;
+      --hill: #F5E2AE;
+      --plant: #E9C98E;
+      --track: rgba(15, 61, 46, 0.14);
+      --mark-bg: #0F3D2E;
+      --mark-fg: #FFC93C;
+      --shadow: rgba(15, 61, 46, 0.4);
+
       position: fixed; inset: 0; overflow: hidden;
       display: flex; align-items: center; justify-content: center;
       direction: ltr; color-scheme: light;
-      background: #fdf6e8; /* نفس لون الـ splash — ثابت، مش بيتغير مع الدارك */
+      background: var(--bg);
+    }
+    /* الوضع الدارك (حسب وضع الموبايل) */
+    @media (prefers-color-scheme: dark) {
+      .boot {
+        --bg: #0F3D2E;
+        --ink: #FFF6E0;
+        --accent: #FFC93C;
+        --pill-bg: #FFC93C;
+        --pill-ink: #0F3D2E;
+        --hill: #16503C;
+        --plant: #1F6B50;
+        --track: rgba(255, 246, 224, 0.16);
+        --mark-bg: #FFC93C;
+        --mark-fg: #0F3D2E;
+        --shadow: rgba(0, 0, 0, 0.5);
+        color-scheme: dark;
+      }
     }
     .boot-hill    { position: absolute; bottom: 0; left: 0; width: 100%; height: 28%; }
+    .boot-hill-fill { fill: var(--hill); }
     .boot-plants  { position: absolute; bottom: 6%; left: 3%; width: 80px; opacity: .9; }
-    .boot-barn    { position: absolute; bottom: 5%; right: 4%; width: 130px; opacity: .9; }
+    .boot-plant-stroke { stroke: var(--plant); }
+    .boot-plant-fill { fill: var(--plant); }
     .boot-sparkle { position: absolute; bottom: 10%; right: 8%; width: 18px; opacity: .8; }
     .boot-center  { position: relative; display: flex; flex-direction: column; align-items: center; }
+
+    .boot-mark {
+      width: clamp(72px, 22vw, 104px); height: auto; margin-bottom: 18px;
+      animation: bootPop .55s cubic-bezier(.2, .9, .3, 1.3) both;
+    }
+    .boot-mark-bg { fill: var(--mark-bg); }
+    .boot-mark-fg { fill: var(--mark-fg); }
+    .boot-mark-line { stroke: var(--mark-fg); }
+    @keyframes bootPop {
+      0%   { transform: scale(.6); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .boot-mark { animation: none; }
+    }
+
     .boot-logo {
       display: flex; align-items: center;
-      font-size: clamp(30px, 8vw, 52px); font-weight: 800; color: #6b8e23;
-      font-family: -apple-system, 'Segoe UI', sans-serif;
+      font-size: clamp(34px, 10vw, 56px); font-weight: 800;
+      letter-spacing: -0.02em; line-height: 1; color: var(--ink);
+      font-family: 'Baloo 2', 'Nunito', 'Segoe UI', system-ui, sans-serif;
     }
-    .boot-ko  { display: inline-block; min-width: 1.5em; }
+    .boot-word  { text-shadow: 0 4px 0 var(--shadow), 0 10px 18px var(--shadow); }
+    .boot-three { color: var(--accent); }
+    .boot-ko {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 1.9em; padding: .14em .42em; margin-left: .14em;
+      border-radius: 999px; background: var(--pill-bg); color: var(--pill-ink);
+      box-shadow: 0 6px 14px var(--shadow);
+      font-size: .68em; letter-spacing: 0;
+    }
     .boot-bar {
-      width: 200px; max-width: 55vw; height: 8px; margin-top: 24px;
-      background: rgba(107, 142, 35, .15); border-radius: 10px;
+      width: 200px; max-width: 55vw; height: 8px; margin-top: 26px;
+      background: var(--track); border-radius: 10px;
     }
   </style>
 </body>

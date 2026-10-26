@@ -225,11 +225,11 @@ const TURKEY_VACC = [
             <input class="form-input text-black bg-gray-100 border p-2 rounded w-full" type="number" [(ngModel)]="userInputs.brokenEggCount" />
           </div>
 
-          <div>
+          <div class="col-span-2 sm:col-span-1">
             <label class="form-label">العلف المستهلك</label>
             <div class="flex gap-1">
-              <input class="form-input text-black bg-gray-100 border p-2 rounded-l w-2/3" type="number" [(ngModel)]="userInputs.feedValue" placeholder="الكمية" />
-              <select class="text-black bg-gray-200 border p-2 rounded-r w-1/3 text-xs font-bold" [(ngModel)]="userInputs.feedUnit">
+              <input class="form-input text-black bg-gray-100 border p-2 rounded-l flex-1 min-w-0" type="number" [(ngModel)]="userInputs.feedValue" placeholder="الكمية" />
+              <select class="text-black bg-gray-200 border py-2 px-2 rounded-r w-24 shrink-0 text-sm font-bold" [(ngModel)]="userInputs.feedUnit">
                 <option value="kg">كجم</option>
                 <option value="ton">طن</option>
                 <option value="gm">جرام</option>
@@ -243,10 +243,15 @@ const TURKEY_VACC = [
           </div>
 
           <div>
+            <label class="form-label">الرطوبة % (اختياري)</label>
+            <input class="form-input text-black bg-gray-100 border p-2 rounded w-full" type="number" min="0" max="100" inputmode="decimal" [(ngModel)]="userInputs.humidityPercent" placeholder="لو عندك جهاز قياس" />
+          </div>
+
+          <div class="col-span-2 sm:col-span-1">
             <label class="form-label">متوسط الوزن (اختياري)</label>
             <div class="flex gap-1">
-              <input class="form-input text-black bg-gray-100 border p-2 rounded-l w-2/3" type="number" [(ngModel)]="userInputs.weightValue" placeholder="الوزن (لو وزنت)" />
-              <select class="text-black bg-gray-200 border p-2 rounded-r w-1/3 text-xs font-bold" [(ngModel)]="userInputs.weightUnit">
+              <input class="form-input text-black bg-gray-100 border p-2 rounded-l flex-1 min-w-0" type="number" [(ngModel)]="userInputs.weightValue" placeholder="الوزن (لو وزنت)" />
+              <select class="text-black bg-gray-200 border py-2 px-2 rounded-r w-24 shrink-0 text-sm font-bold" [(ngModel)]="userInputs.weightUnit">
                 <option value="kg">كجم</option>
                 <option value="gm">جرام</option>
               </select>
@@ -696,6 +701,7 @@ const TURKEY_VACC = [
                 <th class="py-2 px-2 font-bold">نفوق</th>
                 <th class="py-2 px-2 font-bold">علف (كجم)</th>
                 <th class="py-2 px-2 font-bold">وزن (كجم)</th>
+                <th class="py-2 px-2 font-bold">رطوبة %</th>
                 <th class="py-2 px-2 font-bold">سجّله</th>
                 <th class="py-2 px-2 font-bold"></th>
               </tr>
@@ -706,6 +712,7 @@ const TURKEY_VACC = [
                 <td class="py-2 px-2 text-red-500">{{ r.mortality ?? 0 }}</td>
                 <td class="py-2 px-2">{{ r.feedConsumedKg ?? r.feed_consumed_kg ?? '-' }}</td>
                 <td class="py-2 px-2">{{ recordWeightOf(r) ?? '-' }}</td>
+                <td class="py-2 px-2">{{ r.humidityPercent ?? r.humidity_percent ?? '-' }}</td>
                 <td class="py-2 px-2 text-[11px] text-[var(--c-muted)]">{{ recordedByMap()[r.id] || '—' }}</td>
                 <td class="py-2 px-2 whitespace-nowrap">
                   <ng-container *ngIf="myAccess()?.is_owner !== false">
@@ -1056,6 +1063,7 @@ export class FlockDetailComponent implements OnInit {
     feedValue: null as number | null,
     feedUnit: 'kg',
     temperatureCelsius: null as number | null,
+    humidityPercent: null as number | null,
     weightValue: null as number | null,
     weightUnit: 'kg',
     eggCount: null as number | null,
@@ -1113,7 +1121,7 @@ export class FlockDetailComponent implements OnInit {
     this.selectedPhotoFile.set(null);
     this.selectedPhotoPreview.set(null);
     this.userInputs = {
-      mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null,
+      mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null,
       weightValue: null, weightUnit: 'kg', eggCount: null, brokenEggCount: null, notes: '',
     };
   }
@@ -1359,6 +1367,7 @@ export class FlockDetailComponent implements OnInit {
       feedValue: this.recordFeed(r),
       feedUnit: 'kg',
       temperatureCelsius: r.temperatureCelsius ?? r.temperature_celsius ?? null,
+      humidityPercent: r.humidityPercent ?? r.humidity_percent ?? null,
       weightValue: this.recordWeight(r),
       weightUnit: 'kg',
       eggCount: r.eggCount ?? r.egg_count ?? null,
@@ -1809,6 +1818,9 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       mortality: this.userInputs.mortality ? Number(this.userInputs.mortality) : 0,
       feed_consumed_kg: (this.userInputs.feedValue !== null) ? Number(finalFeedKg) : 0.0,
       temperature_celsius: (this.userInputs.temperatureCelsius !== null) ? Number(this.userInputs.temperatureCelsius) : null,
+      // 💧 الرطوبة اختيارية: بتتبعت بس لو المستخدم كتبها
+      ...(this.userInputs.humidityPercent !== null && this.userInputs.humidityPercent !== undefined && (this.userInputs.humidityPercent as any) !== ''
+        ? { humidity_percent: Number(this.userInputs.humidityPercent) } : {}),
       avg_weight_kg: finalWeightKg !== null ? Number(finalWeightKg) : null,
       egg_count: (this.userInputs.eggCount !== null && this.userInputs.eggCount !== undefined) ? Number(this.userInputs.eggCount) : null,
       broken_egg_count: (this.userInputs.brokenEggCount !== null && this.userInputs.brokenEggCount !== undefined) ? Number(this.userInputs.brokenEggCount) : null,
@@ -1817,7 +1829,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
 
     const resetForm = () => {
       this.userInputs = {
-        mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null,
+        mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null,
         weightValue: null, weightUnit: 'kg', eggCount: null, brokenEggCount: null, notes: '',
       };
       this.editingRecordId.set(null);
@@ -1835,13 +1847,30 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       setTimeout(() => this.savedOk.set(false), 3000);
     };
 
-    const onError = (err: any) => {
+    const showError = (err: any) => {
       this.saving.set(false);
-      console.error('تفاصيل الخطأ:', err);
       const detail = err?.error?.detail;
       alert(typeof detail === 'string' ? detail : 'حدث خطأ أثناء الحفظ.');
-      // 🔄 ممكن السيرفر يكون حفظ السجل فعلاً قبل ما الخطأ يحصل — نحدّث الشاشة بدل ما المستخدم يعمل ريفرش يدوي
       this.loadData(flockId);
+    };
+
+    const onError = (err: any) => {
+      console.error('تفاصيل الخطأ:', err);
+      const status = err?.status;
+      // ✅ خطأ سيرفر (5xx) أو انقطاع (0) على سجل جديد: ممكن السجل يكون اتحفظ فعلاً قبل الخطأ.
+      // بنتأكد من السجلات الأول، ولو لقينا سجل النهاردة بنعتبرها نجاح من غير رسالة خطأ.
+      if (!isEditing && (status === 0 || status >= 500)) {
+        this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/records`).subscribe({
+          next: (rows) => {
+            const saved = (rows || []).find(r => this.recordDateStr(r) === targetDateStr);
+            if (saved) onSuccess(saved.id);
+            else showError(err);
+          },
+          error: () => showError(err),
+        });
+        return;
+      }
+      showError(err);
     };
 
     if (isEditing) {

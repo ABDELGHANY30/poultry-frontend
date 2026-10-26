@@ -61,6 +61,24 @@ const CATEGORIES = [
             </a>
           </ng-template>
         </div>
+        <!-- 🌤️ الطقس: النهارده وبكره (بيتحدّث كل 8 ساعات من السيرفر) -->
+        <div *ngIf="weather() as w" class="flex-shrink-0 bg-white/15 backdrop-blur-sm rounded-2xl px-3 py-2 min-w-[112px]">
+          <div class="flex items-center justify-between gap-1.5">
+            <img *ngIf="w.today.icon" [src]="w.today.icon" alt="" class="w-9 h-9 -my-1">
+            <div class="text-center leading-tight">
+              <p class="text-[10px] text-white/70 mb-0">النهارده</p>
+              <p class="text-sm font-black mb-0">{{ w.today.max }}° <span class="text-white/60 font-medium">/ {{ w.today.min }}°</span></p>
+            </div>
+          </div>
+          <p class="text-[10px] text-white/70 text-center mt-0.5 mb-0 truncate max-w-[110px]">{{ w.today.condition }}</p>
+          <div class="border-t border-white/20 mt-1.5 pt-1.5 flex items-center justify-between gap-1.5">
+            <img *ngIf="w.tomorrow.icon" [src]="w.tomorrow.icon" alt="" class="w-6 h-6 -my-0.5">
+            <div class="text-center leading-tight">
+              <p class="text-[10px] text-white/70 mb-0">بكره</p>
+              <p class="text-xs font-bold mb-0">{{ w.tomorrow.max }}° <span class="text-white/60 font-medium">/ {{ w.tomorrow.min }}°</span></p>
+            </div>
+          </div>
+        </div>
         <!-- Pro Badge -->
         <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-3 py-1.5 rounded-2xl flex-shrink-0">
           ⭐ PRO
@@ -525,6 +543,86 @@ export class DashboardComponent implements OnInit {
   // ومايحصلش تناقض بين مصدرين مختلفين لنفس المعلومة.
   reportsIsPro = signal(false);
 
+  // ══════════════════════════════════════════════════════════════
+  // 💾 حفظ أرقام المستخدم (حرارة اليوم / متوسط FCR / النفوق / حالة Pro) على الجهاز
+  // لحد ما أرقام جديدة توصل. الحفظ بمفتاح مرتبط بـ user id، والقراءة بتتم لمفتاح
+  // المستخدم الحالي بس، فبيانات مستخدم عمرها ما بتظهر لمستخدم تاني.
+  // لو الـ id مش معروف مفيش حفظ ولا قراءة خالص.
+  // ══════════════════════════════════════════════════════════════
+  private fresh = { temps: false, fcr: false, mort: false, pro: false }; // اتحدّثت من السيرفر في الجلسة دي
+  private lastCacheUid: string | null = null;
+
+  private cacheUserId = computed<string | null>(() => {
+    if (!this.isLoggedIn()) return null;
+    const u: any = this.auth.currentUser();
+    const id = u?.id ?? u?.user_id ?? u?.email ?? null;
+    return id === null || id === undefined || id === '' ? null : String(id);
+  });
+
+  private numbersKey(uid: string): string {
+    return `dashboard_numbers_cache_v1_${uid}`;
+  }
+
+  private persistNumbers(): void {
+    const uid = this.cacheUserId();
+    if (!uid) return;
+    try {
+      const key = this.numbersKey(uid);
+      const next: any = JSON.parse(localStorage.getItem(key) || 'null') || {};
+      if (this.fresh.temps) next.todayTemps = this.todayTemps();
+      if (this.fresh.fcr) next.avgFcr = this.avgFcr();
+      if (this.fresh.mort) next.recentMortalityTotal = this.recentMortalityTotal();
+      if (this.fresh.pro) next.reportsIsPro = this.reportsIsPro();
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch (e) {
+      console.warn('تعذّر حفظ أرقام الداشبورد محلياً:', e);
+    }
+  }
+
+  // بيعرض المحفوظ بس للحقول اللي لسه ماوصلهاش تحديث من السيرفر
+  private restoreNumbers(uid: string): void {
+    try {
+      const c: any = JSON.parse(localStorage.getItem(this.numbersKey(uid)) || 'null');
+      if (!c) return;
+      if (!this.fresh.temps && c.todayTemps) this.todayTemps.set(c.todayTemps);
+      if (!this.fresh.fcr && c.avgFcr !== undefined) this.avgFcr.set(c.avgFcr);
+      if (!this.fresh.mort && c.recentMortalityTotal !== undefined) this.recentMortalityTotal.set(c.recentMortalityTotal);
+      if (!this.fresh.pro && c.reportsIsPro !== undefined) this.reportsIsPro.set(!!c.reportsIsPro);
+    } catch {
+      /* نسخة محفوظة تالفة: بنتجاهلها */
+    }
+  }
+
+  private resetNumbers(): void {
+    this.fresh = { temps: false, fcr: false, mort: false, pro: false };
+    this.todayTemps.set({});
+    this.avgFcr.set(null);
+    this.recentMortalityTotal.set(null);
+    this.reportsIsPro.set(false);
+  }
+
+  // لما المستخدم يتعرف: نعرض أرقامه المحفوظة. ولو المستخدم اتغير (خروج / دخول بحساب تاني)
+  // نمسح أرقام المستخدم السابق من الشاشة فوراً ونحمّل أرقام الجديد.
+  private numbersCacheEffect = effect(() => {
+    const uid = this.cacheUserId();
+    untracked(() => {
+      const prev = this.lastCacheUid;
+      if (prev === uid) return;
+      this.lastCacheUid = uid;
+
+      if (prev !== null) {
+        this.resetNumbers();
+        if (uid) {
+          this.loadTodayTemps();
+          this.loadReportsProStatus();
+        }
+      }
+      if (!uid) return;
+      this.restoreNumbers(uid);
+      this.persistNumbers(); // لو وصلت أرقام جديدة قبل ما الـ id يتعرف
+    });
+  });
+
   // 📋 تقرير الدورة للقطيع المختار
   cycleReport = signal<any>(null);
   cycleLocked = signal(false);
@@ -577,8 +675,10 @@ categoryNamesAr: { [key: string]: string } = {
   'chicks': 'الكتاكيت',
   'turkey':"الرومي",
   'feed': 'الأعلاف',
+  'breeders':'أمهات ',
   'eggs': 'البيض',
   'ducks': 'البيطري والبط'
+
 };
 
 // 2. مصفوفة تحدد أولوية الترتيب (الدجاج أولاً)
@@ -656,16 +756,59 @@ getCategoryNameAr(categoryKey: string): string {
     this.http.get(`${environment.apiUrl}/reports/summary`).subscribe({
       next: (res: any) => {
         this.reportsIsPro.set(!!res.is_pro);
+        this.fresh.pro = true;
+        this.persistNumbers();
         if (res.is_pro) this.loadReportsSummary();
       },
-      error: () => this.reportsIsPro.set(false)
+      error: (err: any) => {
+        // لو الاتصال فشل بنسيب المحفوظ؛ بس لو السيرفر رفض الجلسة نشيل صلاحية Pro
+        if (err?.status === 401 || err?.status === 403) this.reportsIsPro.set(false);
+      }
+    });
+  }
+
+  // 🌤️ طقس النهارده وبكره (الكاش على السيرفر 8 ساعات حسب المحافظة)
+  weather = signal<{ today: any; tomorrow: any } | null>(null);
+
+  // ⚠️ عدّل أسماء الحقول دي حسب اسم حقل المحافظة الفعلي في الـ flock عندك
+  private weatherGov = computed(() => {
+    const f: any = this.currentFlock();
+    return f?.governorate ?? f?.city ?? f?.location ?? '';
+  });
+
+  // بيحمّل الطقس أول ما الصفحة تفتح، وتاني لو المحافظة اتغيرت (قطيع تاني)
+  private weatherEffect = effect(() => {
+    const gov = this.weatherGov();
+    untracked(() => this.loadWeather(gov));
+  });
+
+  loadWeather(governorate: string) {
+    const key = `weather_cache_v1_${governorate || 'default'}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(key) || 'null');
+      if (cached?.today && cached?.tomorrow) this.weather.set(cached);
+    } catch { /* نسخة تالفة: نتجاهلها */ }
+
+    const params: any = governorate ? { governorate } : {};
+    this.http.get<any>(`${environment.apiUrl}/weather/summary`, { params }).subscribe({
+      next: (res) => {
+        if (res?.today && res?.tomorrow) {
+          this.weather.set(res);
+          try { localStorage.setItem(key, JSON.stringify(res)); } catch { /* مش مشكلة */ }
+        }
+      },
+      error: () => {} // بنسيب آخر طقس محفوظ
     });
   }
 
   loadTodayTemps() {
     this.http.get<Record<string, any>>(`${environment.apiUrl}/flocks/today-temperatures`).subscribe({
-      next: (res) => this.todayTemps.set(res || {}),
-      error: () => {}
+      next: (res) => {
+        this.todayTemps.set(res || {});
+        this.fresh.temps = true;
+        this.persistNumbers();
+      },
+      error: () => {} // بنسيب آخر درجات حرارة محفوظة
     });
   }
 
@@ -674,6 +817,8 @@ getCategoryNameAr(categoryKey: string): string {
       next: (res: any) => {
         const values = (res.flocks || []).map((f: any) => f.fcr).filter((v: any) => v != null);
         this.avgFcr.set(values.length ? +(values.reduce((a: number, b: number) => a + b, 0) / values.length).toFixed(2) : null);
+        this.fresh.fcr = true;
+        this.persistNumbers();
       },
       error: () => {}
     });
@@ -681,6 +826,8 @@ getCategoryNameAr(categoryKey: string): string {
       next: (res: any) => {
         const total = (res.data || []).reduce((s: number, d: any) => s + (d.mortality || 0), 0);
         this.recentMortalityTotal.set(total);
+        this.fresh.mort = true;
+        this.persistNumbers();
       },
       error: () => {}
     });
@@ -753,10 +900,40 @@ getCategoryNameAr(categoryKey: string): string {
     return picked.slice(0, 5);
   });
 
+  // 💾 آخر أسعار وصلت بتتحفظ على الجهاز وتفضل معروضة لحد ما أسعار جديدة توصل
+  // (نفس المفتاح مشترك بين الداشبورد وسوق التجار)
+  private readonly PRICES_CACHE_KEY = 'prices_latest_cache_v1';
+
+  private readCachedPrices(): any[] {
+    try {
+      const raw = localStorage.getItem(this.PRICES_CACHE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeCachedPrices(data: any[]): void {
+    try {
+      localStorage.setItem(this.PRICES_CACHE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('تعذّر حفظ الأسعار محلياً:', e);
+    }
+  }
+
   loadPrices() {
+    // عرض آخر أسعار محفوظة فوراً لحد ما توصل الجديدة
+    const cached = this.readCachedPrices();
+    if (cached.length) this.prices.set(cached);
+
     this.http.get<any>(`${environment.apiUrl}/prices/latest`).subscribe({
-      next: res => this.prices.set(res.prices ?? []),
-      error: () => {}
+      next: res => {
+        const data = res?.prices ?? [];
+        this.prices.set(data);
+        this.writeCachedPrices(data);
+      },
+      error: () => {} // لو فشل الاتصال بنسيب آخر أسعار محفوظة معروضة
     });
   }
 
