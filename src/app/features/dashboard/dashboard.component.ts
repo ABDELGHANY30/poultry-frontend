@@ -36,54 +36,75 @@ const CATEGORIES = [
          style="background:linear-gradient(135deg,#0f2d1a 0%,#1e7d48 60%,#2d9e5f 100%)">
       <div class="absolute inset-0 opacity-10"
             style="background:repeating-linear-gradient(45deg,transparent,transparent 30px,rgba(255,255,255,.05) 30px,rgba(255,255,255,.05) 60px)"></div>
-      <div class="relative px-6 py-7 flex items-center gap-4">
-        <div class="flex-1 min-w-0">
-          <!-- مسجّل: الترحيب + الاسم + عدد مرات التسجيل المتتالية -->
-          <ng-container *ngIf="isLoggedIn(); else guestBanner">
-            <p class="text-white/60 text-sm font-medium mb-1">{{ 'DASHBOARD.WELCOME' | translate }},</p>
-            <h1 class="text-2xl font-bold leading-tight">{{ userName() }} 👋</h1>
-            <div *ngIf="bannerStreakText() as text" class="mt-3">
-              <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                          bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
-                <span class="text-base leading-none">🔥</span>
-                <span class="text-white text-xs font-black leading-tight">{{ text }}</span>
+      <div class="relative px-6 py-7">
+        <div class="flex items-start gap-3">
+          <div class="flex-1 min-w-0">
+            <!-- مسجّل: الترحيب + الاسم + عدد مرات التسجيل المتتالية -->
+            <ng-container *ngIf="isLoggedIn(); else guestBanner">
+              <p class="text-white/60 text-sm font-medium mb-1">{{ 'DASHBOARD.WELCOME' | translate }},</p>
+              <h1 class="text-2xl font-bold leading-tight">{{ userName() }} 👋</h1>
+              <div *ngIf="bannerStreakText() as text" class="mt-3">
+                <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                            bg-gradient-to-l from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
+                  <span class="text-base leading-none">🔥</span>
+                  <span class="text-white text-xs font-black leading-tight">{{ text }}</span>
+                </div>
               </div>
-            </div>
-          </ng-container>
+            </ng-container>
 
-          <!-- غير مسجّل: زرار تسجيل الدخول جوه البانر -->
-          <ng-template #guestBanner>
-            <p class="text-white/60 text-sm font-medium mb-1">أهلاً بيك 👋</p>
-            <h1 class="text-xl font-bold leading-tight mb-3">سجّل دخولك عشان تفتح كل المميزات</h1>
-            <a routerLink="/auth/login"
-               class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white text-green-800 font-bold text-sm no-underline shadow-md active:scale-95 transition-all">
-              تسجيل الدخول
-            </a>
-          </ng-template>
+            <!-- غير مسجّل: زرار تسجيل الدخول جوه البانر -->
+            <ng-template #guestBanner>
+              <p class="text-white/60 text-sm font-medium mb-1">أهلاً بيك 👋</p>
+              <h1 class="text-xl font-bold leading-tight mb-3">سجّل دخولك عشان تفتح كل المميزات</h1>
+              <a routerLink="/auth/login"
+                 class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-white text-green-800 font-bold text-sm no-underline shadow-md active:scale-95 transition-all">
+                تسجيل الدخول
+              </a>
+            </ng-template>
+          </div>
+          <!-- Pro Badge -->
+          <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-3 py-1.5 rounded-2xl flex-shrink-0">
+            ⭐ PRO
+          </div>
         </div>
+
         <!-- 🌤️ الطقس: النهارده وبكره (بيتحدّث كل 8 ساعات من السيرفر) -->
-        <div *ngIf="weather() as w" class="flex-shrink-0 bg-white/15 backdrop-blur-sm rounded-2xl px-3 py-2 min-w-[112px]">
-          <div class="flex items-center justify-between gap-1.5">
-            <img *ngIf="w.today.icon" [src]="w.today.icon" alt="" class="w-9 h-9 -my-1">
-            <div class="text-center leading-tight">
-              <p class="text-[10px] text-white/70 mb-0">النهارده</p>
-              <p class="text-sm font-black mb-0">{{ w.today.max }}° <span class="text-white/60 font-medium">/ {{ w.today.min }}°</span></p>
+        <div *ngIf="weather() as w"
+             class="mt-5 grid grid-cols-2 sm:max-w-md rounded-2xl overflow-hidden"
+             style="background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.13)">
+
+          <!-- النهارده -->
+          <div class="flex items-center gap-3 px-4 py-3">
+            <span class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                  style="background:rgba(255,255,255,.12)">
+              <img *ngIf="w.today.icon" [src]="iconUrl(w.today.icon)" alt="" class="w-9 h-9 object-contain">
+            </span>
+            <div class="min-w-0 leading-tight">
+              <p class="mb-0.5" style="font-size:11px;color:rgba(255,255,255,.62)">النهارده</p>
+              <p class="mb-0 flex items-baseline gap-1.5">
+                <span class="text-xl font-bold" style="color:rgba(255,255,255,.95)">{{ w.today.max }}°</span>
+                <span class="text-xs" style="color:rgba(255,255,255,.55)">{{ w.today.min }}°</span>
+              </p>
+              <p class="mb-0 mt-0.5 truncate" style="font-size:11px;color:rgba(255,255,255,.68)">{{ w.today.condition }}</p>
             </div>
           </div>
-          <p class="text-[10px] text-white/70 text-center mt-0.5 mb-0 truncate max-w-[110px]">{{ w.today.condition }}</p>
-          <div class="border-t border-white/20 mt-1.5 pt-1.5 flex items-center justify-between gap-1.5">
-            <img *ngIf="w.tomorrow.icon" [src]="w.tomorrow.icon" alt="" class="w-6 h-6 -my-0.5">
-            <div class="text-center leading-tight">
-              <p class="text-[10px] text-white/70 mb-0">بكره</p>
-              <p class="text-xs font-bold mb-0">{{ w.tomorrow.max }}° <span class="text-white/60 font-medium">/ {{ w.tomorrow.min }}°</span></p>
+
+          <!-- بكره -->
+          <div class="flex items-center gap-3 px-4 py-3" style="border-inline-start:1px solid rgba(255,255,255,.12)">
+            <span class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                  style="background:rgba(255,255,255,.08)">
+              <img *ngIf="w.tomorrow.icon" [src]="iconUrl(w.tomorrow.icon)" alt="" class="w-7 h-7 object-contain">
+            </span>
+            <div class="min-w-0 leading-tight">
+              <p class="mb-0.5" style="font-size:11px;color:rgba(255,255,255,.62)">بكره</p>
+              <p class="mb-0 flex items-baseline gap-1.5">
+                <span class="text-base font-semibold" style="color:rgba(255,255,255,.88)">{{ w.tomorrow.max }}°</span>
+                <span class="text-xs" style="color:rgba(255,255,255,.5)">{{ w.tomorrow.min }}°</span>
+              </p>
+              <p class="mb-0 mt-0.5 truncate" style="font-size:11px;color:rgba(255,255,255,.62)">{{ w.tomorrow.condition }}</p>
             </div>
           </div>
         </div>
-        <!-- Pro Badge -->
-        <div *ngIf="isPro()" class="bg-amber-400 text-amber-900 text-xs font-black px-3 py-1.5 rounded-2xl flex-shrink-0">
-          ⭐ PRO
-        </div>
-        <div class="text-6xl opacity-20 select-none hidden sm:block">🐔</div>
       </div>
     </div>
 
@@ -781,6 +802,11 @@ getCategoryNameAr(categoryKey: string): string {
     const gov = this.weatherGov();
     untracked(() => this.loadWeather(gov));
   });
+
+  // بعض الـ APIs بترجّع روابط الأيقونات من غير https (//cdn...)
+  iconUrl(u: string): string {
+    return u?.startsWith('//') ? 'https:' + u : u;
+  }
 
   loadWeather(governorate: string) {
     const key = `weather_cache_v1_${governorate || 'default'}`;
