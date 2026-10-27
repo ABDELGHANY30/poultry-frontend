@@ -141,6 +141,127 @@ const TURKEY_VACC = [
       </div>
     </div>
 
+    <!-- 📆 برنامج الدورة — فوق الفورم: معروض يوم النهاردة بس، وباقي الأيام/المراحل بتظهر بالضغط -->
+    <div class="card mb-4" *ngIf="cycleProgram() as cp">
+      <h2 class="section-title mb-3">📆 برنامج الدورة</h2>
+
+      <div *ngIf="!cp.has_program" class="text-center py-3 text-[var(--c-muted)] text-sm">{{ cp.message }}</div>
+
+      <div *ngIf="cp.has_program">
+
+        <!-- 🔔 بداية مرحلة جديدة النهاردة — إجراءات المرحلة كمهام بارزة (مؤقتة، مش محفوظة) -->
+        <div *ngIf="cp.is_phase_transition_today && cp.today_phase as newPhase" class="rounded-xl bg-purple-50 border-2 border-purple-300 p-3 mb-3">
+          <p class="font-black text-purple-800 mb-1">🔔 مرحلة جديدة بدأت النهاردة: "{{ newPhase.phase_label }}"</p>
+          <p class="text-xs text-purple-700 mb-2">حاجات لازم تتعمل النهاردة بالذات (مش هتفضل بارزة بكرة):</p>
+          <ul class="text-sm space-y-1">
+            <li *ngFor="let a of newPhase.actions">• {{ a }}</li>
+          </ul>
+        </div>
+
+        <!-- 💡 نصايح حقيقية مبنية على مقارنة آخر سجل فعلي بالمستهدف -->
+        <div *ngIf="cp.advice?.length" class="rounded-xl bg-blue-50 border border-blue-200 p-3 mb-3">
+          <p class="text-xs font-bold text-blue-800 mb-1">🧠 نصايح اليوم</p>
+          <p *ngFor="let a of cp.advice" class="text-sm text-blue-900 mb-1 last:mb-0">• {{ a }}</p>
+        </div>
+
+        <div *ngIf="cp.today_phase as phase" class="rounded-xl bg-green-50 border border-green-200 p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-black text-green-800">
+              {{ cp.is_repeating ? ('دورة رقم ' + cp.cycle_number + ' — يوم ' + cp.age_days + ' من التلقيح') : ('اليوم ' + cp.age_days) }}
+              — مرحلة "{{ phase.phase_label }}"
+            </span>
+            <span *ngIf="cp.breed_matched" class="text-[10px] px-1.5 py-0.5 rounded-full bg-green-200 text-green-800 font-bold">🎯 أرقام سلالتك بالظبط</span>
+          </div>
+
+          <!-- 🌡️ المستهدفات لليوم ده بالظبط -->
+          <div class="grid grid-cols-2 gap-2 text-xs mb-2">
+            <div *ngIf="cp.target_temperature_today !== null">
+              <span class="text-[var(--c-muted)]">الحرارة المستهدفة اليوم:</span>
+              <span class="font-bold">{{ cp.target_temperature_today }}°م</span>
+            </div>
+            <div *ngIf="cp.target_weight_g_today !== null; else phaseWeightRange">
+              <span class="text-[var(--c-muted)]">الوزن المستهدف اليوم:</span>
+              <span class="font-bold">{{ cp.target_weight_g_today }} جم</span>
+            </div>
+            <ng-template #phaseWeightRange>
+              <div *ngIf="phase.target_weight !== '—'">
+                <span class="text-[var(--c-muted)]">الوزن المستهدف (المرحلة):</span>
+                <span class="font-bold">{{ phase.target_weight }}</span>
+              </div>
+            </ng-template>
+            <div *ngIf="cp.target_feed_g_per_bird_today !== null">
+              <span class="text-[var(--c-muted)]">العلف المستهدف اليوم:</span>
+              <span class="font-bold">{{ cp.target_feed_g_per_bird_today }} جم/طائر</span>
+            </div>
+            <!-- 🌾 إجمالي العلف للقطيع كله (كان جوه فورم التسجيل) -->
+            <div *ngIf="todayTotalFeedKg() !== null" class="col-span-2">
+              <span class="text-[var(--c-muted)]">إجمالي العلف المطلوب للقطيع ({{ flock()!.currentCount | number }} طائر):</span>
+              <span class="font-black text-green-700">{{ todayTotalFeedKg() }} كجم</span>
+            </div>
+          </div>
+
+          <!-- 💡 الإضاءة/الإظلام -->
+          <div *ngIf="cp.lighting_today as lt" class="text-xs bg-white rounded-lg p-2 mb-2">
+            <span class="font-bold" *ngIf="lt.light_hours !== null">
+              💡 {{ lt.light_hours }} ساعة ضوء / {{ lt.dark_hours }} ساعة ظلام —
+            </span>
+            <span [class.text-amber-700]="lt.light_hours === null">{{ lt.note }}</span>
+          </div>
+
+          <p class="text-xs font-bold text-gray-600 mb-1">✅ المطلوب يتعمل النهاردة:</p>
+          <ul class="text-sm space-y-1 mb-2">
+            <li *ngFor="let a of phase.actions">• {{ a }}</li>
+          </ul>
+          <p *ngIf="phase.warning" class="text-xs text-red-600 font-bold mb-2">⚠️ {{ phase.warning }}</p>
+
+          <!-- 🌾 ملاحظة صادقة عن كمية العلف -->
+          <p class="text-[10px] text-gray-400 border-t pt-2">{{ cp.feed_amount_note }}</p>
+        </div>
+        <div *ngIf="!cp.today_phase" class="text-center py-2 text-[var(--c-muted)] text-sm">
+          القطيع خارج نطاق البرنامج المعروف حاليًا (يوم {{ cp.age_days }}).
+        </div>
+
+        <!-- 🏠 دليل الإسكان حسب أسلوب التربية (بطاريات/أرضي/...) — من قاعدة المعرفة -->
+        <p *ngIf="cp.housing_note" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-3">{{ cp.housing_note }}</p>
+        <div *ngIf="cp.housing_guide as hg" class="rounded-xl bg-amber-50 border border-amber-200 p-3 mt-3">
+          <p class="text-xs font-bold text-amber-800 mb-1">🏠 {{ hg.title }}</p>
+          <p *ngIf="hg.density" class="text-xs text-amber-900 mb-2"><span class="font-bold">الكثافة:</span> {{ hg.density }}</p>
+          <ul class="text-sm space-y-1 mb-2">
+            <li *ngFor="let pt of hg.points">• {{ pt }}</li>
+          </ul>
+          <p class="text-[10px] text-gray-400 border-t pt-1">المصدر: {{ hg.source }}</p>
+        </div>
+
+        <!-- 🗓️ كل الأيام/المراحل — مخفية لحد ما المستخدم يضغط، وكل مرحلة بتتفتح بالضغط عليها -->
+        <button type="button" (click)="toggleFullProgram()" class="text-xs font-bold text-green-600 mt-2">
+          {{ showFullProgram() ? 'إخفاء باقي الأيام ▲' : 'عرض كل الأيام (' + (cp.phases?.length || 0) + ' مراحل) ▼' }}
+        </button>
+        <div *ngIf="showFullProgram()" class="mt-2 space-y-1.5">
+          <div *ngIf="!cp.phases || cp.phases.length === 0" class="text-xs text-[var(--c-muted)]">مفيش مراحل متسجلة لهذا النوع.</div>
+          <div *ngFor="let p of cp.phases; let i = index" class="rounded-lg text-xs overflow-hidden"
+               [class.bg-green-100]="i === cp.today_phase_index" [class.bg-gray-50]="i !== cp.today_phase_index">
+            <button type="button" (click)="togglePhase(i)" class="w-full flex items-center justify-between gap-2 p-2 text-right">
+              <span class="font-bold">
+                يوم {{ p.day_from }}–{{ (p.day_to === 999 || p.day_to === 9999) ? 'النهاية' : p.day_to }}: {{ p.phase_label }}
+                <span *ngIf="i === cp.today_phase_index" class="text-green-700 font-black"> ← احنا هنا</span>
+              </span>
+              <span class="text-gray-400 shrink-0">{{ expandedPhase() === i ? '▲' : '▼' }}</span>
+            </button>
+            <div *ngIf="expandedPhase() === i" class="px-2 pb-2 space-y-1">
+              <p *ngIf="p.target_weight && p.target_weight !== '—'">
+                <span class="text-[var(--c-muted)]">الوزن المستهدف:</span> <span class="font-bold">{{ p.target_weight }}</span>
+              </p>
+              <ul *ngIf="p.actions?.length" class="space-y-0.5">
+                <li *ngFor="let a of p.actions">• {{ a }}</li>
+              </ul>
+              <p *ngIf="p.warning" class="text-red-600 font-bold">⚠️ {{ p.warning }}</p>
+              <p *ngIf="!p.actions?.length && !p.warning && (!p.target_weight || p.target_weight === '—')" class="text-[var(--c-muted)]">مفيش تفاصيل إضافية للمرحلة دي.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 🔔 القسم الرئيسي المتغيّر: إما فورم تسجيل بيانات اليوم، أو ملخص اليوم (صحة + أوزان) -->
     <ng-container *ngIf="showDailyForm(); else todaySummaryBlock">
       <div class="card mb-4" [class.border-2]="promptDaily()" [class.border-amber-400]="promptDaily()">
@@ -152,60 +273,6 @@ const TURKEY_VACC = [
                   class="text-xs text-gray-400 font-bold hover:text-gray-600">تخطي الآن ⏭️</button>
           <button *ngIf="hasTodayRecord() || editingRecordId()" type="button" (click)="cancelForm()"
                   class="text-xs text-gray-400 font-bold hover:text-gray-600">إغلاق ✕</button>
-        </div>
-
-        <!-- 📊 مرحلة اليوم: كام المفروض ياكل القطيع النهاردة وإيه المطلوب يتعمل -->
-        <div class="mb-3">
-          <button type="button" (click)="showTodayStagePanel.set(!showTodayStagePanel())"
-                  class="w-full flex items-center justify-between text-xs font-black text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-            <span>📊 مرحلة اليوم — إيه المفروض ياكل ويتعمل النهاردة</span>
-            <span>{{ showTodayStagePanel() ? 'إخفاء ▲' : 'عرض ▼' }}</span>
-          </button>
-
-          <div *ngIf="showTodayStagePanel()" class="mt-2 rounded-xl bg-gray-50 border p-3 text-xs space-y-2">
-            <ng-container *ngIf="cycleProgram() as cp; else noCycleData">
-              <div *ngIf="!cp.has_program" class="text-center text-[var(--c-muted)]">{{ cp.message }}</div>
-
-              <ng-container *ngIf="cp.has_program">
-                <div class="font-black text-sm text-gray-800">
-                  {{ cp.is_repeating ? ('دورة رقم ' + cp.cycle_number + ' — يوم ' + cp.age_days) : ('اليوم ' + cp.age_days) }}
-                  <span *ngIf="cp.today_phase">— مرحلة "{{ cp.today_phase.phase_label }}"</span>
-                </div>
-
-                <!-- 🌾 كام المفروض ياكل القطيع كله النهاردة، حسب العدد المسجل -->
-                <div *ngIf="cp.target_feed_g_per_bird_today !== null" class="bg-white rounded-lg p-2 border">
-                  <div class="flex items-center justify-between">
-                    <span class="text-[var(--c-muted)]">العلف المستهدف للطائر الواحد:</span>
-                    <span class="font-bold">{{ cp.target_feed_g_per_bird_today }} جم/طائر</span>
-                  </div>
-                  <div *ngIf="todayTotalFeedKg() !== null" class="flex items-center justify-between mt-1">
-                    <span class="text-[var(--c-muted)]">إجمالي العلف المطلوب للقطيع ({{ flock()!.currentCount | number }} طائر):</span>
-                    <span class="font-black text-green-700">{{ todayTotalFeedKg() }} كجم</span>
-                  </div>
-                </div>
-                <p *ngIf="cp.target_feed_g_per_bird_today === null" class="text-gray-400">{{ cp.feed_amount_note }}</p>
-
-                <!-- ✅ إيه المطلوب يتعمل النهاردة بالظبط -->
-                <div *ngIf="cp.today_phase?.actions?.length" class="bg-white rounded-lg p-2 border">
-                  <p class="font-bold text-gray-600 mb-1">✅ المطلوب يتعمل النهاردة:</p>
-                  <ul class="space-y-0.5">
-                    <li *ngFor="let a of cp.today_phase.actions">• {{ a }}</li>
-                  </ul>
-                </div>
-
-                <!-- 🧠 نصايح مبنية على آخر سجل فعلي -->
-                <div *ngIf="cp.advice?.length" class="bg-blue-50 rounded-lg p-2 border border-blue-200">
-                  <p class="font-bold text-blue-800 mb-1">🧠 نصايح اليوم:</p>
-                  <p *ngFor="let a of cp.advice" class="text-blue-900">• {{ a }}</p>
-                </div>
-
-                <p *ngIf="cp.today_phase?.warning" class="text-red-600 font-bold">⚠️ {{ cp.today_phase.warning }}</p>
-              </ng-container>
-            </ng-container>
-            <ng-template #noCycleData>
-              <div class="text-center text-[var(--c-muted)]">جاري تحميل بيانات المرحلة...</div>
-            </ng-template>
-          </div>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -373,106 +440,6 @@ const TURKEY_VACC = [
             </p>
           </div>
           <button *ngIf="myAccess()?.is_owner !== false" type="button" (click)="deleteTask(t)" class="text-xs text-red-400 flex-shrink-0">🗑️</button>
-        </div>
-      </div>
-
-      <!-- 📆 برنامج الدورة — إيه المفروض يحصل بالظبط النهاردة حسب عمر القطيع -->
-      <div class="card mb-4" *ngIf="cycleProgram() as cp">
-        <h2 class="section-title mb-3">📆 برنامج الدورة</h2>
-
-        <div *ngIf="!cp.has_program" class="text-center py-3 text-[var(--c-muted)] text-sm">{{ cp.message }}</div>
-
-        <div *ngIf="cp.has_program">
-
-          <!-- 🔔 بداية مرحلة جديدة النهاردة — إجراءات المرحلة كمهام بارزة (مؤقتة، مش محفوظة) -->
-          <div *ngIf="cp.is_phase_transition_today && cp.today_phase as newPhase" class="rounded-xl bg-purple-50 border-2 border-purple-300 p-3 mb-3">
-            <p class="font-black text-purple-800 mb-1">🔔 مرحلة جديدة بدأت النهاردة: "{{ newPhase.phase_label }}"</p>
-            <p class="text-xs text-purple-700 mb-2">حاجات لازم تتعمل النهاردة بالذات (مش هتفضل بارزة بكرة):</p>
-            <ul class="text-sm space-y-1">
-              <li *ngFor="let a of newPhase.actions">• {{ a }}</li>
-            </ul>
-          </div>
-
-          <!-- 💡 نصايح حقيقية مبنية على مقارنة آخر سجل فعلي بالمستهدف -->
-          <div class="rounded-xl bg-blue-50 border border-blue-200 p-3 mb-3">
-            <p class="text-xs font-bold text-blue-800 mb-1">🧠 نصايح اليوم</p>
-            <p *ngFor="let a of cp.advice" class="text-sm text-blue-900 mb-1 last:mb-0">• {{ a }}</p>
-          </div>
-
-          <div *ngIf="cp.today_phase as phase" class="rounded-xl bg-green-50 border border-green-200 p-3 mb-3">
-            <div class="flex items-center justify-between mb-2">
-              <span class="font-black text-green-800">
-                {{ cp.is_repeating ? ('دورة رقم ' + cp.cycle_number + ' — يوم ' + cp.age_days + ' من التلقيح') : ('اليوم ' + cp.age_days) }}
-                — مرحلة "{{ phase.phase_label }}"
-              </span>
-              <span *ngIf="cp.breed_matched" class="text-[10px] px-1.5 py-0.5 rounded-full bg-green-200 text-green-800 font-bold">🎯 أرقام سلالتك بالظبط</span>
-            </div>
-
-            <!-- 🌡️ حرارة دقيقة لليوم ده بالظبط (مش مدى تقريبي) -->
-            <div class="grid grid-cols-2 gap-2 text-xs mb-2">
-              <div *ngIf="cp.target_temperature_today !== null">
-                <span class="text-[var(--c-muted)]">الحرارة المستهدفة اليوم:</span>
-                <span class="font-bold">{{ cp.target_temperature_today }}°م</span>
-              </div>
-              <div *ngIf="cp.target_weight_g_today !== null; else phaseWeightRange">
-                <span class="text-[var(--c-muted)]">الوزن المستهدف اليوم:</span>
-                <span class="font-bold">{{ cp.target_weight_g_today }} جم</span>
-              </div>
-              <ng-template #phaseWeightRange>
-                <div *ngIf="phase.target_weight !== '—'">
-                  <span class="text-[var(--c-muted)]">الوزن المستهدف (المرحلة):</span>
-                  <span class="font-bold">{{ phase.target_weight }}</span>
-                </div>
-              </ng-template>
-              <div *ngIf="cp.target_feed_g_per_bird_today !== null">
-                <span class="text-[var(--c-muted)]">العلف المستهدف اليوم:</span>
-                <span class="font-bold">{{ cp.target_feed_g_per_bird_today }} جم/طائر</span>
-              </div>
-            </div>
-
-            <!-- 💡 الإضاءة/الإظلام -->
-            <div *ngIf="cp.lighting_today as lt" class="text-xs bg-white rounded-lg p-2 mb-2">
-              <span class="font-bold" *ngIf="lt.light_hours !== null">
-                💡 {{ lt.light_hours }} ساعة ضوء / {{ lt.dark_hours }} ساعة ظلام —
-              </span>
-              <span [class.text-amber-700]="lt.light_hours === null">{{ lt.note }}</span>
-            </div>
-
-            <ul class="text-sm space-y-1 mb-2">
-              <li *ngFor="let a of phase.actions">• {{ a }}</li>
-            </ul>
-            <p class="text-xs text-red-600 font-bold mb-2">⚠️ {{ phase.warning }}</p>
-
-            <!-- 🌾 ملاحظة صادقة عن كمية العلف -->
-            <p class="text-[10px] text-gray-400 border-t pt-2">{{ cp.feed_amount_note }}</p>
-          </div>
-          <div *ngIf="!cp.today_phase" class="text-center py-2 text-[var(--c-muted)] text-sm">
-            القطيع خارج نطاق البرنامج المعروف حاليًا (يوم {{ cp.age_days }}).
-          </div>
-
-          <!-- 🏠 دليل الإسكان حسب أسلوب التربية (بطاريات/أرضي/...) — من قاعدة المعرفة -->
-          <p *ngIf="cp.housing_note" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-3">{{ cp.housing_note }}</p>
-          <div *ngIf="cp.housing_guide as hg" class="rounded-xl bg-amber-50 border border-amber-200 p-3 mt-3">
-            <p class="text-xs font-bold text-amber-800 mb-1">🏠 {{ hg.title }}</p>
-            <p *ngIf="hg.density" class="text-xs text-amber-900 mb-2"><span class="font-bold">الكثافة:</span> {{ hg.density }}</p>
-            <ul class="text-sm space-y-1 mb-2">
-              <li *ngFor="let pt of hg.points">• {{ pt }}</li>
-            </ul>
-            <p class="text-[10px] text-gray-400 border-t pt-1">المصدر: {{ hg.source }}</p>
-          </div>
-
-          <!-- 🗓️ الخط الزمني الكامل للدورة -->
-          <button type="button" (click)="toggleFullProgram()" class="text-xs font-bold text-green-600 mt-2">
-            {{ showFullProgram() ? 'إخفاء الخط الزمني الكامل' : 'عرض الخط الزمني الكامل للدورة (' + (cp.phases?.length || 0) + ' مراحل)' }}
-          </button>
-          <div *ngIf="showFullProgram()" class="mt-2 space-y-1.5">
-            <div *ngIf="!cp.phases || cp.phases.length === 0" class="text-xs text-[var(--c-muted)]">مفيش مراحل متسجلة لهذا النوع.</div>
-            <div *ngFor="let p of cp.phases; let i = index" class="rounded-lg p-2 text-xs"
-                 [class.bg-green-100]="i === cp.today_phase_index" [class.bg-gray-50]="i !== cp.today_phase_index">
-              <span class="font-bold">يوم {{ p.day_from }}–{{ (p.day_to === 999 || p.day_to === 9999) ? 'النهاية' : p.day_to }}: {{ p.phase_label }}</span>
-              <span *ngIf="i === cp.today_phase_index" class="text-green-700 font-black"> ← احنا هنا</span>
-            </div>
-          </div>
         </div>
       </div>
     </ng-container>
@@ -1005,8 +972,9 @@ export class FlockDetailComponent implements OnInit {
   showFullProgram = signal(false);
   toggleFullProgram() { this.showFullProgram.update(v => !v); }
 
-  // 📊 لوحة "مرحلة اليوم" جوه فورم التسجيل — العلف المطلوب + المهام حسب عمر القطيع
-  showTodayStagePanel = signal(false);
+  // 🗓️ المرحلة المفتوحة حاليًا في الخط الزمني الكامل (null = كلها مقفولة)
+  expandedPhase = signal<number | null>(null);
+  togglePhase(i: number) { this.expandedPhase.update(v => v === i ? null : i); }
 
   /** إجمالي العلف المطلوب (كجم) للقطيع كله النهاردة = المستهدف للطائر × العدد المسجل حاليًا */
   todayTotalFeedKg = (): number | null => {
@@ -1025,8 +993,7 @@ export class FlockDetailComponent implements OnInit {
       this.activeSection.set('records'); // 📜 السجلات — فيها عمود النفوق اليومي بالتفصيل
       this.recordsView.set('records');
     } else if (isAbout('علف', 'تغذية', 'وزن', 'حرارة', 'إضاءة')) {
-      this.activeSection.set('today'); // 📅 اليوم — فيه برنامج الدورة والنصايح المبنية على المقارنة بالمستهدف
-      this.showTodayStagePanel.set(true);
+      this.activeSection.set('today'); // 📅 اليوم — برنامج الدورة ظاهر فوق الفورم دايمًا
     } else if (isAbout('تطعيم', 'لقاح', 'علاج', 'دواء', 'سحب')) {
       this.activeSection.set('health'); // 💉 الصحة — فيها التحصينات والعلاجات
     } else {
