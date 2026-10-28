@@ -232,7 +232,7 @@ import { LEARNING_BUNDLE } from './learning-data';
                [style.background]="selectedDisease()?.levelBg">
             <span class="text-4xl">{{ selectedDisease()?.icon }}</span>
             <div>
-              <h2 class="font-black text-gray-800 text-lg">{{ selectedDisease()?.name }}</h2>
+              <h2 class="font-black dark:text-gray-400 text-gray-800 text-lg">{{ selectedDisease()?.name }}</h2>
               <span class="text-xs font-black px-2 py-0.5 rounded-full text-white"
                     [style.background]="selectedDisease()?.levelColor">
                 {{ selectedDisease()?.level }}

@@ -1,8 +1,12 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
+import { CalculatorPricesService } from './calculator-prices.service';
+import {
+  calculateFarm, calculateCosts, calculateProfitability, getHousingOptions,
+  POULTRY_LABELS, HOUSING_LABELS, PoultryType, HousingSystem,
+} from './calculator-engine';
+import { exportFarmReportPdf } from './calculator-report';
 
 @Component({
   selector: 'app-calculator',
@@ -604,30 +608,31 @@ import { environment } from '../../../environments/environment';
   `
 })
 export class CalculatorComponent implements OnInit {
-  private http = inject(HttpClient);
+  private pricesSvc = inject(CalculatorPricesService);
   loading = signal(false);
   result = signal<any>(null);
   exportingPdf = signal(false);
   exportPdfError = signal('');
 
-  exportPdf(): void {
+  // تصدير تقرير PDF أوفلاين (بيتولّد جوه التطبيق ويتحفظ/يتشارك من الجهاز)
+  async exportPdf(): Promise<void> {
+    const r = this.result();
+    if (!r) return;
     this.exportingPdf.set(true);
     this.exportPdfError.set('');
-    this.http.post(`${environment.apiUrl}/calculator/export/pdf`, this.form, { responseType: 'blob' }).subscribe({
-      next: (blob: Blob) => {
-        this.exportingPdf.set(false);
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'farm-report.pdf';
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: () => {
-        this.exportingPdf.set(false);
+    try {
+      const t = r.input?.poultry_type as PoultryType;
+      const h = r.input?.housing_system as HousingSystem;
+      await exportFarmReportPdf(r, POULTRY_LABELS[t]?.label ?? t, HOUSING_LABELS[h] ?? h);
+    } catch (e: any) {
+      // المستخدم قفل نافذة المشاركة: مش خطأ
+      if (!/cancel/i.test(String(e?.message ?? e))) {
+        console.error('فشل تصدير PDF:', e);
         this.exportPdfError.set('❌ حصل خطأ أثناء إنشاء الملف، حاول تاني');
       }
-    });
+    } finally {
+      this.exportingPdf.set(false);
+    }
   }
 
   // ── نظام التربية الديناميكي حسب نوع الطائر ──────────────
@@ -661,26 +666,21 @@ export class CalculatorComponent implements OnInit {
 
   // زرار "عندي بالفعل" جنب كل بند تكلفة - بيستبعده من إجمالي تكلفة الدورة
   // لأن المستخدم يكون اشتراه من قبل ومش عايز يتحسب تاني
-  toggleEquipmentExclusion(key: string): void {
+  async toggleEquipmentExclusion(key: string): Promise<void> {
     const prev = this.excludedCategories();
     const updated = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
     this.excludedCategories.set(updated); // تحديث فوري في الواجهة
     this.exclusionError.set('');
-
-    this.http.post<any>(`${environment.apiUrl}/calculator/equipment/exclusions`, { excluded: updated }).subscribe({
-      next: (data) => {
-        this.pricesData.set(data);
-        this.excludedCategories.set(data.excluded_categories || updated);
-        if (this.result()) this.calculate(); // إعادة حساب الإجمالي فورًا بعد التغيير
-      },
-      error: (err) => {
-        this.excludedCategories.set(prev); // فشل الحفظ - رجّع الحالة زي ما كانت
-        this.exclusionError.set(
-          err?.status === 401 ? '🔒 سجّل دخول الأول عشان تقدر تحدد المعدات اللي عندك بالفعل' : '❌ حصل خطأ، حاول تاني'
-        );
-        setTimeout(() => this.exclusionError.set(''), 3000);
-      }
-    });
+    try {
+      const data = await this.pricesSvc.setExcludedCategories(updated);
+      this.pricesData.set(data);
+      this.excludedCategories.set(data.excluded_categories || updated);
+      if (this.result()) await this.calculate(); // إعادة حساب الإجمالي فورًا بعد التغيير
+    } catch {
+      this.excludedCategories.set(prev); // فشل الحفظ - رجّع الحالة زي ما كانت
+      this.exclusionError.set('❌ حصل خطأ، حاول تاني');
+      setTimeout(() => this.exclusionError.set(''), 3000);
+    }
   }
   priceItems = computed(() => this.pricesData().items || {});
   priceKeys = computed(() => Object.keys(this.priceItems()));
@@ -705,15 +705,8 @@ export class CalculatorComponent implements OnInit {
 
   togglePriceHistory(): void {
     this.showPriceHistory.set(!this.showPriceHistory());
-    if (this.showPriceHistory() && this.priceHistory().length === 0) {
-      this.loadingPriceHistory.set(true);
-      this.http.get<any>(`${environment.apiUrl}/calculator/prices/history`).subscribe({
-        next: (data) => {
-          this.priceHistory.set(data.history || []);
-          this.loadingPriceHistory.set(false);
-        },
-        error: () => this.loadingPriceHistory.set(false)
-      });
+    if (this.showPriceHistory()) {
+      this.priceHistory.set(this.pricesSvc.getHistory());
     }
   }
 
@@ -817,43 +810,33 @@ export class CalculatorComponent implements OnInit {
       body.selling_price_per_kg = this.profitForm.selling_price_per_kg;
     }
 
-    this.http.post(`${environment.apiUrl}/calculator/profitability`, body).subscribe({
-      next: (res: any) => {
-        this.profitResult.set(res);
-        this.profitLoading.set(false);
-      },
-      error: () => this.profitLoading.set(false)
-    });
+    try {
+      this.profitResult.set(calculateProfitability(body));
+    } catch (e) {
+      console.error('فشل حساب الجدوى:', e);
+    }
+    this.profitLoading.set(false);
   }
 
-  ngOnInit(): void {
-    // نجيب خيارات نظام التربية الصالحة لكل نوع طائر (بيُستخدم في فلترة الليستة)
-    this.http.get<any>(`${environment.apiUrl}/calculator/housing-options`).subscribe({
-      next: (data) => {
-        this.housingOptionsMap.set(data);
-        this.onPoultryTypeChange(); // تأكيد إن نظام التربية الحالي صالح للنوع الافتراضي
-      },
-      error: (err) => console.error('فشل تحميل خيارات نظام التربية:', err)
-    });
-
-    this.loadPrices();
+  async ngOnInit(): Promise<void> {
+    // أنظمة التربية ثابتة جوه التطبيق (مفيش نداء شبكة)
+    this.housingOptionsMap.set(getHousingOptions());
+    this.onPoultryTypeChange(); // تأكيد إن نظام التربية الحالي صالح للنوع الافتراضي
+    await this.loadPrices();
   }
 
-  loadPrices(): void {
-    this.http.get<any>(`${environment.apiUrl}/calculator/prices`).subscribe({
-      next: (data) => {
-        this.pricesData.set(data);
-        this.excludedCategories.set(data.excluded_categories || []);
-        // نجهّز نسخة قابلة للتعديل من كل الأسعار الحالية عشان تتربط بالفورم
-        const edits: Record<string, number> = {};
-        for (const key of Object.keys(data.items || {})) {
-          edits[key] = data.items[key].price;
-        }
-        this.priceEdits = edits;
-        this.applyStoredProfitPrices();
-      },
-      error: (err) => console.error('فشل تحميل الأسعار:', err)
-    });
+  async loadPrices(): Promise<void> {
+    await this.pricesSvc.ready; // استنى تحميل الأسعار المحفوظة من الجهاز
+    const data = this.pricesSvc.getPrices();
+    this.pricesData.set(data);
+    this.excludedCategories.set(data.excluded_categories || []);
+    // نجهّز نسخة قابلة للتعديل من كل الأسعار الحالية عشان تتربط بالفورم
+    const edits: Record<string, number> = {};
+    for (const key of Object.keys(data.items || {})) {
+      edits[key] = data.items[key].price;
+    }
+    this.priceEdits = edits;
+    this.applyStoredProfitPrices();
   }
 
   // بيملأ سعر الكتكوت وسعر العلف في حاسبة الجدوى الاقتصادية تلقائياً من
@@ -889,86 +872,73 @@ export class CalculatorComponent implements OnInit {
     this.applyStoredProfitPrices();
   }
 
-  savePrices(): void {
-    this.savingPrices.set(true);
-    this.pricesSavedMsg.set('');
-    this.pricesSaveError.set(false);
-    this.http.post<any>(`${environment.apiUrl}/calculator/prices`, { updates: this.priceEdits }).subscribe({
-      next: (data) => {
-        this.pricesData.set(data);
-        this.savingPrices.set(false);
-        this.pricesSavedMsg.set('✅ اتحفظت أسعارك بنجاح');
-        this.priceHistory.set([]); // نخلي السجل يتحمّل من جديد لو المستخدم فتحه تاني
-        setTimeout(() => this.pricesSavedMsg.set(''), 3000);
-      },
-      error: (err) => {
-        this.savingPrices.set(false);
-        this.pricesSaveError.set(true);
-        this.pricesSavedMsg.set(
-          err?.status === 401
-            ? '🔒 سجّل دخول الأول عشان تقدر تحفظ أسعارك الشخصية'
-            : '❌ حصل خطأ أثناء الحفظ، حاول تاني'
-        );
-      }
-    });
+  async savePrices(): Promise<void> {
+    await this.persistPrices('✅ اتحفظت أسعارك بنجاح', false);
   }
 
   // زي savePrices() بالظبط، لكن بعد الحفظ بيعيد حساب النتيجة فورًا عشان تشوف
   // تأثير تعديل سعر الأداة على الإجمالي على طول من غير ما تضغط "احسب" تاني
-  saveEquipmentPrices(): void {
+  async saveEquipmentPrices(): Promise<void> {
+    await this.persistPrices('✅ اتحفظت الأسعار وتحدّث الإجمالي', true);
+  }
+
+  private async persistPrices(okMsg: string, recalc: boolean): Promise<void> {
     this.savingPrices.set(true);
     this.pricesSavedMsg.set('');
     this.pricesSaveError.set(false);
-    this.http.post<any>(`${environment.apiUrl}/calculator/prices`, { updates: this.priceEdits }).subscribe({
-      next: (data) => {
-        this.pricesData.set(data);
-        this.savingPrices.set(false);
-        this.pricesSavedMsg.set('✅ اتحفظت الأسعار وتحدّث الإجمالي');
-        this.priceHistory.set([]);
-        setTimeout(() => this.pricesSavedMsg.set(''), 3000);
-        if (this.result()) this.calculate();
-      },
-      error: (err) => {
-        this.savingPrices.set(false);
-        this.pricesSaveError.set(true);
-        this.pricesSavedMsg.set(
-          err?.status === 401
-            ? '🔒 سجّل دخول الأول عشان تقدر تحفظ أسعارك الشخصية'
-            : '❌ حصل خطأ أثناء الحفظ، حاول تاني'
-        );
-      }
-    });
+    try {
+      const data = await this.pricesSvc.updatePrices(this.priceEdits);
+      this.pricesData.set(data);
+      this.priceHistory.set(this.pricesSvc.getHistory());
+      this.pricesSavedMsg.set(okMsg);
+      setTimeout(() => this.pricesSavedMsg.set(''), 3000);
+      if (recalc && this.result()) await this.calculate();
+    } catch {
+      this.pricesSaveError.set(true);
+      this.pricesSavedMsg.set('❌ حصل خطأ أثناء الحفظ، حاول تاني');
+    } finally {
+      this.savingPrices.set(false);
+    }
   }
 
-  resetPrice(key: string): void {
-    this.http.post<any>(`${environment.apiUrl}/calculator/prices/reset`, { keys: [key] }).subscribe({
-      next: (data) => {
-        this.pricesData.set(data);
-        this.priceEdits[key] = data.items[key]?.price;
-        this.priceHistory.set([]);
-      },
-      error: () => {
-        this.pricesSaveError.set(true);
-        this.pricesSavedMsg.set('❌ حصل خطأ أثناء الرجوع للسعر الافتراضي');
-      }
-    });
+  async resetPrice(key: string): Promise<void> {
+    try {
+      const data = await this.pricesSvc.resetPrices([key]);
+      this.pricesData.set(data);
+      this.priceEdits[key] = data.items[key]?.price;
+      this.priceHistory.set(this.pricesSvc.getHistory());
+    } catch {
+      this.pricesSaveError.set(true);
+      this.pricesSavedMsg.set('❌ حصل خطأ أثناء الرجوع للسعر الافتراضي');
+    }
   }
 
-  calculate() {
+  async calculate(): Promise<void> {
     if (!this.form.bird_count) return;
     this.loading.set(true);
     this.result.set(null);
     this.profitResult.set(null);
 
-    this.http.post(`${environment.apiUrl}/calculator/calculate`, this.form).subscribe({
-      next: (res: any) => {
-        this.result.set(res);
-        this.loading.set(false);
-        setTimeout(() => {
-          document.querySelector('.space-y-4')?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      },
-      error: () => this.loading.set(false)
-    });
+    try {
+      await this.pricesSvc.ready;
+      const prices = this.pricesSvc.getPrices();
+      const res = calculateFarm({ ...this.form, bird_count: this.form.bird_count });
+      try {
+        res.costs = calculateCosts(
+          res, this.form.poultry_type, prices.items,
+          prices.excluded_categories || [], prices.has_custom_prices,
+        );
+      } catch {
+        res.costs = null; // نفس سلوك الباك اند: فشل التكلفة ميكسرش الحساب الأساسي
+      }
+      this.result.set(res);
+      setTimeout(() => {
+        document.querySelector('.space-y-4')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (e) {
+      console.error('فشل الحساب:', e);
+    } finally {
+      this.loading.set(false);
+    }
   }
 }
