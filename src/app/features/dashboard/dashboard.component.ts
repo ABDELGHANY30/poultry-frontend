@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, computed, signal, effect, untracked } from '@angular/core';
+import { Component, OnInit, inject, computed, signal, effect, untracked, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -369,7 +369,7 @@ export class DashboardComponent implements OnInit {
   private streakSvc = inject(StreakService);
 
   bannerStreakText = computed(() => {
-    const s = this.streakSvc.streak();
+    const s: any = this.streakSvc.streak() ?? this.cachedStreak();
     if (!s) return null;
     if (s.current_streak === 0) return 'سجّل بيانات النهاردة عشان تبدأ سلسلة أيامك';
     const remaining = s.next_milestone ? s.next_milestone - s.current_streak : null;
@@ -379,7 +379,9 @@ export class DashboardComponent implements OnInit {
   });
 
   flocks = computed(() => {
-    const list = [...this.flockSvc.flocks()];
+    // لو السيرفر لسه ماردّش (أوفلاين) بنعرض آخر قطعان محفوظة؛ ولو رد فعلاً بنثق في رده حتى لو فاضي
+    const live: any[] = this.flockSvc.flocks();
+    const list = [...(live.length > 0 || this.flocksFresh() ? live : this.cachedFlocks())];
     return list.sort((a: any, b: any) => {
       const dateA = new Date(a.created_at ?? a.createdAt ?? 0).getTime();
       const dateB = new Date(b.created_at ?? b.createdAt ?? 0).getTime();
@@ -423,7 +425,9 @@ export class DashboardComponent implements OnInit {
   isPro = signal(false);
   planInfo = signal<any>(null);
   dailyPrices = signal<any[]>([]);
-  priceDate = computed(() => new Date().toLocaleDateString('en-GB'));
+  // تاريخ آخر تحديث فعلي للأسعار (مش تاريخ النهارده) عشان الأسعار المحفوظة أوفلاين ماتبانش جديدة
+  pricesUpdatedAt = signal<number | null>(null);
+  priceDate = computed(() => new Date(this.pricesUpdatedAt() ?? Date.now()).toLocaleDateString('en-GB'));
   todayTemps = signal<Record<string, { temperature_celsius: number | null; record_date: string }>>({});
   avgFcr = signal<number | null>(null);
   recentMortalityTotal = signal<number | null>(null);
@@ -439,11 +443,13 @@ export class DashboardComponent implements OnInit {
   // المستخدم الحالي بس، فبيانات مستخدم عمرها ما بتظهر لمستخدم تاني.
   // لو الـ id مش معروف مفيش حفظ ولا قراءة خالص.
   // ══════════════════════════════════════════════════════════════
-  private fresh = { temps: false, fcr: false, mort: false, pro: false }; // اتحدّثت من السيرفر في الجلسة دي
+  private fresh = { temps: false, fcr: false, mort: false, pro: false, plan: false }; // اتحدّثت من السيرفر في الجلسة دي
   private lastCacheUid: string | null = null;
 
   private cacheUserId = computed<string | null>(() => {
     if (!this.isLoggedIn()) return null;
+    // الويب مفيش فيه تخزين لبيانات المستخدم في المتصفح (سياسة AuthService) — الحفظ على الموبايل بس
+    if (!this.auth.isNative) return null;
     const u: any = this.auth.currentUser();
     const id = u?.id ?? u?.user_id ?? u?.email ?? null;
     return id === null || id === undefined || id === '' ? null : String(id);
@@ -463,6 +469,7 @@ export class DashboardComponent implements OnInit {
       if (this.fresh.fcr) next.avgFcr = this.avgFcr();
       if (this.fresh.mort) next.recentMortalityTotal = this.recentMortalityTotal();
       if (this.fresh.pro) next.reportsIsPro = this.reportsIsPro();
+      if (this.fresh.plan) next.isPro = this.isPro();
       localStorage.setItem(key, JSON.stringify(next));
     } catch (e) {
       console.warn('تعذّر حفظ أرقام الداشبورد محلياً:', e);
@@ -478,17 +485,56 @@ export class DashboardComponent implements OnInit {
       if (!this.fresh.fcr && c.avgFcr !== undefined) this.avgFcr.set(c.avgFcr);
       if (!this.fresh.mort && c.recentMortalityTotal !== undefined) this.recentMortalityTotal.set(c.recentMortalityTotal);
       if (!this.fresh.pro && c.reportsIsPro !== undefined) this.reportsIsPro.set(!!c.reportsIsPro);
+      if (!this.fresh.plan && c.isPro !== undefined) this.isPro.set(!!c.isPro);
+      if (!this.flocksFresh() && Array.isArray(c.flocks)) this.cachedFlocks.set(c.flocks);
+      if (c.streak && !this.streakSvc.streak()) this.cachedStreak.set(c.streak);
     } catch {
       /* نسخة محفوظة تالفة: بنتجاهلها */
     }
   }
 
   private resetNumbers(): void {
-    this.fresh = { temps: false, fcr: false, mort: false, pro: false };
+    this.fresh = { temps: false, fcr: false, mort: false, pro: false, plan: false };
     this.todayTemps.set({});
     this.avgFcr.set(null);
     this.recentMortalityTotal.set(null);
     this.reportsIsPro.set(false);
+    this.isPro.set(false);
+    this.cachedFlocks.set([]);
+    this.cachedStreak.set(null);
+    this.flocksFresh.set(false);
+  }
+
+  // 💾 القطعان وسلسلة الأيام: بتتحفظ برضه عشان الداشبورد يفضل ظاهر أوفلاين
+  private flocksFresh = signal(false);          // السيرفر رد فعلاً في الجلسة دي
+  private cachedFlocks = signal<any[]>([]);
+  private cachedStreak = signal<any>(null);
+
+  private extrasPersistEffect = effect(() => {
+    const uid = this.cacheUserId();
+    const live: any[] = this.flockSvc.flocks();
+    const fresh = this.flocksFresh();
+    const streak: any = this.streakSvc.streak();
+    if (!uid) return;
+    untracked(() => {
+      try {
+        const key = this.numbersKey(uid);
+        const next: any = JSON.parse(localStorage.getItem(key) || 'null') || {};
+        if (live.length > 0 || fresh) next.flocks = live;
+        if (streak) next.streak = streak;
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch (e) {
+        console.warn('تعذّر حفظ القطعان محلياً:', e);
+      }
+    });
+  });
+
+  loadFlocks() {
+    this.flockSvc.getFlocks().subscribe({
+      // لو الـ service بتبلع الخطأ وترجّع فاضي وإحنا أوفلاين، منعتبرهاش رد حقيقي
+      next: () => { if (navigator.onLine) this.flocksFresh.set(true); },
+      error: () => {},
+    });
   }
 
   // لما المستخدم يتعرف: نعرض أرقامه المحفوظة. ولو المستخدم اتغير (خروج / دخول بحساب تاني)
@@ -503,8 +549,11 @@ export class DashboardComponent implements OnInit {
       if (prev !== null) {
         this.resetNumbers();
         if (uid) {
+          this.loadFlocks();
+          this.loadPlanInfo();
           this.loadTodayTemps();
           this.loadReportsProStatus();
+          this.streakSvc.refresh();
         }
       }
       if (!uid) return;
@@ -518,25 +567,54 @@ export class DashboardComponent implements OnInit {
   cycleLocked = signal(false);
   cycleLoading = signal(false);
 
-  // بيعيد تحميل التقرير كل ما القطيع المختار يتغير
+  // بيعيد تحميل التقرير كل ما القطيع المختار (أو المستخدم) يتغير
   private cycleReportEffect = effect(() => {
     const id = this.currentFlockId();
+    const uid = this.cacheUserId();
     untracked(() => {
       if (id && this.isLoggedIn()) this.loadCycleReport(id);
       else { this.cycleReport.set(null); this.cycleLocked.set(false); }
     });
+    void uid;
   });
 
+  private cycleKey(uid: string, flockId: string): string {
+    return `dashboard_cycle_cache_v1_${uid}_${flockId}`;
+  }
+
   loadCycleReport(flockId: string) {
+    const uid = this.cacheUserId();
     this.cycleLoading.set(true);
-    this.cycleReport.set(null);
     this.cycleLocked.set(false);
+
+    // عرض آخر تقرير محفوظ لنفس القطيع فوراً لحد ما يوصل الجديد
+    let shown = false;
+    if (uid) {
+      try {
+        const c = JSON.parse(localStorage.getItem(this.cycleKey(uid, flockId)) || 'null');
+        if (c) { this.cycleReport.set(c); shown = true; }
+      } catch { /* نسخة تالفة: نتجاهلها */ }
+    }
+    if (!shown) this.cycleReport.set(null);
+
     this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}`).subscribe({
-      next: (res: any) => { this.cycleReport.set(res); this.cycleLoading.set(false); },
+      next: (res: any) => {
+        if (this.currentFlockId() !== flockId) return; // المستخدم غيّر القطيع في النص
+        this.cycleReport.set(res);
+        this.cycleLoading.set(false);
+        if (uid) {
+          try { localStorage.setItem(this.cycleKey(uid, flockId), JSON.stringify(res)); } catch { /* مش مشكلة */ }
+        }
+      },
       error: (err: any) => {
         this.cycleLoading.set(false);
         // 403 + upgrade_required = دورة منتهية والمستخدم مش مشترك
-        if (err?.status === 403 && err?.error?.detail?.upgrade_required) this.cycleLocked.set(true);
+        if (err?.status === 403 && err?.error?.detail?.upgrade_required) {
+          this.cycleLocked.set(true);
+          this.cycleReport.set(null);
+          if (uid) { try { localStorage.removeItem(this.cycleKey(uid, flockId)); } catch { /* */ } }
+        }
+        // أي خطأ تاني (أوفلاين مثلاً): بنسيب آخر تقرير محفوظ معروض
       },
     });
   }
@@ -642,13 +720,26 @@ getCategoryNameAr(categoryKey: string): string {
     ];
   });
 
+  private destroyRef = inject(DestroyRef);
+  private onOnline = () => this.refreshAll();
+
   ngOnInit() {
-    this.flockSvc.getFlocks().subscribe();
+    this.refreshAll();
+    // 🌐 أول ما النت يرجع نحدّث كل الأرقام تلقائياً
+    window.addEventListener('online', this.onOnline);
+    this.destroyRef.onDestroy(() => window.removeEventListener('online', this.onOnline));
+  }
+
+  refreshAll() {
+    this.loadFlocks();
     this.alertSvc.loadAlerts();
     this.loadPlanInfo();
     this.loadPrices();
     this.loadTodayTemps();
     this.loadReportsProStatus();
+    this.loadWeather(this.weatherGov());
+    const id = this.currentFlockId();
+    if (id && this.isLoggedIn()) this.loadCycleReport(id);
     if (this.isLoggedIn()) this.streakSvc.refresh();
   }
 
@@ -866,6 +957,7 @@ getCategoryNameAr(categoryKey: string): string {
   // 💾 آخر أسعار وصلت بتتحفظ على الجهاز وتفضل معروضة لحد ما أسعار جديدة توصل
   // (نفس المفتاح مشترك بين الداشبورد وسوق التجار)
   private readonly PRICES_CACHE_KEY = 'prices_latest_cache_v1';
+  private readonly PRICES_TS_KEY = 'prices_latest_cache_ts_v1';
 
   private readCachedPrices(): any[] {
     try {
@@ -880,6 +972,7 @@ getCategoryNameAr(categoryKey: string): string {
   private writeCachedPrices(data: any[]): void {
     try {
       localStorage.setItem(this.PRICES_CACHE_KEY, JSON.stringify(data));
+      localStorage.setItem(this.PRICES_TS_KEY, String(Date.now()));
     } catch (e) {
       console.warn('تعذّر حفظ الأسعار محلياً:', e);
     }
@@ -888,12 +981,17 @@ getCategoryNameAr(categoryKey: string): string {
   loadPrices() {
     // عرض آخر أسعار محفوظة فوراً لحد ما توصل الجديدة
     const cached = this.readCachedPrices();
-    if (cached.length) this.prices.set(cached);
+    if (cached.length) {
+      this.prices.set(cached);
+      const ts = Number(localStorage.getItem(this.PRICES_TS_KEY));
+      if (ts) this.pricesUpdatedAt.set(ts);
+    }
 
     this.http.get<any>(`${environment.apiUrl}/prices/latest`).subscribe({
       next: res => {
         const data = res?.prices ?? [];
         this.prices.set(data);
+        this.pricesUpdatedAt.set(Date.now());
         this.writeCachedPrices(data);
       },
       error: () => {} // لو فشل الاتصال بنسيب آخر أسعار محفوظة معروضة
@@ -905,6 +1003,8 @@ getCategoryNameAr(categoryKey: string): string {
       next: (res: any) => {
         this.planInfo.set(res);
         this.isPro.set(res.is_pro);
+        this.fresh.plan = true;
+        this.persistNumbers();
       },
       error: () => {}
     });

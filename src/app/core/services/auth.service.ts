@@ -86,6 +86,14 @@ export class AuthService {
     }
     this._token.set(token);
 
+    // 📴 نحمّل النسخة المصغّرة المحفوظة (id/name/language) فوراً، عشان الأوفلاين يعرف مين المستخدم
+    // قبل ما /auth/me يرد (أو لو مارجعش خالص). /auth/me بيستبدلها بالنسخة الكاملة لما يوصل.
+    try {
+      const raw = await this.nativeGet(USER_KEY);
+      const cached = raw ? JSON.parse(raw) : null;
+      if (cached?.id != null) this._user.set(cached as User);
+    } catch { /* نسخة تالفة: نتجاهلها */ }
+
     this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).subscribe({
       next: u => { this._user.set(u); this.persistMinimalUserNative(u); },
       error: (err: HttpErrorResponse) => {
@@ -137,6 +145,24 @@ export class AuthService {
     }
   }
 
+  /** بيمسح أرقام الداشبورد وصحة القطيع المحفوظة لمستخدم معيّن (بتتنادى عند الخروج) */
+  private purgeDashboardCaches(uid: string | null): void {
+    if (!uid) return;
+    try {
+      const prefixes = [
+        `dashboard_numbers_cache_v1_${uid}`,
+        `dashboard_cycle_cache_v1_${uid}_`,
+        `health_cache_v1_${uid}`,
+      ];
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && prefixes.some(p => k.startsWith(p))) toRemove.push(k);
+      }
+      toRemove.forEach(k => localStorage.removeItem(k));
+    } catch { /* storage مقفول — مش مشكلة */ }
+  }
+
   /** بيناديها الـ interceptor لما أي طلب يرجع 401 (كوكي/توكن انتهى) — بتصفّي الحالة المحلية بس من غير redirect. */
   handleUnauthorized(): void {
     if (this.isAuthenticated()) void this.clearAuth();
@@ -173,7 +199,10 @@ export class AuthService {
     }
     // 📴 نمسح النسخ المخزّنة للأوفلاين (قطيع/سجلات/برنامج) للمستخدم ده. السجلات اللي لسه ماتبعتتش بتفضل مربوطة بيه هو بس.
     // بنقرا الـ id قبل clearAuth (اللي بتمسح USER_KEY) — النداءات بتتنفذ بالترتيب.
-    void this.currentUserId().then(uid => this.offline.clearCaches(uid)).catch(() => {});
+    void this.currentUserId().then(uid => {
+      this.offline.clearCaches(uid);
+      this.purgeDashboardCaches(uid);
+    }).catch(() => {});
     void this.clearAuth();
     // الموقع مفتوح للتصفح كزائر، فتسجيل الخروج يرجّعك للداشبورد عادي
     this.router.navigate(['/dashboard']);

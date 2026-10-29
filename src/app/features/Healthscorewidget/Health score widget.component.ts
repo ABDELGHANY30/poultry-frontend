@@ -1,9 +1,10 @@
-import { Component, Input, Output, EventEmitter, OnInit, inject, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, inject, signal, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
+import { AuthService } from '../../core/services/auth.service'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
 interface HealthFactor {
   impact: number;
@@ -167,6 +168,9 @@ export class HealthScoreWidgetComponent implements OnInit {
   @Input() temp: number | null = null;
 
   private http = inject(HttpClient);
+  private auth = inject(AuthService);
+  private destroyRef = inject(DestroyRef);
+  private allFetched = false;
   data = signal<HealthScoreData | null>(null);
   showFactors = signal(false);
   loading = signal(true);
@@ -193,8 +197,44 @@ export class HealthScoreWidgetComponent implements OnInit {
   ringColor = (status: HealthScoreData['status']) => this.styles[status]?.ring ?? this.styles.good.ring;
   statusLabel = (status: HealthScoreData['status']) => this.styles[status]?.label ?? this.styles.good.label;
 
-  ngOnInit() {
+  // 💾 حفظ آخر قايمة قطعان ودرجات الصحة على الجهاز (موبايل بس، ومربوط بـ id المستخدم)
+  private cacheKey(): string | null {
+    if (!this.auth.isNative) return null;
+    const u: any = this.auth.currentUser();
+    const id = u?.id ?? u?.user_id;
+    return id == null || id === '' ? null : `health_cache_v1_${id}`;
+  }
+
+  private readCache(): any {
+    const k = this.cacheKey();
+    if (!k) return {};
+    try { return JSON.parse(localStorage.getItem(k) || 'null') || {}; } catch { return {}; }
+  }
+
+  private writeCache(patch: any): void {
+    const k = this.cacheKey();
+    if (!k) return;
+    try { localStorage.setItem(k, JSON.stringify({ ...this.readCache(), ...patch })); } catch { /* مش مشكلة */ }
+  }
+
+  private onOnline = () => {
+    this.allFetched = false;
     this.loadFlocksList();
+    if (this.viewMode() === 'all') this.showAllFlocks();
+  };
+
+  ngOnInit() {
+    // عرض المحفوظ فوراً لحد ما السيرفر يرد
+    const c = this.readCache();
+    if (Array.isArray(c.flocks) && c.flocks.length) {
+      this.flocksList.set(c.flocks);
+      const wanted = this.flockId ?? c.selected;
+      this.selectedFlockId.set(c.flocks.some((f: any) => f.id === wanted) ? wanted : c.flocks[0].id);
+    }
+    this.loadFlocksList();
+    // 🌐 أول ما النت يرجع نحدّث
+    window.addEventListener('online', this.onOnline);
+    this.destroyRef.onDestroy(() => window.removeEventListener('online', this.onOnline));
   }
 
   /** بتجيب قايمة كل القطعان بتاعت المستخدم، وتفلتر القطعان المغلقة (status !== 'active') قبل ما تعرضها */
@@ -204,16 +244,19 @@ export class HealthScoreWidgetComponent implements OnInit {
         // ⚠️ لو عندك اسم حالة مختلف عن "active" (زي "open" أو "ongoing")، عدّل الشرط ده
         const activeOnly = (flocks || []).filter(f => !f.status || f.status === 'active');
         this.flocksList.set(activeOnly);
+        this.writeCache({ flocks: activeOnly.map(f => ({ id: f.id, name: f.name })) });
         // القطيع المبدئي: اللي جاي من @Input لو موجود (وكان نشط)، وإلا أول قطيع نشط في القايمة
         const initial = (this.flockId && activeOnly.some(f => f.id === this.flockId))
           ? this.flockId
           : activeOnly[0]?.id;
         this.selectedFlockId.set(initial);
+        this.writeCache({ selected: initial });
         this.load();
       },
       error: () => {
         // فشل جلب القايمة مش لازم يوقف عرض الكارت — نكمل بالـ flockId الأصلي لو موجود
-        this.selectedFlockId.set(this.flockId);
+        // أوفلاين: بنكمل بالمحفوظ (لو فيه) أو بالـ flockId الأصلي
+        this.selectedFlockId.set(this.selectedFlockId() ?? this.flockId);
         this.load();
       }
     });
@@ -223,6 +266,7 @@ export class HealthScoreWidgetComponent implements OnInit {
     this.viewMode.set('single');
     if (this.selectedFlockId() !== id) {
       this.selectedFlockId.set(id);
+      this.writeCache({ selected: id });
       this.load();
     }
   }
@@ -230,9 +274,14 @@ export class HealthScoreWidgetComponent implements OnInit {
   /** بيجيب صحة كل القطعان مرة واحدة (طلب لكل قطيع) ويرتبهم من الأسوأ للأحسن */
   showAllFlocks() {
     this.viewMode.set('all');
-    if (this.allFlocksData().length > 0) return; // متجيبهاش تاني لو أصلاً محملة
+    if (this.allFetched) return; // متجيبهاش تاني لو أصلاً اتحدّثت من السيرفر
 
-    this.allFlocksLoading.set(true);
+    // عرض آخر نسخة محفوظة فوراً (لو فيه) ونحدّث في الخلفية
+    const cachedAll = this.readCache().all;
+    if (this.allFlocksData().length === 0 && Array.isArray(cachedAll) && cachedAll.length) {
+      this.allFlocksData.set(cachedAll);
+    }
+    this.allFlocksLoading.set(this.allFlocksData().length === 0);
     const requests = this.flocksList().map(f =>
       this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${f.id}`)
         .pipe(map(res => ({ ...res, flock_id: f.id })))
@@ -241,7 +290,10 @@ export class HealthScoreWidgetComponent implements OnInit {
     forkJoin(requests).subscribe({
       next: (results) => {
         // الأسوأ حالاً (أقل سكور) فوق، عشان يلفت النظر الأول
-        this.allFlocksData.set(results.sort((a, b) => a.score - b.score));
+        const sorted = results.sort((a, b) => a.score - b.score);
+        this.allFlocksData.set(sorted);
+        this.allFetched = true;
+        this.writeCache({ all: sorted });
         this.allFlocksLoading.set(false);
       },
       error: () => {
@@ -251,21 +303,27 @@ export class HealthScoreWidgetComponent implements OnInit {
   }
 
   load() {
-    this.loading.set(true);
     this.error.set(false);
     this.showFactors.set(false); // نقفل تفاصيل الأسباب لما نغيّر القطيع/نعيد التحميل
     const id = this.selectedFlockId();
     if (id) this.flockSelected.emit(id);
+
+    // آخر درجة صحة محفوظة للقطيع ده تظهر فوراً (وتفضل لو السيرفر مردّش)
+    const cachedScore: HealthScoreData | undefined = id ? this.readCache().scores?.[id] : undefined;
+    if (cachedScore) this.data.set(cachedScore);
+    this.loading.set(!cachedScore);
     const params = id ? `?flock_id=${id}` : '';
 
     this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score${params}`).subscribe({
       next: (res) => {
         this.data.set(res);
         this.loading.set(false);
+        if (id) this.writeCache({ scores: { ...(this.readCache().scores || {}), [id]: res } });
       },
       error: () => {
         this.loading.set(false);
-        this.error.set(true);
+        // لو فيه نسخة محفوظة معروضة بنسيبها؛ الخطأ بيظهر بس لو مفيش حاجة نعرضها
+        if (!cachedScore) this.error.set(true);
       }
     });
   }
