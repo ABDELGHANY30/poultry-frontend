@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { environment } from '../../../environments/environment';
 import { User, AuthResponse } from '../models';
-import { OfflineStoreService } from './offline-store.service';
+import { UserOfflineCacheService } from './user-offline-cache.service';
 
 // المفاتيح دي بتتستخدم على الموبايل (Capacitor) بس. على الويب مفيش أي حاجة بتتخزن في المتصفح:
 // التوكن في cookie HttpOnly بيحطها السيرفر، والـ user بييجي من /auth/me.
@@ -17,7 +17,7 @@ const USER_KEY  = 'spa_user';
 export class AuthService {
   private http   = inject(HttpClient);
   private router = inject(Router);
-  private offline = inject(OfflineStoreService);
+  private offline = inject(UserOfflineCacheService);
 
   readonly isNative = Capacitor.isNativePlatform();
 

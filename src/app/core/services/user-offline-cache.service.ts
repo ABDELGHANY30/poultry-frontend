@@ -17,7 +17,7 @@ const PREFIX = 'off:';
 const KEEP_ON_LOGOUT = ['pending_records', 'failed_records'];
 
 @Injectable({ providedIn: 'root' })
-export class OfflineStoreService {
+export class UserOfflineCacheService {
   readonly enabled = Capacitor.isNativePlatform();
 
   private k(userId: string, key: string): string { return `${PREFIX}${userId}:${key}`; }

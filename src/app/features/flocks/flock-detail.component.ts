@@ -7,7 +7,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { FlockService } from '../../core/services/flock.service';
 import { AuthService } from '../../core/services/auth.service';
-import { OfflineStoreService } from '../../core/services/offline-store.service';
+import { UserOfflineCacheService } from '../../core/services/user-offline-cache.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
 // ⚠️ الملفات دي حطها في src/app/shared/widgets/ (أو عدّل المسار حسب مكان ما تحطها فعلاً)
@@ -995,7 +995,7 @@ export class FlockDetailComponent implements OnInit {
   private svc   = inject(FlockService);
   private http  = inject(HttpClient);
   private auth  = inject(AuthService);
-  private store = inject(OfflineStoreService);
+  private store = inject(UserOfflineCacheService);
 
   flock     = signal<Flock | null>(null);
   analytics = signal<FlockAnalytics | null>(null);
@@ -1091,7 +1091,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   // 📴 تخزين الأوفلاين — موبايل بس (على الويب مفيش تخزين في المتصفح)، ومربوط بمعرّف المستخدم الحالي
-  // عشان مستخدم تاني على نفس الجهاز مايشوفش ولا يبعت بيانات غيره. التفاصيل في OfflineStoreService.
+  // عشان مستخدم تاني على نفس الجهاز مايشوفش ولا يبعت بيانات غيره. التفاصيل في UserOfflineCacheService.
   offlineEnabled = this.store.enabled;
   private cacheSet(key: string, value: any): Promise<boolean> {
     return this.auth.currentUserId().then(uid => this.store.set(uid, key, value));
