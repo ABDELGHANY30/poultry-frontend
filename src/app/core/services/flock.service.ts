@@ -50,7 +50,13 @@ export class FlockService {
       eggCount: raw.egg_count ?? raw.eggCount ?? null,
       brokenEggCount: raw.broken_egg_count ?? raw.brokenEggCount ?? null,
       notes: raw.notes ?? null,
-      createdAt: raw.created_at || raw.createdAt
+      createdAt: raw.created_at || raw.createdAt,
+      // 👤 مين سجّل ومين عدّل آخر مرة (null للسجلات القديمة)
+      createdById: raw.created_by_id ?? raw.createdById ?? null,
+      createdByName: raw.created_by_name ?? raw.createdByName ?? null,
+      updatedById: raw.updated_by_id ?? raw.updatedById ?? null,
+      updatedByName: raw.updated_by_name ?? raw.updatedByName ?? null,
+      updatedAt: raw.updated_at ?? raw.updatedAt ?? null
     } as DailyRecord;
   }
 

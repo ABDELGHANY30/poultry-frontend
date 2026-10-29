@@ -9,7 +9,7 @@ import {
   RouterOutlet
 } from "@angular/router";
 import { Component, inject, NgZone, OnInit } from "@angular/core";
-import { OfflineSyncService } from './core/services/offline-sync.service';
+import { OfflineSyncService } from './core/services/offline-store.service';
 import { AdsService } from './core/services/ads.service';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { SplashComponent } from './features/splash/splash.component';

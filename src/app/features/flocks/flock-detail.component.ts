@@ -1,10 +1,13 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { FlockService } from '../../core/services/flock.service';
+import { AuthService } from '../../core/services/auth.service';
+import { OfflineStoreService } from '../../core/services/offline-store.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
 // ⚠️ الملفات دي حطها في src/app/shared/widgets/ (أو عدّل المسار حسب مكان ما تحطها فعلاً)
@@ -143,7 +146,7 @@ const TURKEY_VACC = [
 
     <!-- 📆 برنامج الدورة — فوق الفورم: معروض يوم النهاردة بس، وباقي الأيام/المراحل بتظهر بالضغط -->
     <div class="card mb-4" *ngIf="cycleProgram() as cp">
-      <h2 class="section-title mb-3">📆 برنامج الدورة</h2>
+      <h2 class="section-title mb-3">📆 برنامج الدورة <span *ngIf="cp.offline" class="text-[10px] font-normal text-gray-500">(📴 من النسخة المخزّنة)</span></h2>
 
       <div *ngIf="!cp.has_program" class="text-center py-3 text-[var(--c-muted)] text-sm">{{ cp.message }}</div>
 
@@ -232,34 +235,114 @@ const TURKEY_VACC = [
           <p class="text-[10px] text-gray-400 border-t pt-1">المصدر: {{ hg.source }}</p>
         </div>
 
-        <!-- 🗓️ كل الأيام/المراحل — مخفية لحد ما المستخدم يضغط، وكل مرحلة بتتفتح بالضغط عليها -->
+        <!-- 🗓️ كل الأيام — مخفية لحد ما المستخدم يضغط، وكل يوم بيتفتح بالضغط عليه -->
         <button type="button" (click)="toggleFullProgram()" class="text-xs font-bold text-green-600 mt-2">
-          {{ showFullProgram() ? 'إخفاء باقي الأيام ▲' : 'عرض كل الأيام (' + (cp.phases?.length || 0) + ' مراحل) ▼' }}
+          {{ showFullProgram() ? 'إخفاء باقي الأيام ▲' : 'عرض كل الأيام ▼' }}
         </button>
-        <div *ngIf="showFullProgram()" class="mt-2 space-y-1.5">
-          <div *ngIf="!cp.phases || cp.phases.length === 0" class="text-xs text-[var(--c-muted)]">مفيش مراحل متسجلة لهذا النوع.</div>
-          <div *ngFor="let p of cp.phases; let i = index" class="rounded-lg text-xs overflow-hidden"
-               [class.bg-green-100]="i === cp.today_phase_index" [class.bg-gray-50]="i !== cp.today_phase_index">
-            <button type="button" (click)="togglePhase(i)" class="w-full flex items-center justify-between gap-2 p-2 text-right">
-              <span class="font-bold">
-                يوم {{ p.day_from }}–{{ (p.day_to === 999 || p.day_to === 9999) ? 'النهاية' : p.day_to }}: {{ p.phase_label }}
-                <span *ngIf="i === cp.today_phase_index" class="text-green-700 font-black"> ← احنا هنا</span>
-              </span>
-              <span class="text-gray-400 shrink-0">{{ expandedPhase() === i ? '▲' : '▼' }}</span>
-            </button>
-            <div *ngIf="expandedPhase() === i" class="px-2 pb-2 space-y-1">
-              <p *ngIf="p.target_weight && p.target_weight !== '—'">
-                <span class="text-[var(--c-muted)]">الوزن المستهدف:</span> <span class="font-bold">{{ p.target_weight }}</span>
-              </p>
-              <ul *ngIf="p.actions?.length" class="space-y-0.5">
-                <li *ngFor="let a of p.actions">• {{ a }}</li>
-              </ul>
-              <p *ngIf="p.warning" class="text-red-600 font-bold">⚠️ {{ p.warning }}</p>
-              <p *ngIf="!p.actions?.length && !p.warning && (!p.target_weight || p.target_weight === '—')" class="text-[var(--c-muted)]">مفيش تفاصيل إضافية للمرحلة دي.</p>
+        <div *ngIf="showFullProgram()" class="mt-2">
+
+          <!-- ✅ يوم بيوم (من البرنامج الكامل المخزّن على الجهاز) -->
+          <div *ngIf="fullProgram() as fp; else phasesFallback" class="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+            <div *ngFor="let d of fp.days" class="rounded-lg text-xs overflow-hidden"
+                 [class.bg-green-100]="d.day === todayProgramDay()" [class.bg-gray-50]="d.day !== todayProgramDay()">
+              <button type="button" (click)="toggleDay(d.day)" class="w-full flex items-center justify-between gap-2 p-2 text-right">
+                <span class="font-bold">
+                  يوم {{ d.day }}
+                  <span class="font-normal text-[var(--c-muted)]">— {{ dayPhase(d)?.phase_label }}</span>
+                  <span *ngIf="d.day === todayProgramDay()" class="text-green-700 font-black"> ← النهاردة</span>
+                  <span *ngIf="vaccsForDay(d.day).length"> 💉</span>
+                  <span *ngIf="dayHasNewTreatment(d)"> 💊</span>
+                </span>
+                <span class="text-gray-400 shrink-0">{{ expandedDay() === d.day ? '▲' : '▼' }}</span>
+              </button>
+
+              <div *ngIf="expandedDay() === d.day" class="px-2 pb-2 space-y-1.5">
+                <div class="grid grid-cols-2 gap-1">
+                  <p *ngIf="d.temperature != null"><span class="text-[var(--c-muted)]">الحرارة:</span> <span class="font-bold">{{ d.temperature }}°م</span></p>
+                  <p *ngIf="d.weight_g != null"><span class="text-[var(--c-muted)]">الوزن المستهدف:</span> <span class="font-bold">{{ d.weight_g }} جم</span></p>
+                  <p *ngIf="d.feed_g_per_bird != null"><span class="text-[var(--c-muted)]">العلف:</span> <span class="font-bold">{{ d.feed_g_per_bird }} جم/{{ birdUnit() }}</span></p>
+                  <p *ngIf="d.water_ml_per_bird != null"><span class="text-[var(--c-muted)]">الماء:</span> <span class="font-bold">{{ d.water_ml_per_bird }} مل/{{ birdUnit() }}</span></p>
+                </div>
+                <p *ngIf="dayTotalFeedKg(d) !== null">
+                  <span class="text-[var(--c-muted)]">إجمالي العلف للقطيع:</span> <span class="font-bold text-green-700">{{ dayTotalFeedKg(d) }} كجم</span>
+                </p>
+                <p *ngIf="d.lighting as lt" class="bg-white rounded p-1.5">
+                  💡 <span class="font-bold" *ngIf="lt.light_hours != null">{{ lt.light_hours }} ساعة ضوء / {{ lt.dark_hours }} ساعة ظلام — </span>{{ lt.note }}
+                </p>
+
+                <div *ngIf="vaccsForDay(d.day).length">
+                  <p class="font-bold">💉 تحصينات اليوم:</p>
+                  <p *ngFor="let v of vaccsForDay(d.day)">• {{ v.nameAr }}<span *ngIf="v.method"> ({{ v.method }})</span></p>
+                </div>
+
+                <div *ngIf="d.treatments?.length">
+                  <p class="font-bold">💊 علاجات/مكملات:</p>
+                  <p *ngFor="let t of d.treatments">• {{ t.name_ar }}<span *ngIf="t.starts_this_day" class="text-green-700 font-bold"> (بداية)</span><span *ngIf="t.note" class="text-[var(--c-muted)]"> — {{ t.note }}</span></p>
+                </div>
+
+                <ng-container *ngIf="dayPhase(d) as ph">
+                  <p class="font-bold">✅ إجراءات المرحلة ("{{ ph.phase_label }}"):</p>
+                  <ul class="space-y-0.5">
+                    <li *ngFor="let a of ph.actions">• {{ a }}</li>
+                  </ul>
+                  <p *ngIf="ph.warning" class="text-red-600 font-bold">⚠️ {{ ph.warning }}</p>
+                </ng-container>
+              </div>
             </div>
+            <p *ngIf="fp.open_ended" class="text-[10px] text-gray-400">بعد يوم {{ fp.last_day }} بيستمر نفس نظام آخر مرحلة.</p>
           </div>
+
+          <!-- ↩️ لو البرنامج الكامل مش متاح (سيرفر قديم ومفيش نسخة مخزّنة): قايمة المراحل زي الأول -->
+          <ng-template #phasesFallback>
+            <div class="space-y-1.5">
+              <div *ngIf="!cp.phases || cp.phases.length === 0" class="text-xs text-[var(--c-muted)]">مفيش مراحل متسجلة لهذا النوع.</div>
+              <div *ngFor="let p of cp.phases; let i = index" class="rounded-lg text-xs overflow-hidden"
+                   [class.bg-green-100]="i === cp.today_phase_index" [class.bg-gray-50]="i !== cp.today_phase_index">
+                <button type="button" (click)="togglePhase(i)" class="w-full flex items-center justify-between gap-2 p-2 text-right">
+                  <span class="font-bold">
+                    يوم {{ p.day_from }}–{{ (p.day_to === 999 || p.day_to === 9999) ? 'النهاية' : p.day_to }}: {{ p.phase_label }}
+                    <span *ngIf="i === cp.today_phase_index" class="text-green-700 font-black"> ← احنا هنا</span>
+                  </span>
+                  <span class="text-gray-400 shrink-0">{{ expandedPhase() === i ? '▲' : '▼' }}</span>
+                </button>
+                <div *ngIf="expandedPhase() === i" class="px-2 pb-2 space-y-1">
+                  <p *ngIf="p.target_weight && p.target_weight !== '—'">
+                    <span class="text-[var(--c-muted)]">الوزن المستهدف:</span> <span class="font-bold">{{ p.target_weight }}</span>
+                  </p>
+                  <ul *ngIf="p.actions?.length" class="space-y-0.5">
+                    <li *ngFor="let a of p.actions">• {{ a }}</li>
+                  </ul>
+                  <p *ngIf="p.warning" class="text-red-600 font-bold">⚠️ {{ p.warning }}</p>
+                </div>
+              </div>
+            </div>
+          </ng-template>
         </div>
       </div>
+    </div>
+
+    <!-- 📴 حالة الأوفلاين: سجلات محفوظة على الجهاز بانتظار النت -->
+    <div *ngIf="isOffline() || pendingRecords().length || failedRecords().length || offlineSavedNotice() || syncMessage()" class="mb-4 space-y-2">
+      <div *ngIf="isOffline() && offlineEnabled" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
+        📴 مفيش نت دلوقتي — سجّل بياناتك عادي، هتتحفظ على جهازك وتتبعت أول ما النت يرجع.
+      </div>
+      <div *ngIf="isOffline() && !offlineEnabled" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
+        📴 مفيش نت دلوقتي — على الويب لازم نت عشان تسجّل. تطبيق الموبايل بيدعم التسجيل من غير نت.
+      </div>
+      <div *ngIf="offlineSavedNotice() as msg" class="rounded-xl bg-green-50 border border-green-300 p-3 text-sm text-green-800 font-bold">{{ msg }}</div>
+      <div *ngIf="pendingRecords().length" class="rounded-xl bg-amber-50 border border-amber-300 p-3 text-xs text-amber-900">
+        <p class="font-bold mb-1">⏳ {{ pendingRecords().length }} سجل محفوظ على جهازك بانتظار الإرسال:</p>
+        <p>{{ pendingDatesLabel() }}</p>
+        <button *ngIf="!isOffline()" type="button" (click)="syncPending()" [disabled]="syncingPending()" class="mt-2 font-bold text-green-700">
+          {{ syncingPending() ? 'جاري الإرسال...' : 'ابعتهم دلوقتي' }}
+        </button>
+      </div>
+      <div *ngIf="failedRecords().length" class="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">
+        <p class="font-bold mb-1">⚠️ {{ failedRecords().length }} سجل السيرفر رفضه ومتبعتش:</p>
+        <p *ngFor="let f of failedRecords()">• {{ f.date }} — {{ f.reason }}</p>
+        <button type="button" (click)="dismissFailed()" class="mt-2 font-bold">تجاهل</button>
+      </div>
+      <div *ngIf="syncMessage() as msg" class="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 font-bold">{{ msg }}</div>
     </div>
 
     <!-- 🔔 القسم الرئيسي المتغيّر: إما فورم تسجيل بيانات اليوم، أو ملخص اليوم (صحة + أوزان) -->
@@ -680,7 +763,10 @@ const TURKEY_VACC = [
                 <td class="py-2 px-2">{{ r.feedConsumedKg ?? r.feed_consumed_kg ?? '-' }}</td>
                 <td class="py-2 px-2">{{ recordWeightOf(r) ?? '-' }}</td>
                 <td class="py-2 px-2">{{ r.humidityPercent ?? r.humidity_percent ?? '-' }}</td>
-                <td class="py-2 px-2 text-[11px] text-[var(--c-muted)]">{{ recordedByMap()[r.id] || '—' }}</td>
+                <td class="py-2 px-2 text-[11px] text-[var(--c-muted)]">
+                  <p>{{ authorOf(r) || '—' }}</p>
+                  <p *ngIf="editorOf(r) as ed" class="text-[10px] text-amber-600">✏️ عدّله {{ ed }} · {{ r.updatedAt | date:'d/M h:mm a' }}</p>
+                </td>
                 <td class="py-2 px-2 whitespace-nowrap">
                   <ng-container *ngIf="myAccess()?.is_owner !== false">
                     <button type="button" (click)="startEditRecord(r)" class="text-xs text-blue-600 font-bold ml-2">✏️ تعديل</button>
@@ -908,6 +994,8 @@ export class FlockDetailComponent implements OnInit {
   private router = inject(Router);
   private svc   = inject(FlockService);
   private http  = inject(HttpClient);
+  private auth  = inject(AuthService);
+  private store = inject(OfflineStoreService);
 
   flock     = signal<Flock | null>(null);
   analytics = signal<FlockAnalytics | null>(null);
@@ -975,6 +1063,194 @@ export class FlockDetailComponent implements OnInit {
   // 🗓️ المرحلة المفتوحة حاليًا في الخط الزمني الكامل (null = كلها مقفولة)
   expandedPhase = signal<number | null>(null);
   togglePhase(i: number) { this.expandedPhase.update(v => v === i ? null : i); }
+
+  // 📴 برنامج الدورة الكامل يوم بيوم — بيتخزّن على الجهاز عشان يشتغل من غير نت
+  fullProgram = signal<any | null>(null);
+  expandedDay = signal<number | null>(null);
+  toggleDay(day: number) { this.expandedDay.update(v => v === day ? null : day); }
+  dayPhase(d: any): any | null {
+    const fp = this.fullProgram();
+    return fp && d?.phase_index !== null && d?.phase_index !== undefined ? (fp.phases?.[d.phase_index] ?? null) : null;
+  }
+  vaccsForDay(day: number): any[] { return this.vaccSchedule().filter((v: any) => v.day === day); }
+  dayHasNewTreatment(d: any): boolean { return (d?.treatments || []).some((t: any) => t.starts_this_day); }
+  birdUnit(): string { return String(this.flock()?.type || '').startsWith('rabbit') ? 'رأس' : 'طائر'; }
+  dayTotalFeedKg(d: any): number | null {
+    const n = this.flock()?.currentCount;
+    return d?.feed_g_per_bird != null && n ? Math.round((d.feed_g_per_bird * n) / 100) / 10 : null;
+  }
+  todayProgramDay(): number | null {
+    const cp = this.cycleProgram();
+    if (!cp?.has_program || cp.age_days == null) return null;
+    return cp.is_repeating ? cp.age_days : Math.max(cp.age_days, 1);
+  }
+
+  // 📅 تاريخ النهاردة بالتوقيت المحلي للجهاز (toISOString بيرجّع UTC وبيغلّط اليوم بين 12 والـ 3 الفجر بتوقيت مصر)
+  private localDateStr(d: Date = new Date()): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // 📴 تخزين الأوفلاين — موبايل بس (على الويب مفيش تخزين في المتصفح)، ومربوط بمعرّف المستخدم الحالي
+  // عشان مستخدم تاني على نفس الجهاز مايشوفش ولا يبعت بيانات غيره. التفاصيل في OfflineStoreService.
+  offlineEnabled = this.store.enabled;
+  private cacheSet(key: string, value: any): Promise<boolean> {
+    return this.auth.currentUserId().then(uid => this.store.set(uid, key, value));
+  }
+  private cacheGet(key: string): Promise<any | null> {
+    return this.auth.currentUserId().then(uid => this.store.get(uid, key));
+  }
+
+  // 📴 سجلات اتسجلت من غير نت — بتستنى على الجهاز لحد ما النت يرجع وبعدين بتتبعت
+  private readonly PENDING_KEY = 'pending_records';
+  private readonly FAILED_KEY = 'failed_records';
+  private activeFlockId: string | null = null;
+  isOffline = signal(typeof navigator !== 'undefined' && !navigator.onLine);
+  pendingRecords = signal<any[]>([]);              // سجلات القطيع المفتوح بس (للمستخدم الحالي بس)
+  failedRecords = signal<any[]>([]);               // سجلات السيرفر رفضها — بتتعرض عشان المستخدم يشوفها (مش بتتمسح بصمت)
+  syncingPending = signal(false);
+  syncMessage = signal<string | null>(null);
+  offlineSavedNotice = signal<string | null>(null);
+  pendingDatesLabel = () => this.pendingRecords().map(p => p.date).join('، ');
+
+  // قفل بسيط: قراءة-تعديل-كتابة الطابور بتحصل واحدة ورا التانية (تسجيل جديد + مزامنة في نفس الوقت)
+  private qLock: Promise<unknown> = Promise.resolve();
+  private withQueueLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.qLock.then(fn, fn);
+    this.qLock = run.catch(() => undefined);
+    return run;
+  }
+
+  private async readQueue(): Promise<any[]> {
+    const q = await this.cacheGet(this.PENDING_KEY);
+    return Array.isArray(q) ? q : [];
+  }
+  private async writeQueue(q: any[]): Promise<boolean> {
+    const ok = await this.cacheSet(this.PENDING_KEY, q);
+    await this.refreshPendingSignal();
+    return ok;
+  }
+  private async refreshPendingSignal() {
+    const q = await this.readQueue();
+    this.pendingRecords.set(q.filter(x => x.flockId === this.activeFlockId));
+    const f = await this.cacheGet(this.FAILED_KEY);
+    this.failedRecords.set((Array.isArray(f) ? f : []).filter((x: any) => x.flockId === this.activeFlockId));
+  }
+  /** بترجّع false لو التخزين فشل (مساحة ممتلية / مفيش مستخدم معروف) — ساعتها ماننفعش نقول للمستخدم "اتحفظ" */
+  private queueRecord(item: { kind: 'create' | 'patch'; flockId: string; recordId?: string | null; date: string; payload: any }): Promise<boolean> {
+    return this.withQueueLock(async () => {
+      const uid = await this.auth.currentUserId();
+      if (!uid) return false;
+      // نفس القطيع + نفس اليوم + نفس النوع → آخر نسخة بتحل محل القديمة
+      const q = (await this.readQueue()).filter(x => !(x.flockId === item.flockId && x.date === item.date
+        && x.kind === item.kind && (x.recordId ?? null) === (item.recordId ?? null)));
+      q.push({ ...item, userId: uid, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, queuedAt: new Date().toISOString() });
+      return this.writeQueue(q);
+    });
+  }
+  private removeFromQueue(id: string): Promise<boolean> {
+    return this.withQueueLock(async () => this.writeQueue((await this.readQueue()).filter(x => x.id !== id)));
+  }
+  /** بتقارن القيم المهمة بين السجل المخزّن وسجل السيرفر (null / '' / 0 بتتعامل كـ "فاضي" — السيرفر بيحوّل الفاضي لـ 0 أو null) */
+  private sameRecordValues(payload: any, server: any): boolean {
+    const norm = (v: any) => (v === null || v === undefined || v === '' || Number(v) === 0)
+      ? 0 : (isNaN(Number(v)) ? String(v).trim() : Number(v));
+    return ['mortality', 'feed_consumed_kg', 'temperature_celsius', 'avg_weight_kg', 'water_consumed_l', 'egg_count', 'broken_egg_count', 'notes']
+      .every(k => norm(payload?.[k]) === norm(server?.[k]));
+  }
+  private markFailed(item: any, reason: string): Promise<boolean> {
+    return this.withQueueLock(async () => {
+      const f = await this.cacheGet(this.FAILED_KEY);
+      const list = Array.isArray(f) ? f : [];
+      list.push({ ...item, reason, failedAt: new Date().toISOString() });
+      return this.cacheSet(this.FAILED_KEY, list);
+    });
+  }
+  async dismissFailed() {
+    await this.withQueueLock(async () => {
+      const f = await this.cacheGet(this.FAILED_KEY);
+      await this.cacheSet(this.FAILED_KEY, (Array.isArray(f) ? f : []).filter((x: any) => x.flockId !== this.activeFlockId));
+    });
+    await this.refreshPendingSignal();
+  }
+
+  @HostListener('window:offline')
+  onWentOffline() { this.isOffline.set(true); }
+
+  @HostListener('window:online')
+  onBackOnline() {
+    this.isOffline.set(false);
+    if (this.activeFlockId) this.loadCycleProgram(this.activeFlockId); // نجدّد النسخة المخزّنة
+    this.syncPending();
+  }
+
+  // 🔄 يبعت سجلات المستخدم الحالي المحفوظة للسيرفر بالترتيب، وبعدها يحدّث التحليلات والنصايح
+  async syncPending() {
+    if (this.syncingPending() || !navigator.onLine || !this.store.enabled) return;
+    const uid = await this.auth.currentUserId();
+    if (!uid) return;
+    // دفاع إضافي: التخزين أصلاً مفصول لكل مستخدم، وده يضمن إننا مانبعتش سجل اتخزّن باسم مستخدم تاني
+    const queue = (await this.readQueue()).filter(x => !x.userId || x.userId === uid);
+    if (!queue.length) return;
+    this.syncingPending.set(true);
+
+    let sent = 0, failed = 0;
+    const existingByFlock: Record<string, Record<string, any>> = {}; // تاريخ → صف السجل كما رجع من السيرفر
+    for (const item of queue) {
+      try {
+        if (item.kind === 'create') {
+          if (!existingByFlock[item.flockId]) {
+            const rows = await firstValueFrom(this.http.get<any[]>(`${environment.apiUrl}/flocks/${item.flockId}/records`));
+            const m: Record<string, any> = {};
+            (rows || []).forEach(r => { const d = this.recordDateStr(r); if (d) m[d] = r; });
+            existingByFlock[item.flockId] = m;
+          }
+          const existing = existingByFlock[item.flockId][item.date];
+          if (existing) {
+            // 🛡️ فيه سجل لنفس اليوم على السيرفر — مانكتبش فوقه (ممكن يكون لعضو تاني، وتعديل النفوق بيغيّر عدد الطيور)
+            if (this.sameRecordValues(item.payload, existing)) {
+              // نفس القيم بالظبط (غالبًا الإرسال الأول وصل والرد ضاع) — مفيش حاجة نبعتها
+              await this.removeFromQueue(item.id);
+              sent++;
+              continue;
+            }
+            const who = existing.created_by_name ? ` (سجّله ${existing.created_by_name})` : '';
+            const saved = await this.markFailed(item, `فيه سجل مختلف لنفس اليوم على السيرفر${who} — مااتكتبش فوقه`);
+            if (!saved) break;
+            await this.removeFromQueue(item.id);
+            failed++;
+            continue;
+          }
+          await firstValueFrom(this.svc.addRecord(item.payload));
+        } else {
+          // تعديل مقصود من المستخدم لسجل معروف
+          const fields = { ...item.payload };
+          delete fields.flock_id; delete fields.record_date; delete fields.water_consumed_l;
+          await firstValueFrom(this.http.patch<any>(`${environment.apiUrl}/flocks/${item.flockId}/records/${item.recordId}`, fields));
+        }
+        await this.removeFromQueue(item.id);
+        sent++;
+      } catch (err: any) {
+        const st = err?.status;
+        if (!st || st === 401 || st >= 500) break; // مش وقته (نت/سيرفر/جلسة منتهية) — نسيبه ونحاول تاني
+        // رفض نهائي (400/403/404/409/422...): نحفظه في قايمة "المرفوضة" الأول، وبعدها بس نشيله من الطابور — مفيش بيانات بتضيع بصمت
+        const detail = err?.error?.detail;
+        const saved = await this.markFailed(item, typeof detail === 'string' ? detail : `خطأ ${st}`);
+        if (!saved) break;
+        await this.removeFromQueue(item.id);
+        failed++;
+      }
+    }
+
+    this.syncingPending.set(false);
+    await this.refreshPendingSignal();
+    if (sent || failed) {
+      this.syncMessage.set(sent
+        ? `✅ اتبعت ${sent} سجل للسيرفر وجاري تحديث التحليلات${failed ? ` — و${failed} سجل السيرفر رفضه (شوفهم تحت)` : ''}`
+        : `⚠️ ${failed} سجل السيرفر رفضه — شوفهم تحت`);
+      setTimeout(() => this.syncMessage.set(null), 7000);
+      if (this.activeFlockId) this.loadData(this.activeFlockId); // 🔄 السجلات + التحليلات + النصايح بالداتا الجديدة
+    }
+  }
 
   /** إجمالي العلف المطلوب (كجم) للقطيع كله النهاردة = المستهدف للطائر × العدد المسجل حاليًا */
   todayTotalFeedKg = (): number | null => {
@@ -1056,8 +1332,9 @@ export class FlockDetailComponent implements OnInit {
 
   // ✅ هل اتسجلت بيانات النهاردة للقطيع المفتوح؟
   hasTodayRecord = () => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return this.records().some(r => this.recordDateStr(r) === todayStr);
+    const todayStr = this.localDateStr();
+    return this.records().some(r => this.recordDateStr(r) === todayStr)
+      || this.pendingRecords().some(p => p.kind === 'create' && p.date === todayStr);
   };
 
   // 📋 نعرض فورم التسجيل لو: لسه محسجلش النهاردة ومحطتش تخطي، أو المستخدم فتحه يدويًا
@@ -1076,7 +1353,7 @@ export class FlockDetailComponent implements OnInit {
   skipToday() {
     const id = this.flock()?.id;
     if (!id) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = this.localDateStr();
     localStorage.setItem(`daily_reminder_skip:${id}:${todayStr}`, '1');
     this.skippedToday.set(true);
   }
@@ -1155,8 +1432,52 @@ export class FlockDetailComponent implements OnInit {
 
   // 📆 برنامج الدورة يوم بيوم
   loadCycleProgram(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program`)
-      .subscribe({ next: (res) => this.cycleProgram.set(res), error: () => this.cycleProgram.set(null) });
+    const cacheKey = `cycle_full:${flockId}`;
+    // البرنامج الكامل: من السيرفر لو فيه نت (ونخزّنه للمستخدم الحالي بس)، وإلا من نسخته المخزّنة
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program/full`).subscribe({
+      next: (res) => {
+        if (res?.has_program) { this.fullProgram.set(res); void this.cacheSet(cacheKey, res); }
+        else this.fullProgram.set(null);
+      },
+      error: async () => this.fullProgram.set(await this.cacheGet(cacheKey)),
+    });
+    // مستهدفات اليوم: من السيرفر (فيها النصايح)، ولو مفيش نت نحسبها من النسخة المخزّنة
+    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program`).subscribe({
+      next: (res) => this.cycleProgram.set(res),
+      error: async () => this.cycleProgram.set(await this.offlineTodayProgram(flockId, await this.cacheGet(cacheKey))),
+    });
+  }
+
+  // 📴 نفس شكل رد /cycle-program بس محسوب محليًا من البرنامج الكامل المخزّن (من غير نصايح — دي محتاجة السيرفر)
+  private async offlineTodayProgram(flockId: string, full: any): Promise<any | null> {
+    if (!full?.has_program) return null;
+    const startStr = this.flock()?.startDate ?? (await this.cacheGet(`flock_cache:${flockId}`))?.startDate;
+    if (!startStr) return null;
+    const parts = String(startStr).split('T')[0].split('-');
+    if (parts.length !== 3) return null;
+    const start = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const today = new Date();
+    start.setHours(0, 0, 0, 0); today.setHours(0, 0, 0, 0);
+    const raw = Math.max(0, Math.round((today.getTime() - start.getTime()) / 86400000));
+    const age = full.is_repeating ? raw % full.cycle_length : raw;
+    const lookup = full.is_repeating ? age : Math.max(age, 1);
+    const days: any[] = full.days || [];
+    const d = days.find(x => x.day === lookup) ?? (lookup > full.last_day ? days[days.length - 1] : days[0]);
+    if (!d) return null;
+    const phase = d.phase_index != null ? (full.phases?.[d.phase_index] ?? null) : null;
+    return {
+      has_program: true, offline: true,
+      age_days: age, is_repeating: full.is_repeating,
+      cycle_number: full.is_repeating ? Math.floor(raw / full.cycle_length) + 1 : null,
+      today_phase: phase, today_phase_index: d.phase_index,
+      is_phase_transition_today: !!phase && phase.day_from === lookup && lookup > (full.first_day ?? 1),
+      phases: full.phases,
+      target_temperature_today: d.temperature, target_weight_g_today: d.weight_g,
+      target_feed_g_per_bird_today: d.feed_g_per_bird, target_water_ml_today: d.water_ml_per_bird,
+      lighting_today: d.lighting,
+      advice: [], housing_note: null, housing_guide: null, breed_matched: false,
+      feed_amount_note: '📴 الأرقام دي من نسخة مخزّنة على جهازك. نصايح اليوم (مقارنة سجلاتك بالمستهدف) هتظهر أول ما النت يرجع.',
+    };
   }
 
   // 📊 تقرير الالتزام بالبرنامج على مدار الدورة كاملة
@@ -1324,6 +1645,18 @@ export class FlockDetailComponent implements OnInit {
   // 📜 مساعدين لعرض جدول السجلات السابقة بأي صيغة حقول جاية (camelCase/snake_case)
   recordDateOf(r: any): string { return this.recordDateStr(r); }
   recordWeightOf(r: any): number | null { return this.recordWeight(r); }
+  // 👤 مين سجّل / مين عدّل — الاسم من السجل نفسه (الـ API الجديد)، وخريطة recorded-by القديمة كاحتياطي
+  private myUserId(): string | null { const id = (this.auth.currentUser() as any)?.id; return id != null ? String(id) : null; }
+  authorOf(r: any): string | null {
+    const name = r?.createdByName ?? this.recordedByMap()[r?.id] ?? null;
+    if (!name) return null;
+    return r.createdById && r.createdById === this.myUserId() ? 'أنت' : name;
+  }
+  editorOf(r: any): string | null {
+    if (!r?.updatedByName || !r?.updatedAt) return null;
+    return r.updatedById && r.updatedById === this.myUserId() ? 'أنت' : r.updatedByName;
+  }
+
   pastRecordsSorted = () => this.records().slice().sort((a, b) => this.recordDateStr(b).localeCompare(this.recordDateStr(a)));
 
   startEditRecord(r: any) {
@@ -1599,19 +1932,23 @@ vaccSchedule = () => {
     this.route.queryParamMap.subscribe(qp => {
       this.promptDaily.set(qp.get('prompt') === 'daily');
     });
+
+    this.syncPending(); // 📴 لو فيه سجلات متخزّنة من وقت ما النت كان فاصل
   }
 
   loadData(id: string) {
+    this.activeFlockId = id;
+    this.refreshPendingSignal();
     // 🔁 إعادة ضبط حالة الفورم/التخطي لأي قطيع جديد (الكومبوننت بيتعاد استخدامه)
     this.showFormManually.set(false);
     this.editingRecordId.set(null);
     this.selectedPhotoFile.set(null);
     this.selectedPhotoPreview.set(null);
     this.photoUploadStatus.set('idle');
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = this.localDateStr();
     this.skippedToday.set(localStorage.getItem(`daily_reminder_skip:${id}:${todayStr}`) === '1');
 
-this.svc.getFlock(id).subscribe(dataFromBackend => {
+this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
   if (dataFromBackend) {
     const raw = dataFromBackend as any;
     
@@ -1656,7 +1993,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     const initial = raw.initial_count ?? raw.initialCount ?? 1400;
     const current = raw.current_count ?? raw.currentCount ?? initial;
 
-    this.flock.set({
+    const flockObj: any = {
       id: dataFromBackend.id,
       userId: raw.user_id ?? raw.userId,
       name: dataFromBackend.name,
@@ -1669,9 +2006,14 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       mortalityRate: raw.mortality_rate ?? raw.mortalityRate ?? 0,
       createdAt: raw.created_at ?? raw.createdAt,
       breed: dataFromBackend.breed
-    });
+    };
+    this.flock.set(flockObj);
+    void this.cacheSet(`flock_cache:${id}`, flockObj); // 📴 نسخة محلية (موبايل بس، ومربوطة بالمستخدم) عشان الشاشة تفتح من غير نت
   }
-});
+}, error: async () => {
+  const cached = await this.cacheGet(`flock_cache:${id}`);
+  if (cached) this.flock.set(cached);
+} });
     this.svc.getAnalytics(id).subscribe(a => this.analytics.set(a));
     this.loadHealthScore(id);
     this.loadTodayEvents(id);
@@ -1689,8 +2031,8 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
                                   // (شوف الشرط if (!flockId || !row.dbId) return;)
     // 🥚 تحميل السجلات اليومية (بنستخدمها في عرض سجلات البياض + التحقق من تسجيل اليوم)
     this.svc.getRecords(id).subscribe({
-      next: (recs) => this.records.set(recs || []),
-      error: () => this.records.set([])
+      next: (recs) => { this.records.set(recs || []); void this.cacheSet(`records_cache:${id}`, recs || []); },
+      error: async () => this.records.set((await this.cacheGet(`records_cache:${id}`)) ?? [])
     });
     // 👤 مين سجّل كل سجل — منفصلة عن getRecords لأن DailyRecordOut schema لسه مفيهاش recorded_by_user_id
     this.http.get<Record<string, string>>(`${environment.apiUrl}/flocks/${id}/records/recorded-by`)
@@ -1779,7 +2121,7 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     const isEditing = !!this.editingRecordId();
     const targetDateStr = isEditing
       ? (this.editingRecordDate() as string)
-      : new Date().toISOString().split('T')[0];
+      : this.localDateStr();
 
     const commonFields = {
       mortality: this.userInputs.mortality ? Number(this.userInputs.mortality) : 0,
@@ -1803,6 +2145,37 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       this.editingRecordDate.set(null);
     };
 
+    // 📴 مفيش نت: نخزّن السجل على الجهاز (موبايل بس) وهيتبعت أول ما النت يرجع (التحليلات بتتحدّث بعدها)
+    const queueOffline = async () => {
+      if (!this.store.enabled) {
+        // ويب: مفيش تخزين محلي (سياسة الأمان) — مانقدرش نحفظ من غير نت، والبيانات فاضلة في الفورم
+        this.saving.set(false);
+        alert('مفيش اتصال بالنت. على الويب لازم نت عشان تسجّل — جرّب تاني لما النت يرجع، أو استخدم تطبيق الموبايل للتسجيل من غير نت.');
+        return;
+      }
+      const hadPhoto = !!this.selectedPhotoFile();
+      const saved = await this.queueRecord({
+        kind: isEditing ? 'patch' : 'create',
+        flockId,
+        recordId: isEditing ? this.editingRecordId() : null,
+        date: targetDateStr,
+        payload: isEditing ? commonFields : { flock_id: flockId, record_date: targetDateStr, water_consumed_l: null, ...commonFields },
+      });
+      this.saving.set(false);
+      if (!saved) {
+        // ✅ مانقولش "اتحفظ" لو التخزين فشل — وبنسيب البيانات في الفورم عشان متضيعش
+        alert('مقدرناش نحفظ السجل على جهازك (المساحة ممتلية، أو لسه ماسجلتش دخول بالنت على الجهاز ده بعد التحديث). بياناتك لسه في الفورم — جرّب تاني لما النت يرجع.');
+        return;
+      }
+      this.selectedPhotoFile.set(null);
+      this.selectedPhotoPreview.set(null);
+      resetForm();
+      this.showFormManually.set(false);
+      this.offlineSavedNotice.set('✅ اتحفظ على جهازك — هيتبعت للسيرفر أول ما النت يرجع'
+        + (hadPhoto ? ' (الصورة لازم ترفعها تاني بعد ما النت يرجع)' : ''));
+      setTimeout(() => this.offlineSavedNotice.set(null), 8000);
+    };
+
     const onSuccess = (recordId: string) => {
       this.saving.set(false);
       this.savedOk.set(true);
@@ -1824,7 +2197,8 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
     const onError = (err: any) => {
       console.error('تفاصيل الخطأ:', err);
       const status = err?.status;
-      // ✅ خطأ سيرفر (5xx) أو انقطاع (0) على سجل جديد: ممكن السجل يكون اتحفظ فعلاً قبل الخطأ.
+      if (status === 0 && this.store.enabled) { void queueOffline(); return; } // 📴 موبايل بس — على الويب بنكمّل للفحص تحت (ممكن السجل اتحفظ والرد ضاع) // 📴 انقطاع النت: نخزّنه محليًا (ولو كان وصل فعلاً، المزامنة بتعدّله بدل ما تكرره)
+      // ✅ خطأ سيرفر (5xx) على سجل جديد: ممكن السجل يكون اتحفظ فعلاً قبل الخطأ.
       // بنتأكد من السجلات الأول، ولو لقينا سجل النهاردة بنعتبرها نجاح من غير رسالة خطأ.
       if (!isEditing && (status === 0 || status >= 500)) {
         this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/records`).subscribe({
@@ -1839,6 +2213,8 @@ this.svc.getFlock(id).subscribe(dataFromBackend => {
       }
       showError(err);
     };
+
+    if (!navigator.onLine) { void queueOffline(); return; }
 
     if (isEditing) {
       // ✏️ تعديل سجل يوم فات — PATCH على السجل الموجود، من غير ما نغيّر تاريخه

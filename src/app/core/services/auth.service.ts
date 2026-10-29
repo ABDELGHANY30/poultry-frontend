@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { environment } from '../../../environments/environment';
 import { User, AuthResponse } from '../models';
+import { OfflineStoreService } from './offline-store.service';
 
 // المفاتيح دي بتتستخدم على الموبايل (Capacitor) بس. على الويب مفيش أي حاجة بتتخزن في المتصفح:
 // التوكن في cookie HttpOnly بيحطها السيرفر، والـ user بييجي من /auth/me.
@@ -16,6 +17,7 @@ const USER_KEY  = 'spa_user';
 export class AuthService {
   private http   = inject(HttpClient);
   private router = inject(Router);
+  private offline = inject(OfflineStoreService);
 
   readonly isNative = Capacitor.isNativePlatform();
 
@@ -95,7 +97,7 @@ export class AuthService {
 
   private persistMinimalUserNative(user: User) {
     if (!this.isNative) return;
-    const minimal = { name: user.name, language: (user as any).language };
+    const minimal = { id: (user as any).id, name: user.name, language: (user as any).language };
     this.nativeSet(USER_KEY, JSON.stringify(minimal)).catch(() => {});
   }
 
@@ -107,6 +109,24 @@ export class AuthService {
       this.persistMinimalUserNative(user);
     }
     // ويب: الكوكي اتحطت من السيرفر في رد الـ login — مفيش حاجة نخزنها هنا.
+  }
+
+  /**
+   * معرّف المستخدم الحالي — بيستخدمه تخزين الأوفلاين عشان يفصل بيانات كل مستخدم.
+   * أونلاين: من /auth/me. موبايل أوفلاين: من النسخة المصغّرة المحفوظة (ممكن تبقى null لحد أول فتح أونلاين بعد التحديث).
+   * ويب: null لو لسه مفيش user (مفيش تخزين على الويب أصلاً).
+   */
+  async currentUserId(): Promise<string | null> {
+    const u = this._user() as any;
+    if (u?.id != null) return String(u.id);
+    if (!this.isNative) return null;
+    try {
+      const raw = await this.nativeGet(USER_KEY);
+      const id = raw ? JSON.parse(raw)?.id : null;
+      return id != null ? String(id) : null;
+    } catch {
+      return null;
+    }
   }
 
   private async clearAuth(): Promise<void> {
@@ -151,6 +171,9 @@ export class AuthService {
     if (remote && this.isAuthenticated()) {
       this.http.post(`${environment.apiUrl}/auth/auth/logout`, {}).subscribe({ error: () => {} });
     }
+    // 📴 نمسح النسخ المخزّنة للأوفلاين (قطيع/سجلات/برنامج) للمستخدم ده. السجلات اللي لسه ماتبعتتش بتفضل مربوطة بيه هو بس.
+    // بنقرا الـ id قبل clearAuth (اللي بتمسح USER_KEY) — النداءات بتتنفذ بالترتيب.
+    void this.currentUserId().then(uid => this.offline.clearCaches(uid)).catch(() => {});
     void this.clearAuth();
     // الموقع مفتوح للتصفح كزائر، فتسجيل الخروج يرجّعك للداشبورد عادي
     this.router.navigate(['/dashboard']);

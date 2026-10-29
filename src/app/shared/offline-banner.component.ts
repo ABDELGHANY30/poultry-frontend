@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { OfflineSyncService } from '../../app/core/services/offline-sync.service'; // ⚠️ عدّل المسار حسب مكان الملف عندك
+import { OfflineSyncService } from '../core/services/offline-store.service'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
 @Component({
   selector: 'app-offline-banner',
