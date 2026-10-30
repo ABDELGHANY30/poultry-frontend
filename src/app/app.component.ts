@@ -70,7 +70,6 @@ export class AppComponent implements OnInit {
       }
     });
 
-    this.adsService.init();
     this.offlineSync.init();
 
     const lang = (localStorage.getItem('lang') as 'ar' | 'en') ?? 'ar';
@@ -126,7 +125,9 @@ export class AppComponent implements OnInit {
     kbObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   }
 
-  onSplashFinished() {
+  async onSplashFinished() {
     this.splashDone = true;
+    await this.adsService.init();
+    await this.adsService.showBanner('bottom');
   }
 }

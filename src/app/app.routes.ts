@@ -285,7 +285,6 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard'; // 👈 استيراد حارس الأدمن
 import { proGuard } from './core/guards/pro.guard'; // 👈 استيراد حارس الاشتراك Pro
-import { dailyRecordGuard } from './core/guards/daily-record.guard'; // 👈 حارس التذكير بتسجيل بيانات اليوم
 
 import { LayoutComponent } from './layout/layout.component';
 import { SubscriptionComponent } from './features/sub/subscription.component';
@@ -326,7 +325,6 @@ export const routes: Routes = [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {
         path: 'dashboard',
-        canActivate: [dailyRecordGuard],
         loadComponent: () =>
           import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
       },

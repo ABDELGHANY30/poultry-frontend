@@ -31,6 +31,22 @@ const CATEGORIES = [
   template: `
   <div class="page-wrapper" dir="rtl">
 
+    <!-- ⚠️ تنبيه لكل قطيع لسه ماتسجلش له (النهارده / امبارح / عدد أيام) -->
+    <div *ngIf="isLoggedIn() && missedWarnings().length" class="flex flex-col gap-2 mb-3" dir="rtl">
+      <div *ngFor="let w of missedWarnings(); trackBy: trackWarning"
+           class="rounded-2xl border px-4 py-3 flex items-center justify-between gap-3"
+           [ngClass]="w.cls">
+        <div class="min-w-0">
+          <p class="mb-0 text-sm font-bold">⚠️ {{ w.name }}: {{ w.text }}</p>
+          <p *ngIf="w.lastDate" class="mb-0 text-xs opacity-80">آخر تسجيل: {{ w.lastDate }}</p>
+        </div>
+        <a [routerLink]="['/flocks', w.id]" [queryParams]="{ prompt: 'daily' }"
+           class="flex-shrink-0 px-3 py-1.5 rounded-xl bg-white text-xs font-bold no-underline shadow-sm">
+          سجّل دلوقتي
+        </a>
+      </div>
+    </div>
+
     <!-- Welcome Banner -->
     <div class="relative overflow-hidden rounded-3xl text-white px-6 py-6"
          style="background:#1f7d4e">
@@ -720,6 +736,80 @@ getCategoryNameAr(categoryKey: string): string {
     ];
   });
 
+
+  // ══════════════════════════════════════════════════════════════
+  // ⚠️ تنبيه التسجيل اليومي لكل قطيع نشط
+  // flockId -> آخر تاريخ تسجيل (null = مفيش أي سجل). القطيع اللي لسه ماحمّلش مش بيظهر له تنبيه.
+  // ══════════════════════════════════════════════════════════════
+  private lastRecordDates = signal<Record<string, string | null>>({});
+  private lastRecordIdsKey = '';
+
+  private lastRecordsEffect = effect(() => {
+    const logged = this.isLoggedIn();
+    const ids = this.flocks().map((f: any) => f.id).filter(Boolean) as string[];
+    untracked(() => {
+      if (!logged) { this.lastRecordDates.set({}); this.lastRecordIdsKey = ''; return; }
+      const key = ids.join(',');
+      if (key === this.lastRecordIdsKey) return; // نفس القطعان: مفيش داعي نعيد الطلبات
+      this.lastRecordIdsKey = key;
+      ids.forEach(id => this.loadLastRecord(id));
+    });
+  });
+
+  loadLastRecord(flockId: string) {
+    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/records`).subscribe({
+      next: (rows) => {
+        const dates = (rows || [])
+          .map(r => String(r?.record_date ?? r?.recordDate ?? '').slice(0, 10))
+          .filter(Boolean)
+          .sort();
+        const last = dates.length ? dates[dates.length - 1] : null;
+        this.lastRecordDates.update(m => ({ ...m, [flockId]: last }));
+      },
+      error: () => {}, // أوفلاين: مفيش تحذير غلط
+    });
+  }
+
+  private loadAllLastRecords() {
+    if (!this.isLoggedIn()) return;
+    this.flocks().forEach((f: any) => { if (f?.id) this.loadLastRecord(f.id); });
+  }
+
+  private dayDiff(from: string, to: string): number {
+    const [y1, m1, d1] = from.split('-').map(Number);
+    const [y2, m2, d2] = to.split('-').map(Number);
+    return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+  }
+
+  missedWarnings = computed(() => {
+    const dates = this.lastRecordDates();
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const out: { id: string; name: string; text: string; lastDate: string | null; cls: string }[] = [];
+
+    for (const f of this.flocks() as any[]) {
+      if (!f?.id || !(f.id in dates)) continue;                 // لسه بيحمّل
+      if (f.status && f.status !== 'active') continue;          // قطيع منتهي/مغلق: مفيش تنبيه
+      const last = dates[f.id];
+      const name = f.name || 'القطيع';
+
+      if (last === null) {
+        out.push({ id: f.id, name, text: 'لسه مسجلتش أي بيانات', lastDate: null,
+                   cls: 'bg-amber-50 border-amber-300 text-amber-900' });
+        continue;
+      }
+      const diff = this.dayDiff(last, today);
+      if (diff <= 0) continue; // مسجّل النهارده
+      const lastDate = new Date(last).toLocaleDateString('en-GB');
+      if (diff === 1)      out.push({ id: f.id, name, text: 'لسه مسجلتش بيانات النهارده', lastDate, cls: 'bg-amber-50 border-amber-300 text-amber-900' });
+      else if (diff === 2) out.push({ id: f.id, name, text: 'مسجلتش بيانات امبارح ولا النهارده', lastDate, cls: 'bg-orange-50 border-orange-300 text-orange-900' });
+      else                 out.push({ id: f.id, name, text: `بقالك ${diff} أيام مسجلتش بيانات`, lastDate, cls: 'bg-red-50 border-red-300 text-red-900' });
+    }
+    return out;
+  });
+
+  trackWarning = (_: number, w: { id: string }) => w.id;
+
   private destroyRef = inject(DestroyRef);
   private onOnline = () => this.refreshAll();
 
@@ -741,6 +831,7 @@ getCategoryNameAr(categoryKey: string): string {
     const id = this.currentFlockId();
     if (id && this.isLoggedIn()) this.loadCycleReport(id);
     if (this.isLoggedIn()) this.streakSvc.refresh();
+    this.loadAllLastRecords();
   }
 
   loadReportsProStatus() {
