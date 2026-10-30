@@ -1,8 +1,10 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { environment } from '../../../environments/environment'; // عدّل المسار حسب مكان الملف عندك
+import { PushService } from '../../core/services/push.service'; // عدّل المسار حسب مكان الملف عندك
 
 @Component({
   selector: 'app-notification-bell',
@@ -59,8 +61,11 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
   </div>
   `
 })
-export class NotificationBellComponent implements OnInit {
+export class NotificationBellComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
+  private push = inject(PushService);
+  private pollId: any;
+  private pushSub?: Subscription;
   lang = localStorage.getItem('lang') ?? 'ar';
 
   showPanel = signal(false);
@@ -71,10 +76,34 @@ export class NotificationBellComponent implements OnInit {
 
   ngOnInit() {
     this.loadUnreadCount();
-    // تحديث دوري بسيط كل دقيقة عشان العدد يفضل محدّث حتى لو المستخدم
-    // ما فتحش البانل بنفسه — بديل بسيط عن WebSocket/Push في هذه المرحلة.
-    setInterval(() => this.loadUnreadCount(), 60_000);
+
+    // ✅ تسجيل الجهاز في FCM (على الموبايل بس) — ده اللي بيخلي الإشعارات توصل والتطبيق مقفول
+    this.push.init();
+
+    // لما يوصل إشعار والتطبيق مفتوح → حدّث العدد فورًا
+    this.pushSub = this.push.received$.subscribe(() => {
+      this.loadUnreadCount();
+      if (this.showPanel()) this.loadNotifications();
+    });
+
+    // تحديث دوري كل دقيقة (احتياطي) — بس لما التطبيق ظاهر قدام المستخدم
+    this.pollId = setInterval(() => {
+      if (!document.hidden) this.loadUnreadCount();
+    }, 60_000);
+
+    // لما المستخدم يرجع للتطبيق من الخلفية → حدّث على طول
+    document.addEventListener('visibilitychange', this.onVisibility);
   }
+
+  ngOnDestroy() {
+    clearInterval(this.pollId);
+    this.pushSub?.unsubscribe();
+    document.removeEventListener('visibilitychange', this.onVisibility);
+  }
+
+  private onVisibility = () => {
+    if (!document.hidden) this.loadUnreadCount();
+  };
 
   togglePanel() {
     this.showPanel.set(!this.showPanel());

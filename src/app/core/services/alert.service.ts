@@ -1,7 +1,8 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, interval, startWith, switchMap, catchError, of } from 'rxjs';
+import { Observable, tap, interval, startWith, switchMap, catchError, of, filter, fromEvent } from 'rxjs';
 import { environment } from '../../../environments/environment'; // تأكد من مسار البيئة عندك
+import { PushService } from './push.service';
 
 // ── 1. واجهة البيانات (Interface) لتطابق الـ Backend ──────────────────────
 export interface Alert {
@@ -17,6 +18,7 @@ export interface Alert {
 @Injectable({ providedIn: 'root' })
 export class AlertService {
   private http = inject(HttpClient);
+  private push = inject(PushService);
 
   // عنوان الـ API الخاص بالتنبيهات في الباك إند
   private apiUrl = `${environment.apiUrl}/alerts/`;
@@ -60,11 +62,24 @@ export class AlertService {
     if (this.pollingStarted) return; // منمنعش تكرار الاشتراك لو اتنادت أكتر من مرة
     this.pollingStarted = true;
 
+    const safeLoad = () => this.loadAlerts().pipe(
+      catchError(() => of(null)) // مننهارش الـ polling لو فشل طلب واحد
+    );
+
+    // Polling دوري — بس لما التطبيق ظاهر (مفيش داعي نستهلك نت وبطارية في الخلفية)
     interval(intervalMs).pipe(
       startWith(0),
-      switchMap(() => this.loadAlerts().pipe(
-        catchError(() => of(null)) // مننهارش الـ polling لو فشل طلب واحد
-      ))
+      filter(() => !document.hidden),
+      switchMap(safeLoad)
+    ).subscribe();
+
+    // ✅ لما يوصل Push والتطبيق مفتوح → حدّث فورًا
+    this.push.received$.pipe(switchMap(safeLoad)).subscribe();
+
+    // ✅ لما المستخدم يرجع للتطبيق من الخلفية (مثلاً بعد ما ضغط على إشعار) → حدّث فورًا
+    fromEvent(document, 'visibilitychange').pipe(
+      filter(() => !document.hidden),
+      switchMap(safeLoad)
     ).subscribe();
   }
 }
