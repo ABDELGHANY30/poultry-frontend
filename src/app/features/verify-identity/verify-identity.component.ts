@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -52,7 +52,7 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
         <label class="text-sm font-semibold text-gray-700 block mb-1.5">
           {{ lang === 'ar' ? 'صورة البطاقة (الوجه)' : 'ID front image' }}
         </label>
-        <input type="file" accept="image/*" (change)="onFileSelected($event, 'front')"
+        <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onFileSelected($event, 'front')"
                class="w-full text-sm" />
         <img *ngIf="frontPreview()" [src]="frontPreview()" class="mt-2 rounded-xl border border-gray-200 max-h-40" />
       </div>
@@ -61,7 +61,7 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
         <label class="text-sm font-semibold text-gray-700 block mb-1.5">
           {{ lang === 'ar' ? 'صورة البطاقة (الظهر)' : 'ID back image' }}
         </label>
-        <input type="file" accept="image/*" (change)="onFileSelected($event, 'back')"
+        <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onFileSelected($event, 'back')"
                class="w-full text-sm" />
         <img *ngIf="backPreview()" [src]="backPreview()" class="mt-2 rounded-xl border border-gray-200 max-h-40" />
       </div>
@@ -76,14 +76,14 @@ import { environment } from '../../../environments/environment'; // عدّل ا�
 
       <p class="text-[11px] text-gray-400 text-center">
         {{ lang === 'ar'
-          ? 'بياناتك محمية ومتاحة فقط للمراجعة الإدارية عند الحاجة.'
-          : 'Your data is protected and only accessible for administrative review when needed.' }}
+          ? 'بياناتك بتتخزن مشفّرة ومتاحة فقط للمراجعة الإدارية عند الحاجة.'
+          : 'Your data is stored encrypted and only accessible for administrative review when needed.' }}
       </p>
     </form>
   </div>
   `
 })
-export class VerifyIdentityComponent implements OnInit {
+export class VerifyIdentityComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -120,17 +120,45 @@ export class VerifyIdentityComponent implements OnInit {
       });
   }
 
+  private readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  private readonly MAX_BYTES = 8 * 1024 * 1024; // نفس حد الباك إند
+
+  ngOnDestroy() {
+    this.revoke(this.frontPreview());
+    this.revoke(this.backPreview());
+  }
+
+  private revoke(url: string | null) {
+    if (url) URL.revokeObjectURL(url);
+  }
+
   onFileSelected(event: Event, side: 'front' | 'back') {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
 
+    // فحص مبدئي على الجهاز (الباك إند بيفحص تاني من محتوى الملف نفسه)
+    if (!this.ALLOWED_TYPES.includes(file.type)) {
+      this.errorMsg.set(this.lang === 'ar' ? 'الصورة لازم تكون JPEG أو PNG أو WebP' : 'Image must be JPEG, PNG or WebP');
+      input.value = '';
+      return;
+    }
+    if (file.size > this.MAX_BYTES) {
+      this.errorMsg.set(this.lang === 'ar' ? 'حجم الصورة أكبر من 8 ميجابايت' : 'Image is larger than 8 MB');
+      input.value = '';
+      return;
+    }
+    this.errorMsg.set('');
+
+    const url = URL.createObjectURL(file);
     if (side === 'front') {
+      this.revoke(this.frontPreview());
       this.frontFile = file;
-      this.frontPreview.set(URL.createObjectURL(file));
+      this.frontPreview.set(url);
     } else {
+      this.revoke(this.backPreview());
       this.backFile = file;
-      this.backPreview.set(URL.createObjectURL(file));
+      this.backPreview.set(url);
     }
   }
 
@@ -164,9 +192,13 @@ export class VerifyIdentityComponent implements OnInit {
       },
       error: (err) => {
         this.submitting.set(false);
-        this.errorMsg.set(
-          err?.error?.detail ?? (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again')
-        );
+        const d = err?.error?.detail;
+        let msg: string;
+        if (typeof d === 'string') msg = d;
+        else if (err?.status === 429) msg = this.lang === 'ar' ? 'محاولات كتير، جرّب بعد شوية' : 'Too many attempts, try again later';
+        else if (err?.status === 413) msg = this.lang === 'ar' ? 'حجم الصورة أكبر من 8 ميجابايت' : 'Image is larger than 8 MB';
+        else msg = this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again';
+        this.errorMsg.set(msg);
       }
     });
 }

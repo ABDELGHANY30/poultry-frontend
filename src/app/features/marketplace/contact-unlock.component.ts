@@ -1,18 +1,25 @@
-import { Component, Input, Output, EventEmitter, inject, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
+import { markFromApp } from '../../core/services/deep-link.service';
 
 /**
  * بديل أزرار "اتصال / واتساب" في كارت الإعلان:
- *   <app-contact-unlock [listing]="l" />
+ *   <app-contact-unlock [listing]="l" (browserClosed)="reloadListings()" />
  * الـ listing لازم يجيلك من GET /listings (فيه id, phone, phone_masked, contact_unlocked, is_mine).
  * - لو الرقم مفتوح (صاحب الإعلان أو دافع 50 جنيه): زراري اتصال + واتساب.
  * - لو مقفول: الرقم مخفي + زرار دفع Paymob.
+ *
+ * 🆕 سياسة الدفع:
+ * - التطبيق (Capacitor): مفيش أي دفع جوّاه. الزرار بيفتح الموقع بـ ?unlock=<id>&from=app،
+ *   والموقع بيبدأ الدفع تلقائياً، وبعد النجاح صفحة payment-result بترجّع المستخدم للتطبيق.
+ * - browserClosed: بيتبعت لما المستخدم يقفل متصفح الموقع (حتى لو قفله من غير دفع) —
+ *   اربطه بإعادة تحميل الإعلانات عشان الرقم يظهر لو الدفع تم.
  */
 @Component({
   selector: 'app-contact-unlock',
@@ -52,18 +59,34 @@ import { AuthService } from '../../core/services/auth.service';
   </ng-template>
   `
 })
-export class ContactUnlockComponent {
+export class ContactUnlockComponent implements OnInit {
   @Input({ required: true }) listing: any;
-  @Output() contacted = new EventEmitter<void>(); // الأب يسجّل الاتصال (registerContact)
+  @Output() contacted = new EventEmitter<void>();    // الأب يسجّل الاتصال (registerContact)
+  @Output() browserClosed = new EventEmitter<void>(); // المستخدم قفل متصفح الموقع — الأب يحدّث الإعلانات
 
   private http = inject(HttpClient);
   private auth = inject(AuthService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   lang = localStorage.getItem('lang') ?? 'ar';
   isNative = Capacitor.isNativePlatform();
   loading = signal(false);
   errorMsg = signal('');
+
+  ngOnInit() {
+    if (this.isNative) return;
+
+    const qp = this.route.snapshot.queryParamMap;
+    // جاي من التطبيق -> نفتكر ده عشان صفحة النتيجة تعرض "ارجع للتطبيق"
+    if (qp.get('from') === 'app') markFromApp();
+
+    // التطبيق فتح الموقع بـ ?unlock=<id> -> نبدأ الدفع تلقائياً للإعلان ده
+    const target = qp.get('unlock');
+    if (target && String(this.listing?.id) === target && !this.listing?.contact_unlocked && !this.listing?.is_mine) {
+      this.unlock();
+    }
+  }
 
   whatsappUrl(): string {
     let d = (this.listing?.phone || '').replace(/\D/g, '');
@@ -72,12 +95,20 @@ export class ContactUnlockComponent {
     return `https://wa.me/${d}`;
   }
 
-  unlock() {
+  async unlock() {
     if (!this.auth.isAuthenticated()) { this.router.navigate(['/auth/login'], { queryParams: { returnTo: '/market-hub' } }); return; }
 
     // التطبيق مبيبدأش دفع — بيفتح الموقع والمستخدم يكمّل من هناك (نفس سياسة الاشتراك)
-    if (Capacitor.isNativePlatform()) {
-      Browser.open({ url: `${environment.websiteUrl}/market-hub?unlock=${encodeURIComponent(this.listing.id)}` });
+    if (this.isNative) {
+      try {
+        const handle = await Browser.addListener('browserFinished', () => {
+          handle.remove();
+          this.browserClosed.emit();
+        });
+      } catch { /* مش مشكلة لو الـ listener مش متاح */ }
+      await Browser.open({
+        url: `${environment.websiteUrl}/market-hub?unlock=${encodeURIComponent(this.listing.id)}&from=app`,
+      });
       return;
     }
 

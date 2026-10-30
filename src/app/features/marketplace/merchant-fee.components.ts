@@ -5,7 +5,14 @@ import { HttpClient } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
+import { markFromApp } from '../../core/services/deep-link.service';
 
+/**
+ * 🆕 سياسة الدفع:
+ * - التطبيق: مفيش دفع جوّاه. الزرار بيفتح الموقع (/merchant-fee?from=app) والمستخدم بيدفع من هناك،
+ *   وبعد النجاح صفحة payment-result بترجّعه للتطبيق. ولو قفل المتصفح بنعيد فحص حالة الحساب.
+ * - الموقع: بيفتكر إن المستخدم جاي من التطبيق (from=app) حتى لو اتحوّل لصفحة تسجيل الدخول في النص.
+ */
 @Component({
   selector: 'app-merchant-fee',
   standalone: true,
@@ -54,8 +61,16 @@ export class MerchantFeeComponent implements OnInit {
 
 
   ngOnInit() {
-    this.returnTo = this.route.snapshot.queryParamMap.get('returnTo') || this.returnTo;
+    const qp = this.route.snapshot.queryParamMap;
+    this.returnTo = qp.get('returnTo') || this.returnTo;
 
+    // الموقع: جاي من التطبيق -> نفتكر ده قبل أي redirect (مثلاً لتسجيل الدخول)
+    if (!this.isNative && qp.get('from') === 'app') markFromApp();
+
+    this.loadStatus();
+  }
+
+  private loadStatus() {
     this.http.get<any>(`${environment.apiUrl}/marketplace-payments/merchant/status`)
       .subscribe({
         next: (res) => {
@@ -67,16 +82,23 @@ export class MerchantFeeComponent implements OnInit {
           }
         },
         error: (err) => {
-          if (err?.status === 401) this.router.navigate(['/auth/login']);
+          if (err?.status === 401) this.router.navigate(['/auth/login'], { queryParams: { returnTo: '/merchant-fee' } });
           else this.errorMsg.set(this.lang === 'ar' ? 'تعذر تحميل حالة الحساب، حاول مرة أخرى' : 'Could not load account status');
         },
       });
   }
 
-  pay() {
+  async pay() {
     // التطبيق مبيبدأش عمليات دفع (نفس سياسة صفحة الاشتراك) — بيفتح الموقع والمستخدم يكمّل من هناك
     if (this.isNative) {
-      Browser.open({ url: environment.websiteUrl + '/merchant-fee' });
+      try {
+        // لما المستخدم يقفل المتصفح (دفع أو لأ) نعيد فحص الحالة — لو بقى تاجر هيتحوّل لوحده
+        const handle = await Browser.addListener('browserFinished', () => {
+          handle.remove();
+          this.loadStatus();
+        });
+      } catch { /* مش مشكلة لو الـ listener مش متاح */ }
+      await Browser.open({ url: `${environment.websiteUrl}/merchant-fee?from=app` });
       return;
     }
 
