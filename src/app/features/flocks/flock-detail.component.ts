@@ -358,6 +358,20 @@ const TURKEY_VACC = [
                   class="text-xs text-gray-400 font-bold hover:text-gray-600">إغلاق ✕</button>
         </div>
 
+        <!-- 📅 تاريخ السجل: النهارده افتراضياً، ويقدر يختار يوم فات (مهم للقطيع الشغال قبل التطبيق) -->
+        <div *ngIf="!editingRecordId()" class="mb-3">
+          <label class="form-label">تاريخ السجل</label>
+          <input class="form-input text-black bg-gray-100 border p-2 rounded w-full sm:w-56" type="date"
+                 [ngModel]="newRecordDate() || todayStr()" (ngModelChange)="newRecordDate.set($event)"
+                 [min]="minRecordDate()" [max]="todayStr()" />
+          <p *ngIf="isBackdated()" class="text-xs mt-1 mb-0 text-amber-700">
+            📅 بتسجّل ليوم فات. التنبيهات التلقائية مش بتشتغل على الأيام القديمة.
+          </p>
+          <p *ngIf="backdatedBeforeRegistration()" class="text-xs mt-1 mb-0 text-amber-700">
+            ℹ️ اليوم ده قبل ما القطيع يتسجّل في التطبيق، فالنفوق فيه مش هيغيّر العدد الحالي (محسوب في العدد اللي كتبته وقت التسجيل).
+          </p>
+        </div>
+
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
           <div>
             <label class="form-label">النفوق اليومي</label>
@@ -453,7 +467,7 @@ const TURKEY_VACC = [
             </div>
           </div>
           <button type="button" (click)="showFormManually.set(true)" class="text-xs text-green-600 font-bold mt-3">
-            + تسجيل/تعديل بيانات اليوم
+            + تسجيل بيانات (اليوم أو يوم فات)
           </button>
         </div>
       </div>
@@ -482,6 +496,7 @@ const TURKEY_VACC = [
           <p class="text-xl mb-1">{{ k.icon }}</p>
           <p class="text-lg font-black" [style.color]="k.color">{{ k.value }}</p>
           <p class="text-[10px] text-[var(--c-muted)] font-semibold mt-0.5">{{ k.label | translate }}</p>
+          <p *ngIf="k.note" class="text-[9px] text-amber-600 font-bold mt-0.5 mb-0">{{ k.note }}</p>
         </div>
       </div>
 
@@ -623,6 +638,19 @@ const TURKEY_VACC = [
     <ng-container *ngIf="activeSection() === 'health'">
       <div class="card mb-4">
         <h2 class="section-title">💉 {{ 'FLOCK.VACC_SCHED' | translate }}</h2>
+
+        <!-- قطيع شغال قبل التطبيق: تأكيد كل التحصينات اللي فات موعدها مرة واحدة -->
+        <div *ngIf="pastDueVaccCount() > 0 && myAccess()?.is_owner !== false"
+             class="mb-3 rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-center justify-between gap-3">
+          <p class="text-xs text-amber-900 mb-0">
+            فيه {{ pastDueVaccCount() }} تحصين فات موعده ولسه مش متأكد منه. لو القطيع كان شغال قبل التطبيق وكنت عملتهم، أكّدهم مرة واحدة.
+          </p>
+          <button type="button" (click)="completeAllPastVacc()"
+                  class="flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-bold bg-white border border-green-300 text-green-700 hover:bg-green-50">
+            ✅ اتنفذوا كلهم
+          </button>
+        </div>
+
         <div class="space-y-2">
 
           <div *ngFor="let v of vaccRows()"
@@ -1036,6 +1064,7 @@ export class FlockDetailComponent implements OnInit {
   showPastRecords = signal(true);
   recordsView = signal<'records' | 'report'>('records'); // 📜 سجلات / 📊 تقرير جوه تاب السجلات
   recordedByMap = signal<Record<string, string>>({});
+  newRecordDate = signal<string>('');   // '' = النهارده؛ غير كده تاريخ يوم فات (YYYY-MM-DD)
   editingRecordId = signal<string | null>(null);
   editingRecordDate = signal<string | null>(null);
 
@@ -1330,6 +1359,16 @@ export class FlockDetailComponent implements OnInit {
     return w !== null && w !== undefined ? Number(w) : null;
   }
 
+  // 📅 مساعدين تاريخ السجل (public عشان التمبلت)
+  todayStr = () => this.localDateStr();
+  minRecordDate = (): string => String((this.flock() as any)?.startDate ?? '').split('T')[0];
+  isBackdated = () => !this.editingRecordId() && !!this.newRecordDate() && this.newRecordDate() < this.localDateStr();
+  backdatedBeforeRegistration = () => {
+    const created = String((this.flock() as any)?.createdAt ?? '').split('T')[0];
+    const d = this.newRecordDate();
+    return !this.editingRecordId() && !!d && !!created && d < created;
+  };
+
   // ✅ هل اتسجلت بيانات النهاردة للقطيع المفتوح؟
   hasTodayRecord = () => {
     const todayStr = this.localDateStr();
@@ -1359,6 +1398,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   cancelForm() {
+    this.newRecordDate.set('');
     this.showFormManually.set(false);
     this.editingRecordId.set(null);
     this.editingRecordDate.set(null);
@@ -1620,6 +1660,23 @@ export class FlockDetailComponent implements OnInit {
       });
   }
 
+  // ⏳ تحصينات فات موعدها ولسه مش متأكدين من تنفيذها (نفس شرط عرض ⚠️ في الجدول)
+  pastDueVaccCount = () =>
+    this.vaccRows().filter((v: any) => !v.completed && v.dbId && this.calculatedAge() > v.day).length;
+
+  completeAllPastVacc() {
+    const flockId = this.flock()?.id;
+    if (!flockId) return;
+    const n = this.pastDueVaccCount();
+    if (!n) return;
+    if (!confirm(`تأكيد إن ${n} تحصين فات موعدهم اتنفذوا؟ تقدر ترجّع أي واحد منهم بزرار "تراجع".`)) return;
+    this.http.post<any[]>(`${environment.apiUrl}/flocks/${flockId}/vaccinations/complete-past`, {})
+      .subscribe({
+        next: (rows) => this.dbVaccinations.set(rows || []),
+        error: () => alert('حصل خطأ أثناء تأكيد التحصينات'),
+      });
+  }
+
   toggleVaccination(row: any) {
     const flockId = this.flock()?.id;
     if (!flockId || !row.dbId) return;
@@ -1759,7 +1816,7 @@ vaccSchedule = () => {
   }
 };
 
-  kpis = () => {
+  kpis = (): { icon: string; label: string; value: any; color: string; note?: string }[] => {
     const a = this.analytics() as any;
     if (!a) return [];
     
@@ -1818,7 +1875,9 @@ vaccSchedule = () => {
         icon: '⚖️', 
         label: 'معدل التحويل',   
         value: a.fcr ? Number(a.fcr).toFixed(2) : '0.00', 
-        color: 'var(--c-primary)' 
+        color: 'var(--c-primary)',
+        // 📊 قطيع شغال قبل التطبيق / أيام ناقصة: العلف المسجل مش كل العلف الحقيقي
+        note: (a['is_partial'] ?? a.isPartial) ? 'بيانات جزئية' : undefined
       },
       { 
         icon: '📉', 
@@ -1940,6 +1999,7 @@ vaccSchedule = () => {
     this.activeFlockId = id;
     this.refreshPendingSignal();
     // 🔁 إعادة ضبط حالة الفورم/التخطي لأي قطيع جديد (الكومبوننت بيتعاد استخدامه)
+    this.newRecordDate.set('');
     this.showFormManually.set(false);
     this.editingRecordId.set(null);
     this.selectedPhotoFile.set(null);
@@ -1957,8 +2017,9 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
     
     let age = 0;
 
-    // 🟢 إذا كان للقطيع سجلات مخزنة، نحسب العمر من تاريخ أحدث سجل أو عدد السجلات
-    if (records.length > 0) {
+    // 🟢 العمر بيتحسب من تاريخ بدء القطيع دايماً (مهم للقطيع الشغال بالفعل اللي سجلاته بدأت متأخر).
+    // الحساب من السجلات بقى احتياطي بس لو تاريخ البدء مش موجود.
+    if (!(raw.start_date ?? raw.startDate) && records.length > 0) {
       // استخراج كافة التواريخ المسجلة
       const dates = records
         .map(r => r.record_date ?? r.recordDate)
@@ -2104,6 +2165,21 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       return;
     }
 
+    // 📅 تحقق من تاريخ السجل الجديد (التعديل بيستخدم تاريخ السجل نفسه)
+    if (!this.editingRecordId()) {
+      const d = this.newRecordDate() || this.localDateStr();
+      const start = this.minRecordDate();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { alert('اختار تاريخ صحيح للسجل.'); return; }
+      if (d > this.localDateStr()) { alert('مينفعش تسجّل ليوم لسه ماجاش.'); return; }
+      if (start && d < start) { alert(`التاريخ ده قبل بدء القطيع (${start}).`); return; }
+      const duplicate = this.records().some(r => this.recordDateStr(r) === d)
+        || this.pendingRecords().some(p => p.kind === 'create' && p.date === d);
+      if (duplicate) {
+        alert('فيه سجل متسجل ليوم ده بالفعل. افتحه من جدول السجلات السابقة واضغط تعديل.');
+        return;
+      }
+    }
+
     this.saving.set(true);
 
     let finalFeedKg = Number(this.userInputs.feedValue || 0);
@@ -2121,7 +2197,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
     const isEditing = !!this.editingRecordId();
     const targetDateStr = isEditing
       ? (this.editingRecordDate() as string)
-      : this.localDateStr();
+      : (this.newRecordDate() || this.localDateStr());
 
     const commonFields = {
       mortality: this.userInputs.mortality ? Number(this.userInputs.mortality) : 0,
@@ -2143,6 +2219,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       };
       this.editingRecordId.set(null);
       this.editingRecordDate.set(null);
+      this.newRecordDate.set('');
     };
 
     // 📴 مفيش نت: نخزّن السجل على الجهاز (موبايل بس) وهيتبعت أول ما النت يرجع (التحليلات بتتحدّث بعدها)

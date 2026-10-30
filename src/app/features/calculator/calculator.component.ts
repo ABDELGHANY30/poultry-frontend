@@ -7,13 +7,33 @@ import {
   POULTRY_LABELS, HOUSING_LABELS, PoultryType, HousingSystem,
 } from './calculator-engine';
 import { exportFarmReportPdf } from './calculator-report';
+import { NrcFormulatorComponent } from './nrc-formulator.component';
 
 @Component({
   selector: 'app-calculator',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NrcFormulatorComponent],
   template: `
   <div class="page-wrapper">
+
+    <!-- زرار التبديل: الحسابات المالية ⇄ NRC -->
+    <div class="flex gap-1 p-1 bg-gray-100 rounded-2xl mb-4">
+      <button (click)="mode.set('finance')"
+              class="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
+              [class.bg-white]="mode() === 'finance'" [class.shadow]="mode() === 'finance'"
+              [class.text-green-700]="mode() === 'finance'" [class.text-gray-500]="mode() !== 'finance'">
+        💰 الحسابات المالية
+      </button>
+      <button (click)="mode.set('nrc')"
+              class="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
+              [class.bg-white]="mode() === 'nrc'" [class.shadow]="mode() === 'nrc'"
+              [class.text-indigo-700]="mode() === 'nrc'" [class.text-gray-500]="mode() !== 'nrc'">
+        🧬 NRC (تركيب العلف)
+      </button>
+    </div>
+
+    <!-- الحسابات المالية (بنخفيها بدل ما نحذفها عشان النتايج تفضل زي ما هي) -->
+    <div [style.display]="mode() === 'finance' ? 'block' : 'none'">
 
     <!-- Header -->
     <div class="rounded-3xl text-white px-6 py-5 mb-4"
@@ -604,11 +624,19 @@ import { exportFarmReportPdf } from './calculator-report';
       </div>
 
     </div>
+    </div>
+
+    <!-- حاسبة NRC -->
+    <div [style.display]="mode() === 'nrc' ? 'block' : 'none'">
+      <app-nrc-formulator></app-nrc-formulator>
+    </div>
+
   </div>
   `
 })
 export class CalculatorComponent implements OnInit {
   private pricesSvc = inject(CalculatorPricesService);
+  mode = signal<'finance' | 'nrc'>('finance');
   loading = signal(false);
   result = signal<any>(null);
   exportingPdf = signal(false);

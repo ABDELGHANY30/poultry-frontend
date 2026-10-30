@@ -76,7 +76,7 @@ export class FlockService {
   }
 
   // 3. إنشاء قطيع جديد وإرساله للباكيند
-  createFlock(payload: FlockCreate & { housingSystem?: string }): Observable<Flock> {
+  createFlock(payload: FlockCreate & { housingSystem?: string; currentCount?: number | null }): Observable<Flock> {
     // تحويل البيانات المرسلة إلى snake_case ليقبلها الباكيند بسهولة
     const body = {
       name: payload.name,
@@ -84,7 +84,8 @@ export class FlockService {
       initial_count: payload.initialCount,
       start_date: payload.startDate,
       breed: payload.breed,
-      housing_system: payload.housingSystem || null
+      housing_system: payload.housingSystem || null,
+      current_count: payload.currentCount ?? null   // قطيع شغال بالفعل: العدد الحالي
     };
 
     return this.http.post<any>(`${environment.apiUrl}/flocks/`, body).pipe(

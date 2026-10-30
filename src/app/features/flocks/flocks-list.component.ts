@@ -339,6 +339,24 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
             <input class="form-input" type="number" [(ngModel)]="form.initialCount" min="1" placeholder="500" />
           </div>
 
+          <!-- 4.5 قطيع شغال بالفعل (بدأ قبل استخدام التطبيق) -->
+          <div class="flex flex-col gap-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="isExistingFlock" (ngModelChange)="onExistingToggle($event)" />
+              <span class="form-label mb-0">قطيع شغال بالفعل (بدأ قبل استخدام التطبيق)</span>
+            </label>
+            <ng-container *ngIf="isExistingFlock">
+              <p class="text-xs mb-0" style="opacity:.7">
+                اكتب فوق تاريخ دخول القطيع الحقيقي والعدد الأصلي وقت الدخول، وهنا العدد الحالي دلوقتي. الفرق بينهم بيتحسب نفوق سابق.
+              </p>
+              <label class="form-label">العدد الحالي</label>
+              <input class="form-input" type="number" [(ngModel)]="currentCount" min="1" [max]="form.initialCount" />
+              <p *ngIf="currentCount && currentCount > form.initialCount" class="text-xs mb-0" style="color:#dc2626">
+                العدد الحالي لا يمكن أن يزيد عن العدد الأصلي
+              </p>
+            </ng-container>
+          </div>
+
           <!-- 5. السلالة المختارة حسب النوع المختار -->
       <div>
   <label class="form-label">{{ 'FLOCK.breed' | translate }}</label>
@@ -606,6 +624,14 @@ export class FlocksListComponent implements OnInit {
     breed: ''  
   };
 
+  // 🐔 قطيع شغال بالفعل
+  isExistingFlock = false;
+  currentCount: number | null = null;
+
+  onExistingToggle(on: boolean) {
+    this.currentCount = on ? (this.form.initialCount || null) : null;
+  }
+
   ngOnInit() { 
     this.svc.getFlocks().subscribe(); 
   }
@@ -635,9 +661,15 @@ export class FlocksListComponent implements OnInit {
     };
     this.housingSystem = '';
     this.housingOptions = [];
+    this.isExistingFlock = false;
+    this.currentCount = null;
   }
 
   isValid(): boolean {
+    if (this.isExistingFlock) {
+      const cc = Number(this.currentCount);
+      if (!cc || cc < 1 || cc > this.form.initialCount) return false;
+    }
     return !!this.form.name && 
            !!this.form.type &&
            this.form.initialCount > 0 && 
@@ -652,7 +684,11 @@ export class FlocksListComponent implements OnInit {
     // ⚠️ housingSystem بيتبعت هنا لو الـ FlockCreate interface وendpoint الباك
     // إند اتحدّثوا يقبلوه — لو لسه معملتش الجزئين دول، القيمة دي هتتبعت
     // لكن الباك إند هيتجاهلها (مش هتتحفظ) لحد ما تحدّث flocks_1_.py/schemas.py
-    const payload: any = { ...this.form, housingSystem: this.housingSystem };
+    const payload: any = {
+      ...this.form,
+      housingSystem: this.housingSystem,
+      currentCount: this.isExistingFlock ? Number(this.currentCount) : null,
+    };
 
     this.svc.createFlock(payload).subscribe({
       next: () => {
