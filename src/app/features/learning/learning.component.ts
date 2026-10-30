@@ -65,7 +65,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
         <div class="flex items-center gap-2 mb-4">
           <span class="text-3xl">{{ currentType()?.icon }}</span>
-          <h2 class="font-black text-gray-800 text-lg">{{ currentType()?.label }}</h2>
+          <h2 class="font-black  dark:text-green-500 text-gray-800 text-lg">{{ currentType()?.label }}</h2>
         </div>
 
         <div class="space-y-3">

@@ -83,25 +83,30 @@ const CATEGORIES = [
           </ng-template>
         </div>
 
-        <!-- 🌤️ الطقس: الشكل التاني (من غير مربع)، اضغط عليه تبدّل بين النهارده وبكره -->
-        <button *ngIf="activeWeather() as w" type="button" (click)="toggleWeather()"
-                class="flex-shrink-0 flex items-center gap-3 text-white active:scale-95 transition-all"
-                style="direction:ltr;background:none;border:none;padding:0"
-                aria-label="اضغط لتبديل الطقس بين النهارده وبكره">
+        <!-- 🌤️ الطقس: بيعرض اليوم، وزرار صغير تحته يبدّل بين النهارده وبكره -->
+        <div *ngIf="activeWeather() as w" class="flex-shrink-0 flex flex-col items-center gap-2 text-white">
 
-          <div class="text-center leading-tight">
-            <div style="font-size:11px;color:rgba(255,255,255,.75)">{{ weatherDay() === 'today' ? 'النهارده' : 'بكره' }}</div>
-            <p class="mb-0 flex items-baseline justify-center gap-1">
-              <span class="text-3xl font-bold">{{ w.max }}°</span>
-              <span class="text-xs" style="color:rgba(255,255,255,.7)">{{ w.min }}°</span>
-            </p>
-            <p class="mb-0 mt-0.5 truncate max-w-[90px]" style="font-size:11px;color:rgba(255,255,255,.8)">{{ w.condition }}</p>
+          <div class="flex items-center gap-3" style="direction:ltr">
+            <div class="text-center leading-tight">
+              <div style="font-size:11px;color:rgba(255,255,255,.75)">{{ weatherDay() === 'today' ? 'النهارده' : 'بكره' }}</div>
+              <p class="mb-0 flex items-baseline justify-center gap-1">
+                <span class="text-3xl font-bold">{{ w.max }}°</span>
+                <span class="text-xs" style="color:rgba(255,255,255,.7)">{{ w.min }}°</span>
+              </p>
+              <p class="mb-0 mt-0.5 truncate max-w-[90px]" style="font-size:11px;color:rgba(255,255,255,.8)">{{ w.condition }}</p>
+            </div>
+
+            <span style="width:1px;align-self:stretch;background:rgba(255,255,255,.3)"></span>
+
+            <span class="text-4xl leading-none flex-shrink-0">{{ weatherIcon(w) }}</span>
           </div>
 
-          <span style="width:1px;align-self:stretch;background:rgba(255,255,255,.3)"></span>
-
-          <span class="text-4xl leading-none flex-shrink-0">{{ weatherIcon(w) }}</span>
-        </button>
+          <button type="button" (click)="toggleWeather()"
+                  class="px-3 py-1 rounded-full text-xs font-bold text-white active:scale-95 transition-all"
+                  style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45)">
+            {{ weatherDay() === 'today' ? 'طقس بكره' : 'طقس النهارده' }}
+          </button>
+        </div>
 
       </div>
     </div>
