@@ -11,6 +11,12 @@ import {
 const STORAGE_KEY = 'nrc_formulator_v1';
 const DEFAULT_PROFILE = 'layer_peak';
 
+/** أنواع مقفولة بملصق "غير متاح" (شيل النوع من القايمة لو عايز ترجّعه) */
+const DISABLED_GROUPS: string[] = ['goose'];
+
+/** استهلاك الطائر اليومي (جم) المعروف من ملفاتك — باقي المراحل المستخدم بيكتبه بنفسه */
+const DEFAULT_INTAKE_G: Record<string, number> = { layer_peak: 105 };
+
 /** أسماء مختصرة للقيم عشان تتحط في شبكة صغيرة على الموبايل */
 const SHORT_LABELS: Record<string, string> = {
   me: 'طاقة (ك.كالوري)', cp: 'بروتين %', lys: 'ليسين %', met: 'ميثيونين %', mc: 'ميث+سيست %',
@@ -38,12 +44,17 @@ const SHORT_LABELS: Record<string, string> = {
       <div>
         <p class="text-sm font-bold text-gray-700 mb-2">1️⃣ اختار الطائر</p>
         <div class="grid grid-cols-3 gap-2">
-          <button *ngFor="let g of groups" (click)="pickGroup(g.id)"
-                  class="rounded-2xl py-2.5 px-1 text-center border-2 transition-all"
+          <button *ngFor="let g of groups" (click)="pickGroup(g.id)" [disabled]="isDisabledGroup(g.id)"
+                  class="relative rounded-2xl py-2.5 px-1 text-center border-2 transition-all"
                   [class.border-indigo-500]="groupId === g.id" [class.bg-indigo-50]="groupId === g.id"
-                  [class.border-gray-100]="groupId !== g.id" [class.bg-white]="groupId !== g.id">
+                  [class.border-gray-100]="groupId !== g.id" [class.bg-white]="groupId !== g.id"
+                  [class.opacity-50]="isDisabledGroup(g.id)">
             <div class="text-2xl leading-none">{{ g.icon }}</div>
             <div class="text-[11px] font-semibold leading-tight mt-1 text-gray-700">{{ g.label }}</div>
+            <span *ngIf="isDisabledGroup(g.id)"
+                  class="absolute -top-1.5 -left-1.5 bg-gray-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md -rotate-12 shadow">
+              غير متاح
+            </span>
           </button>
         </div>
       </div>
@@ -55,16 +66,56 @@ const SHORT_LABELS: Record<string, string> = {
         </select>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <p class="text-sm font-bold text-gray-700 mb-2">3️⃣ الكمية (كجم)</p>
-          <input type="number" min="1" [ngModel]="batchKg" (ngModelChange)="batchKg = $event; calculate()"
-                 class="form-input" placeholder="100"/>
+      <div>
+        <p class="text-sm font-bold text-gray-700 mb-2">3️⃣ كمية العلف</p>
+        <div class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-3">
+          <button (click)="setQtyMode('kg')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  [class.bg-white]="qtyMode === 'kg'" [class.shadow]="qtyMode === 'kg'"
+                  [class.text-indigo-700]="qtyMode === 'kg'" [class.text-gray-500]="qtyMode !== 'kg'">⚖️ بالكيلو</button>
+          <button (click)="setQtyMode('birds')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  [class.bg-white]="qtyMode === 'birds'" [class.shadow]="qtyMode === 'birds'"
+                  [class.text-indigo-700]="qtyMode === 'birds'" [class.text-gray-500]="qtyMode !== 'birds'">🐔 من عدد الطيور</button>
         </div>
-        <div *ngIf="profile().isPerDay">
-          <p class="text-sm font-bold text-gray-700 mb-2">علف الدجاجة/يوم (جم)</p>
-          <input type="number" min="50" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
-                 class="form-input" placeholder="150"/>
+
+        <div *ngIf="qtyMode === 'kg'" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">الكمية (كجم)</label>
+            <input type="number" min="1" [ngModel]="batchKg" (ngModelChange)="batchKg = $event; calculate()"
+                   class="form-input" placeholder="100"/>
+          </div>
+          <div *ngIf="profile().isPerDay">
+            <label class="text-xs text-gray-500 block mb-1">علف الدجاجة/يوم (جم)</label>
+            <input type="number" min="50" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
+                   class="form-input" placeholder="150"/>
+          </div>
+        </div>
+
+        <div *ngIf="qtyMode === 'birds'">
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">عدد الطيور</label>
+              <input type="number" min="1" [ngModel]="animals" (ngModelChange)="animals = $event; calculate()"
+                     class="form-input" placeholder="1000"/>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">علف الطائر/يوم (جم)</label>
+              <input type="number" min="1" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
+                     class="form-input" [placeholder]="profile().isPerDay ? '150' : 'جم'"/>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">لمدة (أيام)</label>
+              <input type="number" min="1" [ngModel]="days" (ngModelChange)="days = $event; calculate()"
+                     class="form-input" placeholder="7"/>
+            </div>
+          </div>
+          <div *ngIf="computedBatch() !== null" class="mt-2 bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-800">
+            🧮 الكمية المطلوبة: <b>{{ computedBatch() | number:'1.0-1' }}</b> كجم
+            <span class="text-xs">({{ perDayKg() | number:'1.0-1' }} كجم في اليوم)</span>
+          </div>
+          <p *ngIf="computedBatch() === null" class="mt-2 text-xs text-amber-700">
+            اكتب عدد الطيور وكام جرام بياكل الطائر في اليوم عشان تظهر الكمية.
+          </p>
+          <p class="mt-1 text-[11px] text-gray-400">استهلاك الطائر بيختلف بالعمر والسلالة — راجع جدول سلالتك أو سجلاتك.</p>
         </div>
       </div>
     </div>
@@ -81,20 +132,54 @@ const SHORT_LABELS: Record<string, string> = {
         <p class="text-base font-bold text-gray-800">🌾 الخلطة لـ {{ lastBatch | number:'1.0-2' }} كجم</p>
         <p class="text-xs text-gray-400 mb-3">{{ stageLabel(profile()) }}</p>
 
-        <div *ngFor="let row of formulaRows(r)" class="flex items-center gap-2 py-2.5 border-b border-gray-100">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm text-gray-800">{{ row.name }}</p>
-            <p *ngIf="row.note" class="text-[11px] text-gray-400">{{ row.note }}</p>
+        <div *ngFor="let row of formulaRows(r); trackBy: trackByKey" class="py-2.5 border-b border-gray-100">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm text-gray-800">{{ row.name }}</p>
+              <p *ngIf="row.note" class="text-[11px] text-gray-400">{{ row.note }}</p>
+            </div>
+            <span class="text-base font-black text-gray-900">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></span>
+            <span class="text-[11px] text-gray-400 w-12 text-left" dir="ltr">{{ row.pct | number:'1.0-1' }}%</span>
+            <button (click)="toggleIngredient(row.key)" class="text-gray-300 text-lg leading-none px-1" title="مش عندي الخامة دي">✕</button>
           </div>
-          <span class="text-base font-black text-gray-900">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></span>
-          <span class="text-[11px] text-gray-400 w-12 text-left" dir="ltr">{{ row.pct | number:'1.0-1' }}%</span>
-          <button (click)="toggleIngredient(row.key)" class="text-gray-300 text-lg leading-none px-1" title="مش عندي الخامة دي">✕</button>
+          <div class="flex items-center gap-2 mt-1.5">
+            <span class="text-[11px] text-gray-400">سعر الكجم</span>
+            <input type="number" step="any" min="0" class="form-input text-xs py-1 px-2 w-20" placeholder="جنيه"
+                   [value]="priceValue(row.key) ?? ''" (change)="onPriceChange(row.key, $event)"/>
+            <span *ngIf="rowCost(row) !== null" class="text-xs text-indigo-700 font-semibold">= {{ rowCost(row) | number:'1.0-0' }} جنيه</span>
+          </div>
         </div>
 
-        <div class="flex items-center gap-2 py-2.5 text-indigo-700">
-          <span class="flex-1 text-sm">💊 بريمكس (فيتامينات ومعادن)</span>
-          <span class="text-base font-black">{{ r.premix_kg | number:'1.0-2' }} <span class="text-xs font-normal">كجم</span></span>
-          <span class="w-12"></span><span class="w-6"></span>
+        <div class="py-2.5 text-indigo-700">
+          <div class="flex items-center gap-2">
+            <span class="flex-1 text-sm">💊 بريمكس (فيتامينات ومعادن)</span>
+            <span class="text-base font-black">{{ r.premix_kg | number:'1.0-2' }} <span class="text-xs font-normal">كجم</span></span>
+            <span class="w-12"></span><span class="w-6"></span>
+          </div>
+          <div class="flex items-center gap-2 mt-1.5">
+            <span class="text-[11px] text-gray-400">سعر الكجم</span>
+            <input type="number" step="any" min="0" class="form-input text-xs py-1 px-2 w-20" placeholder="جنيه"
+                   [value]="premixPrice ?? ''" (change)="onPremixChange($event)"/>
+            <span *ngIf="premixCost(r) !== null" class="text-xs font-semibold">= {{ premixCost(r) | number:'1.0-0' }} جنيه</span>
+          </div>
+        </div>
+
+        <!-- التكلفة -->
+        <div *ngIf="costSummary(r) as cs" class="mt-2">
+          <div *ngIf="cs.complete" class="bg-indigo-50 rounded-xl px-3 py-3 text-indigo-900 space-y-1">
+            <p class="text-sm">💰 إجمالي التكلفة: <b class="text-lg">{{ cs.total | number:'1.0-0' }}</b> جنيه</p>
+            <p class="text-xs">سعر كجم العلف: <b>{{ cs.perKg | number:'1.2-2' }}</b> جنيه</p>
+            <p *ngIf="cs.perAnimal !== null" class="text-xs">
+              تكلفة الطائر الواحد: <b>{{ cs.perAnimal | number:'1.2-2' }}</b> جنيه
+              (<b>{{ cs.perAnimalDay | number:'1.2-2' }}</b> جنيه في اليوم)
+            </p>
+          </div>
+          <div *ngIf="!cs.complete" class="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-600 leading-relaxed">
+            💰 اكتب <b>سعر الكجم</b> تحت كل خامة (وسعر البريمكس) وهتظهر التكلفة.
+            ناقص سعر <b>{{ cs.missing }}</b>.
+            <span *ngIf="cs.total > 0">المحسوب لحد دلوقتي: <b>{{ cs.total | number:'1.0-0' }}</b> جنيه.</span>
+            الخلطة بتتظبط على أسعارك كل ما تكتب أكتر.
+          </div>
         </div>
 
         <p class="text-[11px] text-gray-400 mt-1">لو في خامة مش عندك اضغط ✕ جنبها وهتتغير الخلطة.</p>
@@ -104,11 +189,6 @@ const SHORT_LABELS: Record<string, string> = {
         </div>
         <div *ngIf="!r.ok" class="mt-3 bg-amber-50 rounded-xl px-3 py-2 text-sm text-amber-800">
           ⚠️ الخلطة مش مطابقة تماماً (فيه {{ failedChecks(r).length }} قيد). جرّب تفعّل خامات أكتر من الخيارات المتقدمة.
-        </div>
-
-        <div *ngIf="allRealPrices(r)" class="mt-3 bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-800">
-          💰 التكلفة: <b>{{ r.cost_index_per_kg | number:'1.2-2' }}</b> جنيه/كجم —
-          إجمالي <b>{{ (r.cost_index_per_kg || 0) * lastBatch | number:'1.0-0' }}</b> جنيه
         </div>
 
         <button (click)="showDetails.set(!showDetails())" class="mt-3 text-xs text-indigo-700 font-semibold">
@@ -222,6 +302,9 @@ export class NrcFormulatorComponent implements OnInit {
   intakeG: number | null = null;
   premixPrice: number | null = null;
   lastBatch = 100;
+  qtyMode: 'kg' | 'birds' = 'kg';
+  animals: number | null = null;
+  days: number | null = 7;
 
   ingList: IngredientInfo[] = [];
   ingSections: { group: IngredientGroup; items: IngredientInfo[] }[] = [];
@@ -242,9 +325,12 @@ export class NrcFormulatorComponent implements OnInit {
       const { value } = await Preferences.get({ key: STORAGE_KEY });
       if (value) {
         const s = JSON.parse(value);
-        if (s.profileKey && this.findProfile(s.profileKey)) this.setProfile(s.profileKey);
+        if (s.profileKey && this.findProfile(s.profileKey) && !this.isProfileDisabled(s.profileKey)) this.setProfile(s.profileKey);
         this.batchKg = s.batchKg ?? 100;
-        this.intakeG = s.intakeG ?? null;
+        this.intakeG = s.intakeG ?? DEFAULT_INTAKE_G[this.profileKey] ?? null;
+        this.qtyMode = s.qtyMode === 'birds' ? 'birds' : 'kg';
+        this.animals = s.animals ?? null;
+        this.days = s.days ?? 7;
         this.premixPrice = s.premixPrice ?? null;
         this.prices.set(s.prices ?? {});
         this.lab.set({ poultry: {}, rabbit: {}, ...(s.lab ?? {}) });
@@ -264,6 +350,7 @@ export class NrcFormulatorComponent implements OnInit {
         key: STORAGE_KEY,
         value: JSON.stringify({
           profileKey: this.profileKey, batchKg: this.batchKg, intakeG: this.intakeG, premixPrice: this.premixPrice,
+          qtyMode: this.qtyMode, animals: this.animals, days: this.days,
           excluded: this.excluded(), prices: this.prices(), lab: this.lab(),
         }),
       });
@@ -286,6 +373,7 @@ export class NrcFormulatorComponent implements OnInit {
     this.groupId = this.groups.find(g => g.profiles.some(p => p.key === key))?.id ?? this.groups[0].id;
     this.ingList = getIngredients(key);
     this.buildSections();
+    this.intakeG = DEFAULT_INTAKE_G[key] ?? null;
   }
 
   private buildSections(): void {
@@ -302,7 +390,14 @@ export class NrcFormulatorComponent implements OnInit {
     return this.findProfile(this.profileKey) ?? this.groups[0].profiles[0];
   }
 
+  isDisabledGroup(id: string): boolean { return DISABLED_GROUPS.includes(id); }
+
+  private isProfileDisabled(key: string): boolean {
+    return this.groups.some(g => this.isDisabledGroup(g.id) && g.profiles.some(p => p.key === key));
+  }
+
   pickGroup(id: string): void {
+    if (this.isDisabledGroup(id)) return;
     this.groupId = id;
     this.onGroupChange();
   }
@@ -327,6 +422,7 @@ export class NrcFormulatorComponent implements OnInit {
     const hadRabbit = this.ingList.some(i => i.key === 'alfalfa_hay');
     this.ingList = getIngredients(this.profileKey);
     this.buildSections();
+    this.intakeG = DEFAULT_INTAKE_G[this.profileKey] ?? null;
     const nowRabbit = this.ingList.some(i => i.key === 'alfalfa_hay');
     // لو اتنقلنا بين جدول الدواجن وجدول الأرانب: الخامات مختلفة، فنرجع للخامات المحلية
     if (hadList && hadRabbit !== nowRabbit) this.applySet('local');
@@ -395,13 +491,13 @@ export class NrcFormulatorComponent implements OnInit {
 
   // ── الحساب ──
   calculate(): void {
-    const batch = Number(this.batchKg) > 0 ? Number(this.batchKg) : 100;
+    const batch = this.resolveBatch();
     this.lastBatch = batch;
     const info = this.profile();
     const premix = Number(this.premixPrice) > 0 ? Number(this.premixPrice) : undefined;
     try {
       this.result.set(formulate(this.profileKey, {
-        prices: this.prices(),
+        prices: this.effectivePrices(),
         ingredientOverrides: this.lab()[this.tbl()] ?? {},
         exclude: this.excluded(),
         batchKg: batch,
@@ -434,10 +530,92 @@ export class NrcFormulatorComponent implements OnInit {
     return '';
   }
 
-  /** هل كل الخامات المستخدمة (والبريمكس) ليها سعر فعلي من المستخدم؟ */
-  allRealPrices(r: FormulaResult): boolean {
-    const used = Object.keys(r.formula_pct ?? {});
-    return used.length > 0 && used.every(k => (this.prices()[k] ?? 0) > 0) && Number(this.premixPrice) > 0;
+  // ── الكمية من عدد الطيور ──
+  setQtyMode(m: 'kg' | 'birds'): void {
+    this.qtyMode = m;
+    this.calculate();
+  }
+
+  /** الكمية (كجم) = عدد الطيور × استهلاك الطائر (جم) × الأيام ÷ 1000 — null لو البيانات ناقصة */
+  computedBatch(): number | null {
+    const n = Number(this.animals), g = Number(this.intakeG), d = Number(this.days) > 0 ? Number(this.days) : 1;
+    return n > 0 && g > 0 ? (n * g * d) / 1000 : null;
+  }
+
+  perDayKg(): number {
+    return (Number(this.animals) * Number(this.intakeG)) / 1000;
+  }
+
+  private resolveBatch(): number {
+    if (this.qtyMode === 'birds') {
+      const c = this.computedBatch();
+      if (c !== null) return c;
+    }
+    return Number(this.batchKg) > 0 ? Number(this.batchKg) : 100;
+  }
+
+  // ── الأسعار والتكلفة ──
+  /**
+   * الأسعار اللي بيتحسب عليها الاختيار الأمثل. الخامة اللي المستخدم كتب سعرها تتاخد زي ما هي،
+   * والباقي (أرقام نسبية افتراضية) بنقيسه على مستوى أسعاره عشان ما تبقاش رخيصة بشكل وهمي.
+   */
+  private effectivePrices(): Record<string, number> {
+    const user = this.prices();
+    const ratios: number[] = [];
+    for (const i of this.ingList) {
+      const u = user[i.key];
+      if (u > 0 && i.price > 0) ratios.push(u / i.price);
+    }
+    if (!ratios.length) return { ...user };
+    ratios.sort((a, b) => a - b);
+    const mid = ratios.length >> 1;
+    const factor = ratios.length % 2 ? ratios[mid] : (ratios[mid - 1] + ratios[mid]) / 2;
+    const out: Record<string, number> = {};
+    for (const i of this.ingList) out[i.key] = user[i.key] > 0 ? user[i.key] : i.price * factor;
+    return out;
+  }
+
+  trackByKey = (_: number, row: { key: string }) => row.key;
+
+  /** السعر بيتطبّق لما المستخدم يخلّص كتابة (مش مع كل رقم) عشان الخلطة ما تتغيرش وهو بيكتب */
+  onPriceChange(key: string, ev: Event): void {
+    const v = (ev.target as HTMLInputElement).value;
+    this.setPrice(key, v === '' ? null : Number(v));
+  }
+
+  onPremixChange(ev: Event): void {
+    const v = (ev.target as HTMLInputElement).value;
+    this.premixPrice = v === '' || !(Number(v) > 0) ? null : Number(v);
+    this.calculate();
+  }
+
+  rowCost(row: { key: string; kg: number }): number | null {
+    const p = this.prices()[row.key] ?? 0;
+    return p > 0 ? row.kg * p : null;
+  }
+
+  premixCost(r: FormulaResult): number | null {
+    const p = Number(this.premixPrice);
+    return p > 0 ? (r.premix_kg ?? 0) * p : null;
+  }
+
+  costSummary(r: FormulaResult) {
+    let total = 0, missing = 0;
+    for (const row of this.formulaRows(r)) {
+      const c = this.rowCost(row);
+      if (c === null) missing++; else total += c;
+    }
+    const px = this.premixCost(r);
+    if (px === null) missing++; else total += px;
+
+    const animals = this.qtyMode === 'birds' && Number(this.animals) > 0 ? Number(this.animals) : 0;
+    const days = Number(this.days) > 0 ? Number(this.days) : 1;
+    return {
+      total, missing, complete: missing === 0,
+      perKg: this.lastBatch > 0 ? total / this.lastBatch : 0,
+      perAnimal: animals ? total / animals : null,
+      perAnimalDay: animals ? total / animals / days : null,
+    };
   }
 
   groupNote(): string {
