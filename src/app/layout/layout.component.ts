@@ -73,7 +73,7 @@ interface NavItem {
         <!-- User Section in Sidebar -->
        <!-- User Section in Sidebar -->
        <!-- الجزء الخاص بالمستخدم / تسجيل الدخول -->
-<div class="px-4 py-4 border-t border-white/10">
+<div class="px-4 pt-4 pb-16 border-t border-white/10" style="padding-bottom:calc(4.5rem + env(safe-area-inset-bottom, 0px))">
 
   <!-- حالة 1: المستخدم مسجل ولديه بريد إلكتروني -->
   <div *ngIf="auth.currentUser() && auth.currentUser()?.email; else loginBtns" class="flex items-center gap-3">

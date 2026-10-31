@@ -354,6 +354,13 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
               <p *ngIf="currentCount && currentCount > form.initialCount" class="text-xs mb-0" style="color:#dc2626">
                 العدد الحالي لا يمكن أن يزيد عن العدد الأصلي
               </p>
+              <p class="text-xs mb-0 mt-1" style="opacity:.7">
+                اختياري، لكن بيخلّي معدل التحويل (FCR) دقيق: كام علف القطيع استهلك من أول يوم لحد دلوقتي، ومتوسط وزن الطائر حالياً.
+              </p>
+              <label class="form-label">إجمالي العلف المستهلك لحد دلوقتي (كجم) — اختياري</label>
+              <input class="form-input" type="number" [(ngModel)]="openingFeedKg" min="0" />
+              <label class="form-label">متوسط وزن الطائر حالياً (كجم) — اختياري</label>
+              <input class="form-input" type="number" [(ngModel)]="openingWeightKg" min="0" step="0.01" />
             </ng-container>
           </div>
 
@@ -627,6 +634,8 @@ export class FlocksListComponent implements OnInit {
   // 🐔 قطيع شغال بالفعل
   isExistingFlock = false;
   currentCount: number | null = null;
+  openingFeedKg: number | null = null;
+  openingWeightKg: number | null = null;
 
   onExistingToggle(on: boolean) {
     this.currentCount = on ? (this.form.initialCount || null) : null;
@@ -663,6 +672,8 @@ export class FlocksListComponent implements OnInit {
     this.housingOptions = [];
     this.isExistingFlock = false;
     this.currentCount = null;
+    this.openingFeedKg = null;
+    this.openingWeightKg = null;
   }
 
   isValid(): boolean {
@@ -688,6 +699,8 @@ export class FlocksListComponent implements OnInit {
       ...this.form,
       housingSystem: this.housingSystem,
       currentCount: this.isExistingFlock ? Number(this.currentCount) : null,
+      openingFeedKg: this.isExistingFlock && this.openingFeedKg ? Number(this.openingFeedKg) : null,
+      openingWeightKg: this.isExistingFlock && this.openingWeightKg ? Number(this.openingWeightKg) : null,
     };
 
     this.svc.createFlock(payload).subscribe({
