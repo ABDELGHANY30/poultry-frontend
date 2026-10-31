@@ -70,7 +70,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
         <div class="space-y-3">
           <div *ngFor="let prog of currentPrograms()"
-               (click)="selectedProgram.set(prog)"
+               (click)="openProgram(prog)"
                class="rounded-2xl p-4 border-2 cursor-pointer flex items-center gap-3 transition hover:shadow-md"
                [style.background]="prog.color"
                [style.border-color]="prog.accent">
@@ -93,9 +93,9 @@ import { LEARNING_BUNDLE } from './learning-data';
 
         <!-- بحث -->
         <div class="relative mb-4">
-          <input [(ngModel)]="searchQuery"
+          <input [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)"
                  placeholder="ابحث بالاسم أو التفاصيل..."
-                 class="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm pr-10"
+                 class="w-full bg-gray-50 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 border border-gray-200 rounded-2xl px-4 py-3 text-sm pr-10"
                  dir="rtl"/>
           <span class="absolute left-3 top-3 text-gray-400">🔍</span>
         </div>
@@ -185,6 +185,15 @@ import { LEARNING_BUNDLE } from './learning-data';
           </button>
         </div>
 
+        <!-- بحث الأمراض -->
+        <div class="relative mb-3">
+          <input [ngModel]="diseaseSearch()" (ngModelChange)="diseaseSearch.set($event)"
+                 placeholder="ابحث باسم المرض أو العرض..."
+                 class="w-full bg-gray-50 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 border border-gray-200 rounded-2xl px-4 py-3 text-sm pr-10"
+                 dir="rtl"/>
+          <span class="absolute left-3 top-3 text-gray-400">🔍</span>
+        </div>
+
         <!-- فلترة الخطورة -->
         <div class="flex gap-2 mb-3">
           <button *ngFor="let f of ['الكل','خطر','متوسط']"
@@ -200,15 +209,15 @@ import { LEARNING_BUNDLE } from './learning-data';
         <div class="space-y-2">
           <div *ngFor="let d of filteredDiseases()"
                (click)="selectedDisease.set(d)"
-               class="bg-white rounded-2xl border p-4 flex items-center gap-3 cursor-pointer hover:shadow-md transition"
+               class="bg-white dark:bg-gray-800 rounded-2xl border p-4 flex items-center gap-3 cursor-pointer hover:shadow-md transition"
                [style.border-color]="d.levelColor + '44'">
             <div class="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                  [style.background]="d.levelBg">
               {{ d.icon }}
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-gray-800 text-sm">{{ d.name }}</p>
-              <p class="text-xs text-gray-400 mt-0.5 truncate">{{ d.symptoms[0] }}</p>
+              <p class="font-bold text-gray-800 dark:text-gray-100 text-sm">{{ d.name }}</p>
+              <p class="text-xs text-gray-400 dark:text-gray-300 mt-0.5 truncate">{{ d.symptoms[0] }}</p>
             </div>
             <span class="text-xs font-black px-2 py-1 rounded-lg flex-shrink-0"
                   [style.background]="d.levelBg"
@@ -232,7 +241,7 @@ import { LEARNING_BUNDLE } from './learning-data';
                [style.background]="selectedDisease()?.levelBg">
             <span class="text-4xl">{{ selectedDisease()?.icon }}</span>
             <div>
-              <h2 class="font-black dark:text-green-500 text-gray-800 text-lg">{{ selectedDisease()?.name }}</h2>
+              <h2 class="font-black text-lg" style="color:#1f2937">{{ selectedDisease()?.name }}</h2>
               <span class="text-xs font-black px-2 py-0.5 rounded-full text-white"
                     [style.background]="selectedDisease()?.levelColor">
                 {{ selectedDisease()?.level }}
@@ -242,44 +251,44 @@ import { LEARNING_BUNDLE } from './learning-data';
 
           <!-- الأعراض -->
           <div class="card">
-            <h3 class="font-black text-gray-800 mb-3 flex items-center gap-2">
+            <h3 class="font-black text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
               <span class="w-7 h-7 bg-red-100 rounded-xl flex items-center justify-center text-sm">🔍</span>
               الأعراض
             </h3>
             <div class="space-y-1.5">
               <div *ngFor="let s of selectedDisease()?.symptoms"
-                   class="flex items-start gap-2 text-sm bg-red-50 rounded-xl px-3 py-2">
+                   class="flex items-start gap-2 text-sm bg-red-50 dark:bg-red-900/30 rounded-xl px-3 py-2">
                 <span class="text-red-400 flex-shrink-0 mt-0.5">⚠️</span>
-                <span class="text-gray-700">{{ s }}</span>
+                <span class="text-gray-700 dark:text-gray-100">{{ s }}</span>
               </div>
             </div>
           </div>
 
           <!-- العلاج -->
-          <div class="rounded-2xl p-4 border border-green-200 bg-green-50">
-            <h3 class="font-black text-green-800 mb-2 flex items-center gap-2">
+          <div class="rounded-2xl p-4 border border-green-200 bg-green-50 dark:bg-green-900/30 dark:border-green-700">
+            <h3 class="font-black text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
               <span>💊</span> العلاج
             </h3>
-            <p class="text-sm text-green-700 leading-relaxed">{{ selectedDisease()?.treatment }}</p>
+            <p class="text-sm text-green-700 dark:text-green-100 leading-relaxed">{{ selectedDisease()?.treatment }}</p>
           </div>
 
           <!-- الوقاية -->
-          <div class="rounded-2xl p-4 border border-blue-200 bg-blue-50">
-            <h3 class="font-black text-blue-800 mb-2 flex items-center gap-2">
+          <div class="rounded-2xl p-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-700">
+            <h3 class="font-black text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
               <span>🛡️</span> الوقاية
             </h3>
-            <p class="text-sm text-blue-700 leading-relaxed">{{ selectedDisease()?.prevention }}</p>
+            <p class="text-sm text-blue-700 dark:text-blue-100 leading-relaxed">{{ selectedDisease()?.prevention }}</p>
           </div>
 
           <!-- التفريق -->
           <div class="card" *ngIf="selectedDisease()?.diffFrom?.length">
-            <h3 class="font-black text-gray-800 mb-3 flex items-center gap-2">
+            <h3 class="font-black text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
               <span class="w-7 h-7 bg-amber-100 rounded-xl flex items-center justify-center text-sm">🔄</span>
               الفرق بينه وبين
             </h3>
             <div class="space-y-2">
               <div *ngFor="let d of selectedDisease()?.diffFrom"
-                   class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-800">
+                   class="bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-700 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-100">
                 {{ d }}
               </div>
             </div>
@@ -287,11 +296,11 @@ import { LEARNING_BUNDLE } from './learning-data';
 
           <!-- معلومة إضافية -->
           <div class="card" *ngIf="selectedDisease()?.extraInfo">
-            <h3 class="font-black text-gray-800 mb-2 flex items-center gap-2">
+            <h3 class="font-black text-gray-800 dark:text-gray-100 mb-2 flex items-center gap-2">
               <span class="w-7 h-7 bg-gray-100 rounded-xl flex items-center justify-center text-sm">💡</span>
               معلومة إضافية
             </h3>
-            <p class="text-sm text-gray-600 leading-relaxed">{{ selectedDisease()?.extraInfo }}</p>
+            <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{{ selectedDisease()?.extraInfo }}</p>
           </div>
         </div>
       </div>
@@ -428,7 +437,8 @@ export class LearningComponent implements OnInit {
   animalTypeFilter = signal('all');
   lessonCategoryFilter = signal('all');
   lessonLevelFilter = signal('الكل');
-  searchQuery = '';
+  searchQuery = signal('');
+  diseaseSearch = signal('');
 
   // فلتر الأمراض حسب نوع الطائر/الحيوان: دواجن (عام دجاج) / رومي / بط / سمان / أرانب
   animalTypes = [
@@ -474,7 +484,7 @@ export class LearningComponent implements OnInit {
 
   filteredItems = computed(() => {
     const items = this.selectedProgram()?.items || [];
-    const q = this.searchQuery.toLowerCase();
+    const q = this.searchQuery().toLowerCase();
     const t = this.typeFilter();
     return items.filter((i: any) => {
       const matchQ = !q || i.title.toLowerCase().includes(q) || i.day.toLowerCase().includes(q) || i.desc.toLowerCase().includes(q);
@@ -487,11 +497,13 @@ export class LearningComponent implements OnInit {
     this.dataLoaded();
     const f = this.diseaseFilter();
     const at = this.animalTypeFilter();
+    const q = this.diseaseSearch().trim().toLowerCase();
     return this.diseasesData.filter((d: any) => {
+      const matchQ = !q || d.name.toLowerCase().includes(q) || (d.symptoms || []).some((x: string) => x.toLowerCase().includes(q));
       const matchSeverity = f === 'الكل' || d.level === f;
       // مرض 'all' (زي إجهاد الحرارة) بيظهر مهما كان الفلتر المختار
       const matchAnimal = at === 'all' || d.animalType === at || d.animalType === 'all';
-      return matchSeverity && matchAnimal;
+      return matchSeverity && matchAnimal && matchQ;
     });
   });
 
@@ -533,8 +545,14 @@ export class LearningComponent implements OnInit {
     this.dataLoaded.set(true);
   }
 
+  openProgram(prog: any) {
+    this.searchQuery.set('');
+    this.typeFilter.set('all');
+    this.selectedProgram.set(prog);
+  }
+
   typeIcon(type: string): string {
-    const map: any = { 'تحصين': '💉', 'مضاد حيوي': '💊', 'فيتامين': '⚗️', 'تغذية': '🌾', 'إضاءة': '💡', 'تنبيه': '⚠️', 'تكاثر': '🐇', 'معادلة': '🧮', 'ملاحظة': '📝', 'أمن حيوي': '🛡️' };
+    const map: any = { 'تحصين': '💉', 'مضاد حيوي': '💊', 'فيتامين': '⚗️', 'تغذية': '🌾', 'إضاءة': '💡', 'تنبيه': '⚠️', 'تكاثر': '🐇', 'معادلة': '🧮', 'ملاحظة': '📝', 'أمن حيوي': '🛡️', 'حرارة': '🌡️', 'مياه': '💧', 'وزن': '⚖️' };
     return map[type] ?? '📌';
   }
 }
