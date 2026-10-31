@@ -5,6 +5,7 @@ import { Preferences } from '@capacitor/preferences';
 import {
   formulate, FormulaResult, FormulaCheck, getProfileGroups, getIngredients, getAttrLabel, isInSet,
   profileTable, EDITABLE_ATTRS, PREMIX_PCT, SET_LABELS, ProfileGroup, ProfileInfo, IngredientInfo,
+  INGREDIENT_GROUPS, IngredientGroup, getIngredientNote,
 } from './feed-formulator-engine';
 
 const STORAGE_KEY = 'nrc_formulator_v1';
@@ -81,7 +82,10 @@ const SHORT_LABELS: Record<string, string> = {
         <p class="text-xs text-gray-400 mb-3">{{ stageLabel(profile()) }}</p>
 
         <div *ngFor="let row of formulaRows(r)" class="flex items-center gap-2 py-2.5 border-b border-gray-100">
-          <span class="flex-1 min-w-0 text-sm text-gray-800">{{ row.name }}</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm text-gray-800">{{ row.name }}</p>
+            <p *ngIf="row.note" class="text-[11px] text-gray-400">{{ row.note }}</p>
+          </div>
           <span class="text-base font-black text-gray-900">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></span>
           <span class="text-[11px] text-gray-400 w-12 text-left" dir="ltr">{{ row.pct | number:'1.0-1' }}%</span>
           <button (click)="toggleIngredient(row.key)" class="text-gray-300 text-lg leading-none px-1" title="مش عندي الخامة دي">✕</button>
@@ -132,7 +136,9 @@ const SHORT_LABELS: Record<string, string> = {
 
       <div *ngIf="showAdvanced()" class="mt-3 space-y-3">
         <p class="text-xs text-gray-500 leading-relaxed">
-          علّم على الخامات اللي عندك، واكتب سعرك بالجنيه للكجم عشان تظهر التكلفة. اللي مش مكتوب بيستخدم رقم نسبي للمثال فقط.
+          اختار الخامات اللي تقدر تشتريها: <b>✔️ متاحة</b> / بدون علامة = مش متاحة. تحت كل خامة مكتوب بتضيف إيه.
+          الأملاح والأحماض الأمينية خليها متاحة لو تقدر، لأنها بتساعد في ضبط الخلطة.
+          واكتب سعرك بالجنيه للكجم لو عايز التكلفة.
         </p>
 
         <div class="flex gap-2 flex-wrap">
@@ -142,33 +148,49 @@ const SHORT_LABELS: Record<string, string> = {
           </button>
         </div>
 
-        <div *ngFor="let i of ingList" class="border border-gray-100 rounded-xl p-2"
-             [class.opacity-50]="!isAvailable(i.key)">
-          <div class="flex items-center gap-2">
-            <input type="checkbox" [checked]="isAvailable(i.key)" (change)="toggleIngredient(i.key)"
-                   class="w-4 h-4 flex-shrink-0"/>
-            <span class="text-sm flex-1 min-w-0 truncate">{{ i.ar }}</span>
-            <input type="number" step="any" min="0" class="form-input text-sm py-1 px-2 w-24 flex-shrink-0"
-                   [placeholder]="'' + i.price" [ngModel]="priceValue(i.key)"
-                   (ngModelChange)="setPrice(i.key, $event)"/>
-            <button (click)="toggleLab(i.key)" class="text-base flex-shrink-0"
-                    [class.opacity-40]="labCount(i.key) === 0" title="تحليل معملي">🔬</button>
+        <div *ngFor="let sec of ingSections" class="space-y-2">
+          <div class="pt-2">
+            <p class="text-xs font-bold text-gray-700">{{ sec.group.icon }} {{ sec.group.label }}</p>
+            <p class="text-[11px] text-gray-400">{{ sec.group.hint }}</p>
           </div>
 
-          <div *ngIf="openLab() === i.key" class="mt-2 pt-2 border-t border-gray-100">
-            <p class="text-[11px] text-gray-500 mb-2">
-              لو عندك تحليل معملي للخامة اكتب القيم (% على أساس العلف الطازج). الفاضي بياخد القيمة النموذجية.
-            </p>
-            <div class="grid grid-cols-3 gap-2">
-              <div *ngFor="let a of editableAttrs()">
-                <label class="text-[10px] text-gray-500 block">{{ shortLabel(a) }}</label>
-                <input type="number" step="any" class="form-input text-xs py-1 px-2"
-                       [placeholder]="'' + i.values[a]" [ngModel]="labValue(i.key, a)"
-                       (ngModelChange)="setLab(i.key, a, $event)"/>
+          <div *ngFor="let i of sec.items" class="border border-gray-100 rounded-xl p-2"
+               [class.opacity-50]="!isAvailable(i.key)">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" [checked]="isAvailable(i.key)" (change)="toggleIngredient(i.key)"
+                     class="w-5 h-5 flex-shrink-0"/>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-800">{{ i.ar }}</p>
+                <p *ngIf="i.note" class="text-[11px] text-gray-500">{{ i.note }}</p>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span *ngFor="let st of i.stats" class="text-[10px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{{ st }}</span>
+                </div>
               </div>
+              <div class="flex-shrink-0 text-center">
+                <input type="number" step="any" min="0" class="form-input text-sm py-1 px-2 w-20"
+                       [placeholder]="'' + i.price" [ngModel]="priceValue(i.key)"
+                       (ngModelChange)="setPrice(i.key, $event)"/>
+                <span class="text-[10px] text-gray-400">جنيه/كجم</span>
+              </div>
+              <button (click)="toggleLab(i.key)" class="text-base flex-shrink-0"
+                      [class.opacity-40]="labCount(i.key) === 0" title="تحليل معملي">🔬</button>
             </div>
-            <button *ngIf="labCount(i.key) > 0" (click)="resetLab(i.key)"
-                    class="text-xs text-red-500 mt-2">↺ رجّع القيم النموذجية</button>
+
+            <div *ngIf="openLab() === i.key" class="mt-2 pt-2 border-t border-gray-100">
+              <p class="text-[11px] text-gray-500 mb-2">
+                لو عندك تحليل معملي للخامة اكتب القيم (% على أساس العلف الطازج). الفاضي بياخد القيمة النموذجية.
+              </p>
+              <div class="grid grid-cols-3 gap-2">
+                <div *ngFor="let a of editableAttrs()">
+                  <label class="text-[10px] text-gray-500 block">{{ shortLabel(a) }}</label>
+                  <input type="number" step="any" class="form-input text-xs py-1 px-2"
+                         [placeholder]="'' + i.values[a]" [ngModel]="labValue(i.key, a)"
+                         (ngModelChange)="setLab(i.key, a, $event)"/>
+                </div>
+              </div>
+              <button *ngIf="labCount(i.key) > 0" (click)="resetLab(i.key)"
+                      class="text-xs text-red-500 mt-2">↺ رجّع القيم النموذجية</button>
+            </div>
           </div>
         </div>
 
@@ -202,6 +224,7 @@ export class NrcFormulatorComponent implements OnInit {
   lastBatch = 100;
 
   ingList: IngredientInfo[] = [];
+  ingSections: { group: IngredientGroup; items: IngredientInfo[] }[] = [];
 
   excluded = signal<string[]>([]);
   prices = signal<Record<string, number>>({});
@@ -262,6 +285,13 @@ export class NrcFormulatorComponent implements OnInit {
     this.profileKey = key;
     this.groupId = this.groups.find(g => g.profiles.some(p => p.key === key))?.id ?? this.groups[0].id;
     this.ingList = getIngredients(key);
+    this.buildSections();
+  }
+
+  private buildSections(): void {
+    this.ingSections = INGREDIENT_GROUPS
+      .map(g => ({ group: g, items: this.ingList.filter(i => i.group === g.id) }))
+      .filter(sec => sec.items.length > 0);
   }
 
   stages(): ProfileInfo[] {
@@ -296,6 +326,7 @@ export class NrcFormulatorComponent implements OnInit {
     const hadList = this.ingList.length > 0;
     const hadRabbit = this.ingList.some(i => i.key === 'alfalfa_hay');
     this.ingList = getIngredients(this.profileKey);
+    this.buildSections();
     const nowRabbit = this.ingList.some(i => i.key === 'alfalfa_hay');
     // لو اتنقلنا بين جدول الدواجن وجدول الأرانب: الخامات مختلفة، فنرجع للخامات المحلية
     if (hadList && hadRabbit !== nowRabbit) this.applySet('local');
@@ -386,10 +417,10 @@ export class NrcFormulatorComponent implements OnInit {
   }
 
   // ── عرض النتيجة ──
-  formulaRows(r: FormulaResult): { key: string; name: string; pct: number; kg: number }[] {
+  formulaRows(r: FormulaResult): { key: string; name: string; note: string; pct: number; kg: number }[] {
     return Object.entries(r.formula_pct ?? {})
       .sort((a, b) => b[1] - a[1])
-      .map(([k, pct]) => ({ key: k, name: r.names?.[k] ?? k, pct, kg: r.batch_kg?.[k] ?? 0 }));
+      .map(([k, pct]) => ({ key: k, name: r.names?.[k] ?? k, note: getIngredientNote(k), pct, kg: r.batch_kg?.[k] ?? 0 }));
   }
 
   failedChecks(r: FormulaResult): FormulaCheck[] { return (r.checks ?? []).filter(c => !c.ok); }

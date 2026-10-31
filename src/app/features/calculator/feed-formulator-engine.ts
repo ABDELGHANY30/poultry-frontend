@@ -227,15 +227,90 @@ export function getProfileGroups(): ProfileGroup[] {
   })).filter(g => g.profiles.length > 0);
 }
 
-export interface IngredientInfo { key: string; ar: string; price: number; values: Record<string, number> }
+export interface IngredientInfo {
+  key: string; ar: string; price: number; values: Record<string, number>;
+  /** القسم (طاقة/بروتين/ألياف/معادن/أحماض أمينية) */
+  group: string;
+  /** سطر قصير بيقول الخامة بتضيف إيه للعليقة */
+  note: string;
+  /** أهم أرقام الخامة (بروتين، طاقة، كالسيوم...) للعرض */
+  stats: string[];
+}
+
+export interface IngredientGroup { id: string; icon: string; label: string; hint: string }
+
+export const INGREDIENT_GROUPS: IngredientGroup[] = [
+  { id: 'energy', icon: '⚡', label: 'مصادر الطاقة', hint: 'الأساس في العليقة (حبوب ونخالة وزيت)' },
+  { id: 'protein', icon: '🥩', label: 'مصادر البروتين', hint: 'بروتين وأحماض أمينية' },
+  { id: 'fiber', icon: '🌿', label: 'ألياف ودريس', hint: 'للأرانب' },
+  { id: 'mineral', icon: '🦴', label: 'معادن وأملاح', hint: 'كالسيوم وفوسفور وصوديوم' },
+  { id: 'amino', icon: '🧪', label: 'أحماض أمينية صناعية', hint: 'بتكمّل نقص الليسين والميثيونين والثريونين' },
+];
+
+const INGREDIENT_META: Record<string, { group: string; note: string }> = {
+  corn: { group: 'energy', note: 'طاقة عالية وبروتين قليل' },
+  wheat: { group: 'energy', note: 'طاقة وبروتين متوسط' },
+  barley: { group: 'energy', note: 'طاقة أقل وألياف أكتر من الذرة' },
+  sorghum: { group: 'energy', note: 'طاقة قريبة من الذرة' },
+  wheat_bran: { group: 'energy', note: 'ألياف وفوسفور، طاقته قليلة' },
+  rice_bran: { group: 'energy', note: 'طاقة وألياف وفوسفور' },
+  soy_oil: { group: 'energy', note: 'طاقة مركزة جداً (زيت)' },
+  sbm44: { group: 'protein', note: 'بروتين وليسين عاليين' },
+  sbm48: { group: 'protein', note: 'بروتين أعلى وألياف أقل من 44%' },
+  sbm: { group: 'protein', note: 'بروتين وليسين عاليين' },
+  fullfat_soy: { group: 'protein', note: 'بروتين وطاقة معاً (محمص)' },
+  sunflower_meal: { group: 'protein', note: 'بروتين متوسط وألياف عالية' },
+  faba: { group: 'protein', note: 'بروتين متوسط' },
+  cgm60: { group: 'protein', note: 'بروتين عالي وميثيونين' },
+  fishmeal60: { group: 'protein', note: 'بروتين عالي مع كالسيوم وفوسفور (غالي)' },
+  meat_bone: { group: 'protein', note: 'بروتين مع كالسيوم وفوسفور' },
+  alfalfa_hay: { group: 'fiber', note: 'ألياف وبروتين وكالسيوم' },
+  berseem_hay: { group: 'fiber', note: 'ألياف وكالسيوم' },
+  soy_hulls: { group: 'fiber', note: 'ألياف بالأساس' },
+  beet_pulp: { group: 'fiber', note: 'ألياف وكالسيوم' },
+  limestone: { group: 'mineral', note: 'كالسيوم' },
+  dcp: { group: 'mineral', note: 'فوسفور وكالسيوم' },
+  salt: { group: 'mineral', note: 'صوديوم (ملح الطعام)' },
+  nahco3: { group: 'mineral', note: 'صوديوم (بيكربونات)' },
+  dl_met: { group: 'amino', note: 'ميثيونين صناعي' },
+  lys_hcl: { group: 'amino', note: 'ليسين صناعي' },
+  l_thr: { group: 'amino', note: 'ثريونين صناعي' },
+};
+
+const trim = (x: number) => String(+x.toFixed(1));
+
+/** أهم أرقام الخامة (بحد أقصى 3) بترتيب الأهمية */
+function ingredientStats(v: Record<string, number>, tname: string): string[] {
+  const out: string[] = [];
+  if ((v['lys'] ?? 0) >= 10) out.push(`ليسين ${trim(v['lys'])}%`);
+  if ((v['met'] ?? 0) >= 10) out.push(`ميثيونين ${trim(v['met'])}%`);
+  else if ((v['mc'] ?? 0) >= 10) out.push(`ميثيونين ${trim(v['mc'])}%`);
+  if ((v['thr'] ?? 0) >= 10) out.push(`ثريونين ${trim(v['thr'])}%`);
+  if ((v['na'] ?? 0) >= 1) out.push(`صوديوم ${trim(v['na'])}%`);
+  if ((v['cp'] ?? 0) > 0) out.push(`بروتين ${trim(v['cp'])}%`);
+  if (tname === 'poultry' && (v['me'] ?? 0) > 0) out.push(`طاقة ${Math.round(v['me'])}`);
+  if (tname === 'rabbit' && (v['ndf'] ?? 0) >= 25) out.push(`ألياف ${trim(v['ndf'])}%`);
+  if (tname === 'poultry' && (v['cf'] ?? 0) >= 8) out.push(`ألياف ${trim(v['cf'])}%`);
+  if ((v['ca'] ?? 0) >= 1) out.push(`كالسيوم ${trim(v['ca'])}%`);
+  const ph = v['avp'] ?? v['p'] ?? 0;
+  if (ph >= 1) out.push(`فوسفور ${trim(ph)}%`);
+  return out.slice(0, 3);
+}
+
+/** سطر "بتضيف إيه" لخامة معيّنة (للعرض تحت اسمها في الخلطة) */
+export function getIngredientNote(key: string): string {
+  return INGREDIENT_META[key]?.note ?? '';
+}
 
 /** خامات الجدول الخاص بالمرحلة (دواجن/حمام أو أرانب) مع القيم النموذجية */
 export function getIngredients(profile: string): IngredientInfo[] {
   const tname: string = PROFILES[profile].table ?? 'poultry';
   return Object.entries(TABLES[tname]).map(([key, v]: [string, any]) => {
     const values: Record<string, number> = {};
-    for (const a of EDITABLE_ATTRS[tname]) values[a] = v[a] ?? 0;
-    return { key, ar: v.ar, price: v.price, values };
+    for (const a of new Set([...EDITABLE_ATTRS[tname], 'ndf', 'cf', 'p', 'avp', 'thr'])) if (v[a] !== undefined) values[a] = v[a];
+    for (const a of EDITABLE_ATTRS[tname]) if (values[a] === undefined) values[a] = 0;
+    const meta = INGREDIENT_META[key] ?? { group: 'energy', note: '' };
+    return { key, ar: v.ar, price: v.price, values, group: meta.group, note: meta.note, stats: ingredientStats(values, tname) };
   });
 }
 
