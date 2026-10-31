@@ -25,55 +25,114 @@ const SHORT_LABELS: Record<string, string> = {
   <div>
 
     <!-- Header -->
-    <div class="rounded-3xl text-white px-6 py-5 mb-4"
+    <div class="rounded-3xl text-white px-6 py-4 mb-4"
          style="background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 100%)">
-      <h1 class="text-xl font-bold">🧬 حاسبة NRC لتركيب العلف</h1>
-      <p class="text-white/70 text-sm mt-1">أقل تكلفة تحقق احتياج النوع والمرحلة</p>
+      <h1 class="text-lg font-bold">🧬 تركيب العلف</h1>
+      <p class="text-white/70 text-xs mt-0.5">اختار الطائر والمرحلة وهتظهر لك الخلطة على طول</p>
     </div>
 
-    <!-- 1) النوع والمرحلة -->
+    <!-- الاختيارات -->
     <div class="card space-y-4 mb-4">
+
       <div>
-        <label class="form-label">🐾 النوع</label>
-        <select [(ngModel)]="groupId" (ngModelChange)="onGroupChange()" class="form-input">
-          <option *ngFor="let g of groups" [value]="g.id">{{ g.icon }} {{ g.label }}</option>
-        </select>
+        <p class="text-sm font-bold text-gray-700 mb-2">1️⃣ اختار الطائر</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button *ngFor="let g of groups" (click)="pickGroup(g.id)"
+                  class="rounded-2xl py-2.5 px-1 text-center border-2 transition-all"
+                  [class.border-indigo-500]="groupId === g.id" [class.bg-indigo-50]="groupId === g.id"
+                  [class.border-gray-100]="groupId !== g.id" [class.bg-white]="groupId !== g.id">
+            <div class="text-2xl leading-none">{{ g.icon }}</div>
+            <div class="text-[11px] font-semibold leading-tight mt-1 text-gray-700">{{ g.label }}</div>
+          </button>
+        </div>
       </div>
 
       <div>
-        <label class="form-label">📈 المرحلة</label>
-        <select [(ngModel)]="profileKey" (ngModelChange)="onProfileChange()" class="form-input">
-          <option *ngFor="let p of stages()" [value]="p.key">{{ p.ar }}</option>
+        <p class="text-sm font-bold text-gray-700 mb-2">2️⃣ المرحلة</p>
+        <select [ngModel]="profileKey" (ngModelChange)="profileKey = $event; onProfileChange()" class="form-input">
+          <option *ngFor="let p of stages()" [value]="p.key">{{ stageLabel(p) }}</option>
         </select>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="form-label">⚖️ كمية الخلطة (كجم)</label>
-          <input type="number" min="1" [(ngModel)]="batchKg" class="form-input" placeholder="100"/>
+          <p class="text-sm font-bold text-gray-700 mb-2">3️⃣ الكمية (كجم)</p>
+          <input type="number" min="1" [ngModel]="batchKg" (ngModelChange)="batchKg = $event; calculate()"
+                 class="form-input" placeholder="100"/>
         </div>
         <div *ngIf="profile().isPerDay">
-          <label class="form-label">🍽️ علف الدجاجة/يوم (جم)</label>
-          <input type="number" min="50" [(ngModel)]="intakeG" class="form-input" placeholder="150"/>
+          <p class="text-sm font-bold text-gray-700 mb-2">علف الدجاجة/يوم (جم)</p>
+          <input type="number" min="50" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
+                 class="form-input" placeholder="150"/>
         </div>
       </div>
-
-      <p class="text-[11px] text-gray-400 leading-relaxed">
-        📚 المصدر: {{ profile().src }}
-      </p>
     </div>
 
-    <!-- 2) الخامات والأسعار -->
-    <div class="card mb-4">
-      <button (click)="showIngredients.set(!showIngredients())"
-              class="w-full flex items-center justify-between text-sm font-bold text-gray-700">
-        <span>🌾 الخامات والأسعار <span class="text-xs font-normal text-gray-400">({{ availableCount() }} من {{ ingList.length }} متاحة)</span></span>
-        <span>{{ showIngredients() ? '▲' : '▼' }}</span>
+    <!-- النتيجة -->
+    <div *ngIf="result() as r" class="space-y-4">
+
+      <div *ngIf="!r.formula_pct" class="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
+        ❌ {{ r.message }}
+        <button (click)="showAdvanced.set(true)" class="block mt-2 text-indigo-700 font-semibold">⚙️ افتح الخامات وفعّل خامات أكتر</button>
+      </div>
+
+      <div *ngIf="r.formula_pct" class="card">
+        <p class="text-base font-bold text-gray-800">🌾 الخلطة لـ {{ lastBatch | number:'1.0-2' }} كجم</p>
+        <p class="text-xs text-gray-400 mb-3">{{ stageLabel(profile()) }}</p>
+
+        <div *ngFor="let row of formulaRows(r)" class="flex items-center gap-2 py-2.5 border-b border-gray-100">
+          <span class="flex-1 min-w-0 text-sm text-gray-800">{{ row.name }}</span>
+          <span class="text-base font-black text-gray-900">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></span>
+          <span class="text-[11px] text-gray-400 w-12 text-left" dir="ltr">{{ row.pct | number:'1.0-1' }}%</span>
+          <button (click)="toggleIngredient(row.key)" class="text-gray-300 text-lg leading-none px-1" title="مش عندي الخامة دي">✕</button>
+        </div>
+
+        <div class="flex items-center gap-2 py-2.5 text-indigo-700">
+          <span class="flex-1 text-sm">💊 بريمكس (فيتامينات ومعادن)</span>
+          <span class="text-base font-black">{{ r.premix_kg | number:'1.0-2' }} <span class="text-xs font-normal">كجم</span></span>
+          <span class="w-12"></span><span class="w-6"></span>
+        </div>
+
+        <p class="text-[11px] text-gray-400 mt-1">لو في خامة مش عندك اضغط ✕ جنبها وهتتغير الخلطة.</p>
+
+        <div *ngIf="r.ok" class="mt-3 bg-green-50 rounded-xl px-3 py-2 text-sm text-green-700 font-semibold">
+          ✅ الخلطة مطابقة لاحتياج الطائر
+        </div>
+        <div *ngIf="!r.ok" class="mt-3 bg-amber-50 rounded-xl px-3 py-2 text-sm text-amber-800">
+          ⚠️ الخلطة مش مطابقة تماماً (فيه {{ failedChecks(r).length }} قيد). جرّب تفعّل خامات أكتر من الخيارات المتقدمة.
+        </div>
+
+        <div *ngIf="allRealPrices(r)" class="mt-3 bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-800">
+          💰 التكلفة: <b>{{ r.cost_index_per_kg | number:'1.2-2' }}</b> جنيه/كجم —
+          إجمالي <b>{{ (r.cost_index_per_kg || 0) * lastBatch | number:'1.0-0' }}</b> جنيه
+        </div>
+
+        <button (click)="showDetails.set(!showDetails())" class="mt-3 text-xs text-indigo-700 font-semibold">
+          {{ showDetails() ? '▲ إخفاء' : '▼ عرض' }} التحليل الغذائي
+        </button>
+        <div *ngIf="showDetails()" class="mt-2">
+          <div *ngFor="let ch of r.checks" class="flex items-center gap-2 py-1.5 border-b border-gray-50 text-sm">
+            <span class="w-5 flex-shrink-0">{{ ch.ok ? '✅' : '❌' }}</span>
+            <span class="flex-1 min-w-0">{{ ch.label }}</span>
+            <span class="font-semibold" [class.text-red-600]="!ch.ok">{{ ch.value }}</span>
+            <span class="text-[11px] text-gray-400 w-20 text-left flex-shrink-0" dir="ltr">{{ reqText(ch) }}</span>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-2">📚 المصدر: {{ r.src }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- خيارات متقدمة (مخفية) -->
+    <div class="card mt-4">
+      <button (click)="showAdvanced.set(!showAdvanced())"
+              class="w-full flex items-center justify-between text-sm font-bold text-gray-600">
+        <span>⚙️ خيارات متقدمة <span class="text-xs font-normal text-gray-400">(الخامات، الأسعار، التحليل المعملي)</span></span>
+        <span>{{ showAdvanced() ? '▲' : '▼' }}</span>
       </button>
 
-      <div *ngIf="showIngredients()" class="mt-3 space-y-3">
+      <div *ngIf="showAdvanced()" class="mt-3 space-y-3">
         <p class="text-xs text-gray-500 leading-relaxed">
-          علّم على الخامات اللي عندك، واكتب سعرك الفعلي بالجنيه للكجم. الأسعار الافتراضية <b>أرقام نسبية للمثال فقط</b> (الذرة = 1).
+          علّم على الخامات اللي عندك، واكتب سعرك بالجنيه للكجم عشان تظهر التكلفة. اللي مش مكتوب بيستخدم رقم نسبي للمثال فقط.
         </p>
 
         <div class="flex gap-2 flex-wrap">
@@ -98,7 +157,7 @@ const SHORT_LABELS: Record<string, string> = {
 
           <div *ngIf="openLab() === i.key" class="mt-2 pt-2 border-t border-gray-100">
             <p class="text-[11px] text-gray-500 mb-2">
-              لو عندك تحليل معملي للخامة دي اكتب القيم (% على أساس العلف الطازج). الفاضي بياخد القيمة النموذجية.
+              لو عندك تحليل معملي للخامة اكتب القيم (% على أساس العلف الطازج). الفاضي بياخد القيمة النموذجية.
             </p>
             <div class="grid grid-cols-3 gap-2">
               <div *ngFor="let a of editableAttrs()">
@@ -116,96 +175,16 @@ const SHORT_LABELS: Record<string, string> = {
         <div class="border border-gray-100 rounded-xl p-2 flex items-center gap-2">
           <span class="text-sm flex-1">💊 سعر البريمكس (جنيه/كجم)</span>
           <input type="number" step="any" min="0" class="form-input text-sm py-1 px-2 w-24"
-                 placeholder="12" [(ngModel)]="premixPrice"/>
+                 placeholder="12" [ngModel]="premixPrice" (ngModelChange)="premixPrice = $event; calculate()"/>
         </div>
       </div>
     </div>
 
-    <!-- زر الحساب -->
-    <button (click)="calculate()" class="btn-primary btn w-full py-3 text-base mb-4">🧮 احسب التركيبة</button>
-
-    <!-- النتيجة -->
-    <div *ngIf="result() as r" id="nrc-result" class="space-y-4">
-
-      <!-- مفيش حل -->
-      <div *ngIf="!r.formula_pct" class="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
-        ❌ {{ r.message }}
-      </div>
-
-      <ng-container *ngIf="r.formula_pct">
-
-        <!-- حالة القيود -->
-        <div *ngIf="r.ok" class="bg-green-50 border border-green-200 rounded-2xl p-3 text-sm text-green-700 font-semibold">
-          ✅ كل القيود الغذائية متحققة
-        </div>
-        <div *ngIf="!r.ok" class="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-800">
-          ⚠️ فيه {{ failedChecks(r).length }} قيد مش متحقق. خفّف حدود خامة أو أضف الأحماض الأمينية أو الصويا (من قايمة الخامات) وجرّب تاني.
-        </div>
-
-        <!-- التركيبة -->
-        <div class="card">
-          <p class="text-sm font-bold text-gray-700 mb-3">📋 التركيبة ({{ r.ar }})</p>
-          <div class="grid grid-cols-12 text-[11px] text-gray-400 pb-1 border-b">
-            <span class="col-span-6">الخامة</span>
-            <span class="col-span-3 text-center">النسبة %</span>
-            <span class="col-span-3 text-center">كجم</span>
-          </div>
-          <div *ngFor="let row of formulaRows(r)" class="grid grid-cols-12 py-1.5 border-b border-gray-50 text-sm">
-            <span class="col-span-6 truncate">{{ row.name }}</span>
-            <span class="col-span-3 text-center font-semibold">{{ row.pct | number:'1.2-2' }}</span>
-            <span class="col-span-3 text-center text-gray-600">{{ row.kg | number:'1.0-2' }}</span>
-          </div>
-          <div class="grid grid-cols-12 py-1.5 border-b border-gray-50 text-sm text-indigo-700">
-            <span class="col-span-6">💊 بريمكس (من المورّد)</span>
-            <span class="col-span-3 text-center font-semibold">{{ r.premix_pct | number:'1.2-2' }}</span>
-            <span class="col-span-3 text-center">{{ r.premix_kg | number:'1.0-2' }}</span>
-          </div>
-          <div class="grid grid-cols-12 pt-2 text-sm font-bold">
-            <span class="col-span-6">الإجمالي</span>
-            <span class="col-span-3 text-center">100</span>
-            <span class="col-span-3 text-center">{{ lastBatch | number:'1.0-2' }}</span>
-          </div>
-        </div>
-
-        <!-- التكلفة -->
-        <div class="rounded-2xl p-4 text-center text-white" style="background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 100%)">
-          <ng-container *ngIf="allRealPrices(r); else relativeCost">
-            <p class="text-xs text-white/70">تكلفة الكجم</p>
-            <p class="text-2xl font-black">{{ r.cost_index_per_kg | number:'1.2-2' }} جنيه</p>
-            <p class="text-xs text-white/70 mt-1">إجمالي الخلطة ({{ lastBatch | number:'1.0-2' }} كجم): {{ (r.cost_index_per_kg || 0) * lastBatch | number:'1.0-0' }} جنيه</p>
-          </ng-container>
-          <ng-template #relativeCost>
-            <p class="text-xs text-white/70">رقم تكلفة نسبي للكجم</p>
-            <p class="text-2xl font-black">{{ r.cost_index_per_kg | number:'1.2-2' }}</p>
-            <p class="text-xs text-white/70 mt-1">اكتب أسعارك الفعلية لكل الخامات المستخدمة (والبريمكس) عشان تطلع التكلفة بالجنيه</p>
-          </ng-template>
-        </div>
-
-        <!-- القيود الغذائية -->
-        <div class="card">
-          <p class="text-sm font-bold text-gray-700 mb-3">🔍 التحليل الغذائي مقابل الاحتياج</p>
-          <div *ngFor="let ch of r.checks" class="flex items-center gap-2 py-1.5 border-b border-gray-50 text-sm">
-            <span class="w-5 flex-shrink-0">{{ ch.ok ? '✅' : '❌' }}</span>
-            <span class="flex-1 min-w-0">{{ ch.label }}</span>
-            <span class="font-semibold" [class.text-red-600]="!ch.ok">{{ ch.value }}</span>
-            <span class="text-[11px] text-gray-400 w-20 text-left flex-shrink-0" dir="ltr">{{ reqText(ch) }}</span>
-          </div>
-          <p *ngIf="r.analysis && r.analysis['ca_p_ratio']" class="text-xs text-gray-500 mt-3">
-            نسبة كالسيوم/فوسفور: <b>{{ r.analysis['ca_p_ratio'] | number:'1.1-1' }}</b>
-          </p>
-        </div>
-
-      </ng-container>
-
-      <!-- ملاحظات مهمة -->
-      <div class="bg-gray-50 rounded-2xl p-4 text-xs text-gray-600 leading-relaxed space-y-1.5">
-        <p *ngIf="groupNote()">📌 {{ groupNote() }}</p>
-        <p>💊 البريمكس (فيتامينات ومعادن) محسوب بنسبة {{ premixPct }}% — اشتريه حسب نوع الطائر وأضفه بنسبة المورّد.</p>
-        <p>🧪 قيم الخامات نموذجية وبتختلف من شحنة لشحنة؛ استبدلها بتحليل معملي لو متاح.</p>
-        <p>📉 أرقام NRC 1994 قديمة نسبياً؛ السلالات الحديثة قد تحتاج أكثر.</p>
-        <p>🧑‍⚕️ النتيجة لا تغني عن مختص تغذية. جرّب على دفعة صغيرة وتابع الأداء.</p>
-      </div>
-    </div>
+    <!-- تنبيه -->
+    <p class="text-[11px] text-gray-400 leading-relaxed mt-4 px-1">
+      <span *ngIf="groupNote()">📌 {{ groupNote() }} </span>
+      البريمكس بنسبة {{ premixPct }}% — اشتريه حسب نوع الطائر. أرقام NRC 1994 قديمة نسبياً، والنتيجة لا تغني عن مختص تغذية؛ جرّب على دفعة صغيرة.
+    </p>
 
   </div>
   `
@@ -230,6 +209,8 @@ export class NrcFormulatorComponent implements OnInit {
   result = signal<FormulaResult | null>(null);
   showIngredients = signal(false);
   openLab = signal<string | null>(null);
+  showAdvanced = signal(false);
+  showDetails = signal(false);
 
   async ngOnInit(): Promise<void> {
     this.setProfile(DEFAULT_PROFILE);
@@ -251,6 +232,7 @@ export class NrcFormulatorComponent implements OnInit {
     }
     // أول مرة (مفيش إعدادات محفوظة): الخامات المحلية. من غير حفظ هنا عشان ما نمسحش إعدادات قديمة بالغلط
     if (!loaded) this.applySet('local', false);
+    this.calculate();
   }
 
   private async persist(): Promise<void> {
@@ -290,6 +272,21 @@ export class NrcFormulatorComponent implements OnInit {
     return this.findProfile(this.profileKey) ?? this.groups[0].profiles[0];
   }
 
+  pickGroup(id: string): void {
+    this.groupId = id;
+    this.onGroupChange();
+  }
+
+  /** اسم المرحلة من غير تكرار اسم الطائر (الموجود فوق) */
+  stageLabel(p: ProfileInfo): string {
+    const parts = p.ar.split(' — ');
+    if (parts.length < 2) return p.ar;
+    let label = parts.slice(1).join(' — ');
+    const m = parts[0].match(/\(([^)]*)\)/);
+    if (m) label += ' · ' + m[1];
+    return label;
+  }
+
   onGroupChange(): void {
     const first = this.stages()[0];
     if (first) { this.profileKey = first.key; this.onProfileChange(); }
@@ -303,7 +300,7 @@ export class NrcFormulatorComponent implements OnInit {
     // لو اتنقلنا بين جدول الدواجن وجدول الأرانب: الخامات مختلفة، فنرجع للخامات المحلية
     if (hadList && hadRabbit !== nowRabbit) this.applySet('local');
     this.openLab.set(null);
-    this.result.set(null);
+    this.calculate();
   }
 
   // ── الخامات ──
@@ -314,12 +311,12 @@ export class NrcFormulatorComponent implements OnInit {
   toggleIngredient(key: string): void {
     const cur = this.excluded();
     this.excluded.set(cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key]);
-    this.persist();
+    this.calculate();
   }
 
   applySet(setId: string, save = true): void {
     this.excluded.set(this.ingList.filter(i => !isInSet(this.profileKey, setId, i.key)).map(i => i.key));
-    if (save) this.persist();
+    if (save) this.calculate();
   }
 
   // ── الأسعار ──
@@ -330,7 +327,7 @@ export class NrcFormulatorComponent implements OnInit {
     if (v === null || v === undefined || !isFinite(Number(v)) || Number(v) <= 0) delete next[key];
     else next[key] = Number(v);
     this.prices.set(next);
-    this.persist();
+    this.calculate();
   }
 
   // ── التحليل المعملي ──
@@ -352,7 +349,7 @@ export class NrcFormulatorComponent implements OnInit {
     if (Object.keys(ing).length) table[key] = ing; else delete table[key];
     all[t] = table;
     this.lab.set(all);
-    this.persist();
+    this.calculate();
   }
 
   resetLab(key: string): void {
@@ -362,7 +359,7 @@ export class NrcFormulatorComponent implements OnInit {
     delete table[key];
     all[t] = table;
     this.lab.set(all);
-    this.persist();
+    this.calculate();
   }
 
   // ── الحساب ──
@@ -386,14 +383,13 @@ export class NrcFormulatorComponent implements OnInit {
       this.result.set({ profile: this.profileKey, ok: false, message: 'حصل خطأ أثناء الحساب، حاول تاني' });
     }
     this.persist();
-    setTimeout(() => document.getElementById('nrc-result')?.scrollIntoView({ behavior: 'smooth' }), 100);
   }
 
   // ── عرض النتيجة ──
-  formulaRows(r: FormulaResult): { name: string; pct: number; kg: number }[] {
+  formulaRows(r: FormulaResult): { key: string; name: string; pct: number; kg: number }[] {
     return Object.entries(r.formula_pct ?? {})
       .sort((a, b) => b[1] - a[1])
-      .map(([k, pct]) => ({ name: r.names?.[k] ?? k, pct, kg: r.batch_kg?.[k] ?? 0 }));
+      .map(([k, pct]) => ({ key: k, name: r.names?.[k] ?? k, pct, kg: r.batch_kg?.[k] ?? 0 }));
   }
 
   failedChecks(r: FormulaResult): FormulaCheck[] { return (r.checks ?? []).filter(c => !c.ok); }
