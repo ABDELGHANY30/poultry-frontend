@@ -450,7 +450,12 @@ const TURKEY_VACC = [
 
     <ng-template #todaySummaryBlock>
       <div class="grid lg:grid-cols-2 gap-4 mb-4">
-        <app-health-score-widget [flockId]="flock()!.id" (factorClick)="onHealthFactorClick($event)"></app-health-score-widget>
+        <app-health-score-widget
+          [flockId]="flock()!.id"
+          [birds]="healthStats().birds"
+          [dead]="healthStats().dead"
+          [temp]="healthStats().temp"
+          (factorClick)="onHealthFactorClick($event)"></app-health-score-widget>
 
         <div class="card">
           <div class="flex items-center justify-between mb-2">
@@ -522,7 +527,8 @@ const TURKEY_VACC = [
           مفيش مهام يومية متحددة لسه للقطيع ده.
         </div>
         <div *ngFor="let t of todayTasks()" class="flex items-start gap-3 bg-gray-50 rounded-lg px-3 py-2.5 mb-1.5">
-          <button type="button" (click)="toggleTaskToday(t)"
+          <button type="button" (click)="toggleTaskToday(t)" [disabled]="!canToggleTasks()"
+                  [class.opacity-50]="!canToggleTasks()"
                   class="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center mt-0.5"
                   [class.bg-green-600]="t.completed_today" [class.border-green-600]="t.completed_today"
                   [class.border-gray-300]="!t.completed_today">
@@ -939,15 +945,19 @@ const TURKEY_VACC = [
           {{ inviting() ? 'جاري الإرسال...' : 'إرسال الدعوة' }}
         </button>
 
-        <div *ngIf="lastInviteLink()" class="bg-white rounded-lg p-2 border">
-          <div *ngIf="lastInviteCode()" class="text-center mb-2">
+        <div *ngIf="lastInviteCode()" class="bg-white rounded-lg p-2 border">
+          <div class="text-center mb-2">
             <p class="text-[10px] text-gray-500">كود الدعوة (ابعته للعضو — مطلوب عشان يقبل):</p>
             <p class="font-black tracking-widest text-lg" dir="ltr">{{ lastInviteCode() }}</p>
           </div>
           <p class="text-[10px] text-gray-500 mb-2">
-            العضو لازم يكون عنده حساب بنفس الإيميل ده. هيلاقي الدعوة جوه التطبيق، وهيكتب الكود عشان يقبلها. ابعتله الكود:
+            العضو لازم يكون عنده حساب بنفس الإيميل ده. هيلاقي الدعوة جوه التطبيق، وهيكتب الكود عشان يقبلها. ابعتله الكود بس:
           </p>
           <div class="flex gap-2">
+            <button type="button" (click)="copyInviteCode()"
+                    class="flex-1 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold">
+              {{ inviteCodeCopied() ? '✓ اتنسخ' : '📋 نسخ الكود' }}
+            </button>
             <a [href]="whatsappShareUrl()" target="_blank" rel="noopener"
                class="flex-1 py-2 rounded-lg bg-green-500 text-white text-xs font-bold text-center no-underline">📱 واتساب</a>
             <a [href]="telegramShareUrl()" target="_blank" rel="noopener"
@@ -1314,7 +1324,7 @@ export class FlockDetailComponent implements OnInit {
   farmMembers = signal<any[]>([]);
   showInviteForm = signal(false);
   inviting = signal(false);
-  lastInviteLink = signal<string | null>(null);
+  inviteCodeCopied = signal(false);
   lastInviteCode = signal<string | null>(null); // 🔑 كود الدعوة اللي الباك بيولّده (للمالك بس)
   inviteCodes: Record<string, string> = {};      // 🔑 الكود اللي المدعو بيكتبه لكل دعوة
   pendingInvitesForMe = signal<any[]>([]); // 🔔 دعوات موجهة لإيميلي أنا (لو صاحب الحساب ده كمان مدعو من حد تاني)
@@ -1367,6 +1377,23 @@ export class FlockDetailComponent implements OnInit {
     const created = String((this.flock() as any)?.createdAt ?? '').split('T')[0];
     const d = this.newRecordDate();
     return !this.editingRecordId() && !!d && !!created && d < created;
+  };
+
+  // 💚 أرقام كارت الصحة (إجمالي الطيور / النفوق / حرارة اليوم): نفس اللي بيبعته الداشبورد للكارت.
+  // من غيرها الكارت بيتعرض من غير الأرقام دي في صفحة القطيع.
+  healthStats = () => {
+    const f: any = this.flock();
+    if (!f) return { birds: null as number | null, dead: null as number | null, temp: null as number | null };
+    const current = Number(f.currentCount ?? f.current_count ?? 0);
+    const initial = Number(f.initialCount ?? f.initial_count ?? 0);
+    const todayStr = this.localDateStr();
+    const rec: any = this.records().find(r => this.recordDateStr(r) === todayStr);
+    const t = rec?.temperatureCelsius ?? rec?.temperature_celsius ?? null;
+    return {
+      birds: current,
+      dead: Math.max(0, initial - current),
+      temp: t !== null && t !== undefined ? Number(t) : null,
+    };
   };
 
   // ✅ هل اتسجلت بيانات النهاردة للقطيع المفتوح؟
@@ -1540,16 +1567,25 @@ export class FlockDetailComponent implements OnInit {
       });
   }
 
+  // 👷 تأكيد المهام نفس صلاحية تسجيل السجلات: صاحب القطيع أو عضو عنده can_add_records
+  canToggleTasks = () => this.myAccess()?.is_owner !== false || !!this.myAccess()?.can_add_records;
+
   toggleTaskToday(t: any) {
     const flockId = this.flock()?.id;
-    if (!flockId) return;
+    if (!flockId || !this.canToggleTasks()) return;
     const wasCompleted = t.completed_today;
     const req = wasCompleted
       ? this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`)
       : this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}/complete`, {});
     req.subscribe({
       next: () => this.loadTodayTasks(flockId),
-      error: () => alert('حصل خطأ أثناء تحديث المهمة'),
+      error: (err) => {
+        // الحالة اتغيرت من حد تاني (أو صلاحية ناقصة): نحدّث القايمة بدل ما تفضل قديمة
+        this.loadTodayTasks(flockId);
+        alert(err?.status === 404 || err?.status === 403
+          ? 'مالكش صلاحية تأكيد المهام على القطيع ده'
+          : 'حصل خطأ أثناء تحديث المهمة، اتحدّثت القايمة');
+      },
     });
   }
 
@@ -1574,9 +1610,9 @@ export class FlockDetailComponent implements OnInit {
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
-          // ⚠️ إرسال إيميل حقيقي مش موجود لسه — اللينك ده لازم يتبعت يدويًا للعضو
-          // 🌐 لينك الموقع نفسه (مش لينك القطيع/الدعوة) — العضو يسجّل حساب وبعدين الدعوة تظهرله جوه التطبيق
-          this.lastInviteLink.set(window.location.origin);
+          // ⚠️ إرسال إيميل حقيقي مش موجود لسه — الكود لازم يتبعت يدويًا للعضو
+          // 🔑 بنبعت الكود بس (من غير لينك: window.location.origin كان بيطلع localhost وقت التطوير)
+          this.inviteCodeCopied.set(false);
           this.lastInviteCode.set(res?.invite_code ?? null);
           this.inviteForm = { invited_email: '', role: 'worker', can_add_records: true, can_view_financials: false };
           this.loadFarmMembers();
@@ -1631,15 +1667,27 @@ export class FlockDetailComponent implements OnInit {
       .subscribe({ next: () => this.loadPendingInvitesForMe(), error: () => alert('حصل خطأ أثناء رفض الدعوة') });
   }
 
-  // 📱 مشاركة لينك الدعوة عبر واتساب/تيليجرام — مجرد رابط، مفيش API ولا حساب مدفوع مطلوب
-  whatsappShareUrl(): string {
+  // 📱 مشاركة كود الدعوة بس عبر واتساب/تيليجرام — مفيش لينك، مجرد نص فيه الكود
+  private inviteShareText(): string {
     const code = this.lastInviteCode();
-    const text = `تمت دعوتك للانضمام كعضو في إدارة القطعان. ادخل على حسابك (بنفس الإيميل اللي اتدعيت عليه) وهتلاقي الدعوة جوه التطبيق: ${this.lastInviteLink()}` +
-      (code ? `\nكود الدعوة: ${code}` : '');
-    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    return code ? `كود الدعوة: ${code}` : '';
+  }
+  whatsappShareUrl(): string {
+    return `https://wa.me/?text=${encodeURIComponent(this.inviteShareText())}`;
   }
   telegramShareUrl(): string {
-    return `https://t.me/share/url?url=${encodeURIComponent(this.lastInviteLink() || '')}&text=${encodeURIComponent('تمت دعوتك للانضمام كعضو في إدارة القطعان — ادخل على حسابك' + (this.lastInviteCode() ? `\nكود الدعوة: ${this.lastInviteCode()}` : ''))}`;
+    // تيليجرام بيطلب باراميتر url حتى لو فاضي، فبنبعت مسافة
+    return `https://t.me/share/url?url=%20&text=${encodeURIComponent(this.inviteShareText())}`;
+  }
+  copyInviteCode() {
+    const code = this.lastInviteCode();
+    if (!code) return;
+    const done = () => { this.inviteCodeCopied.set(true); setTimeout(() => this.inviteCodeCopied.set(false), 2000); };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(code).then(done, () => alert(`الكود: ${code}`));
+    } else {
+      alert(`الكود: ${code}`);
+    }
   }
 
   // 💉 دمج الجدول الاسترشادي (أسماء/طريقة) مع حالة التنفيذ الحقيقية من الداتابيز
