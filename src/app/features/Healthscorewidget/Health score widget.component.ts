@@ -1,8 +1,9 @@
-import { Component, Input, Output, EventEmitter, OnInit, inject, signal, DestroyRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, inject, signal, DestroyRef, effect, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { forkJoin } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { forkJoin, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 import { AuthService } from '../../core/services/auth.service'; // ⚠️ عدّل المسار حسب مكان الملف عندك
 
@@ -55,7 +56,7 @@ interface HealthScoreData {
       </div>
 
       <div *ngIf="!allFlocksLoading()" class="divide-y">
-        <button *ngFor="let d of allFlocksData()" (click)="showSingleFlock(d.flock_id)"
+        <button *ngFor="let d of allFlocksData()" (click)="openFlock(d.flock_id)"
                 class="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors text-right">
           <div class="flex items-center gap-2.5">
             <div class="w-2 h-8 rounded-full" [class]="barClass(d.status)"></div>
@@ -75,7 +76,15 @@ interface HealthScoreData {
     <div *ngIf="viewMode() === 'single' && !loading() && data() as d"
          class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 mb-5">
 
-      <div class="text-sm text-gray-500 mb-3">{{ d.flock_name }}</div>
+      <!-- 👆 الضغط على الجزء ده بيفتح صفحة القطيع -->
+      <div role="link" tabindex="0" class="cursor-pointer active:opacity-80 transition-opacity"
+           (click)="openFlock(selectedFlockId() ?? d.flock_id)"
+           (keydown.enter)="openFlock(selectedFlockId() ?? d.flock_id)">
+
+      <div class="flex items-center justify-between text-sm text-gray-500 mb-3">
+        <span>{{ d.flock_name }}</span>
+        <span class="text-gray-300">‹</span>
+      </div>
 
       <div class="flex items-center gap-2">
         <!-- الدايرة -->
@@ -112,6 +121,7 @@ interface HealthScoreData {
       </div>
 
       <div class="text-xs mt-2" [class]="textClass(d.status)">صحة القطيع</div>
+      </div>
 
       <!-- 🔎 أسباب النقص -->
       <div *ngIf="d.factors.length" class="border-t border-gray-100 pt-3 mt-3">
@@ -149,7 +159,7 @@ interface HealthScoreData {
     </div>
 
     <div *ngIf="error()" class="rounded-2xl border-2 border-dashed border-gray-200 p-6 bg-gray-50 text-xs text-gray-400 text-center">
-      🐔 مفيش قطيع نشط لعرض صحته دلوقتي
+      {{ offline() ? '📡 مفيش نت ومفيش بيانات محفوظة لسه — هتظهر أول ما تفتح نت مرة' : '🐔 مفيش قطيع نشط لعرض صحته دلوقتي' }}
     </div>
   `
 })
@@ -168,6 +178,7 @@ export class HealthScoreWidgetComponent implements OnInit {
   @Input() temp: number | null = null;
 
   private http = inject(HttpClient);
+  private router = inject(Router);
   private auth = inject(AuthService);
   private destroyRef = inject(DestroyRef);
   private allFetched = false;
@@ -175,6 +186,7 @@ export class HealthScoreWidgetComponent implements OnInit {
   showFactors = signal(false);
   loading = signal(true);
   error = signal(false);
+  offline = signal(false);
 
   flocksList = signal<{ id: string; name: string }[]>([]);
   selectedFlockId = signal<string | undefined>(undefined);
@@ -223,14 +235,38 @@ export class HealthScoreWidgetComponent implements OnInit {
     if (this.viewMode() === 'all') this.showAllFlocks();
   };
 
-  ngOnInit() {
-    // عرض المحفوظ فوراً لحد ما السيرفر يرد
+  private restoredFor: string | null = null;
+
+  /** بيعرض المحفوظ (القطعان + آخر درجة صحة) فوراً من غير ما يستنى السيرفر */
+  private restoreFromCache() {
+    const k = this.cacheKey();
+    if (!k || k === this.restoredFor) return;
+    this.restoredFor = k;
+
     const c = this.readCache();
-    if (Array.isArray(c.flocks) && c.flocks.length) {
-      this.flocksList.set(c.flocks);
-      const wanted = this.flockId ?? c.selected;
-      this.selectedFlockId.set(c.flocks.some((f: any) => f.id === wanted) ? wanted : c.flocks[0].id);
+    if (!Array.isArray(c.flocks) || !c.flocks.length) return;
+    if (this.flocksList().length === 0) this.flocksList.set(c.flocks);
+
+    const wanted = this.selectedFlockId() ?? this.flockId ?? c.selected;
+    const sel = c.flocks.some((f: any) => f.id === wanted) ? wanted : c.flocks[0].id;
+    this.selectedFlockId.set(sel);
+
+    const cachedScore: HealthScoreData | undefined = c.scores?.[sel];
+    if (cachedScore && !this.data()) {
+      this.data.set(cachedScore);
+      this.loading.set(false);
     }
+    this.flockSelected.emit(sel); // الأب يجيب أرقام القطيع (طيور / نفوق / حرارة) من محفوظاته
+  }
+
+  // المستخدم ممكن يتعرف بعد ما الكارت يتفتح (أوفلاين) — أول ما الـ id يبان نعرض المحفوظ
+  private restoreEffect = effect(() => {
+    this.cacheKey();
+    untracked(() => this.restoreFromCache());
+  });
+
+  ngOnInit() {
+    this.restoreFromCache();
     this.loadFlocksList();
     // 🌐 أول ما النت يرجع نحدّث
     window.addEventListener('online', this.onOnline);
@@ -246,12 +282,14 @@ export class HealthScoreWidgetComponent implements OnInit {
         this.flocksList.set(activeOnly);
         this.writeCache({ flocks: activeOnly.map(f => ({ id: f.id, name: f.name })) });
         // القطيع المبدئي: اللي جاي من @Input لو موجود (وكان نشط)، وإلا أول قطيع نشط في القايمة
+        const current = this.selectedFlockId();
         const initial = (this.flockId && activeOnly.some(f => f.id === this.flockId))
           ? this.flockId
-          : activeOnly[0]?.id;
+          : (current && activeOnly.some(f => f.id === current) ? current : activeOnly[0]?.id);
         this.selectedFlockId.set(initial);
         this.writeCache({ selected: initial });
         this.load();
+        this.prefetchScores(activeOnly.map(f => f.id), initial);
       },
       error: () => {
         // فشل جلب القايمة مش لازم يوقف عرض الكارت — نكمل بالـ flockId الأصلي لو موجود
@@ -259,6 +297,23 @@ export class HealthScoreWidgetComponent implements OnInit {
         this.selectedFlockId.set(this.selectedFlockId() ?? this.flockId);
         this.load();
       }
+    });
+  }
+
+  /** بيفتح صفحة القطيع اللي المستخدم ضغط عليه */
+  openFlock(id: string | undefined | null) {
+    if (!id) return;
+    this.router.navigate(['/flocks', id]);
+  }
+
+  /** بيحفظ في الخلفية درجة صحة باقي القطعان، عشان تظهر أوفلاين لما المستخدم يبدّل بينهم */
+  private prefetchScores(ids: string[], skipId?: string) {
+    if (!navigator.onLine) return;
+    ids.filter(id => id !== skipId).forEach(id => {
+      this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${id}`).subscribe({
+        next: (res) => this.writeCache({ scores: { ...(this.readCache().scores || {}), [id]: { ...res, flock_id: id } } }),
+        error: () => {}
+      });
     });
   }
 
@@ -281,19 +336,40 @@ export class HealthScoreWidgetComponent implements OnInit {
     if (this.allFlocksData().length === 0 && Array.isArray(cachedAll) && cachedAll.length) {
       this.allFlocksData.set(cachedAll);
     }
+    // مفيش نسخة "الكل" محفوظة؟ نركّبها من درجات القطعان المحفوظة
+    const cachedScores = this.readCache().scores || {};
+    if (this.allFlocksData().length === 0) {
+      const built = this.flocksList()
+        .map(f => cachedScores[f.id] ? { ...cachedScores[f.id], flock_id: f.id } : null)
+        .filter((x): x is HealthScoreData => !!x)
+        .sort((a, b) => a.score - b.score);
+      if (built.length) this.allFlocksData.set(built);
+    }
     this.allFlocksLoading.set(this.allFlocksData().length === 0);
+
+    let failed = false;
     const requests = this.flocksList().map(f =>
-      this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${f.id}`)
-        .pipe(map(res => ({ ...res, flock_id: f.id })))
+      this.http.get<HealthScoreData>(`${environment.apiUrl}/ai/health-score?flock_id=${f.id}`).pipe(
+        map(res => ({ ...res, flock_id: f.id })),
+        // قطيع واحد فشل مايبوّظش الباقي: نستخدم آخر درجة محفوظة له
+        catchError(() => {
+          failed = true;
+          return of(cachedScores[f.id] ? { ...cachedScores[f.id], flock_id: f.id } as HealthScoreData : null);
+        })
+      )
     );
+    if (!requests.length) { this.allFlocksLoading.set(false); return; }
 
     forkJoin(requests).subscribe({
       next: (results) => {
-        // الأسوأ حالاً (أقل سكور) فوق، عشان يلفت النظر الأول
-        const sorted = results.sort((a, b) => a.score - b.score);
-        this.allFlocksData.set(sorted);
-        this.allFetched = true;
-        this.writeCache({ all: sorted });
+        const ok = results.filter((r): r is HealthScoreData => !!r);
+        if (ok.length) {
+          // الأسوأ حالاً (أقل سكور) فوق، عشان يلفت النظر الأول
+          const sorted = ok.sort((a, b) => a.score - b.score);
+          this.allFlocksData.set(sorted);
+          this.writeCache({ all: sorted });
+        }
+        this.allFetched = !failed; // لو فيه فشل نعيد المحاولة المرة الجاية
         this.allFlocksLoading.set(false);
       },
       error: () => {
@@ -323,7 +399,7 @@ export class HealthScoreWidgetComponent implements OnInit {
       error: () => {
         this.loading.set(false);
         // لو فيه نسخة محفوظة معروضة بنسيبها؛ الخطأ بيظهر بس لو مفيش حاجة نعرضها
-        if (!cachedScore) this.error.set(true);
+        if (!cachedScore) { this.offline.set(!navigator.onLine); this.error.set(true); }
       }
     });
   }

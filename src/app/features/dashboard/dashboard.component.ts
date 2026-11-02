@@ -140,11 +140,16 @@ const CATEGORIES = [
         <!-- 3 صفوف ظاهرة بس (148px)، والباقي بسكرول جوه الكارت من غير ما حجمه يتغير -->
         <div class="flex flex-col gap-2 h-[148px] overflow-y-auto overscroll-contain pe-1">
           <div *ngFor="let p of tabPrices()"
-               class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 h-11 flex-shrink-0">
-            <span class="text-sm text-gray-800 truncate">{{ p.item_name_ar }}</span>
+               class="flex items-center justify-between gap-3 rounded-lg border px-3 h-11 flex-shrink-0"
+               [style.background-color]="getCategoryColor(activePriceTab(), 'bg')"
+               style="border-color:#e0e0e0">
+            <span class="flex items-center gap-1.5 min-w-0">
+              <span class="text-sm flex-shrink-0">{{ getCategoryIcon(activePriceTab()) }}</span>
+              <span class="text-sm font-bold truncate" style="color:#1f2937">{{ p.item_name_ar }}</span>
+            </span>
             <span class="flex-shrink-0 text-xs text-gray-400">
-              المعلن <b class="text-sm font-medium text-gray-800">{{ p.price_max ? (p.price_max | number) : '—' }}</b>
-              · التنفيذ <b class="text-sm font-medium text-green-700">{{ p.price_min | number }}</b>
+              المعلن <b class="text-sm font-black text-blue-600">{{ p.price_max ? (p.price_max | number) : '—' }}</b>
+              · التنفيذ <b class="text-sm font-black text-green-600">{{ p.price_min | number }}</b>
             </span>
           </div>
         </div>
