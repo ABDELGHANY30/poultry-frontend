@@ -22,7 +22,8 @@ import { SupplierSurveyComponent } from '../../features/supplierSurvey/SupplierS
 // التعليق في أول referral-card.component.ts نفسه لتفاصيل التركيب
 import { ReferralCardComponent } from '../../features/referral_card.component.ts/referral-card.component';
 import { CleanupGuideComponent } from './cleanup-guide.component';
-import { CLEANUP_GUIDES, addDays, localDateStr as guideDateStr } from './cleanup-guide.data';
+import { DisinfectantsGuideComponent } from './disinfectants-guide.component';
+import { CLEANUP_GUIDES, addDays, getPrepFlag, localDateStr as guideDateStr, setPrepFlag } from './cleanup-guide.data';
 
 const BROILER_VACC = [
   { day: 1,  nameEn: 'Hatchery: Marek + ND + IB', nameAr: 'المعمل: ماريك + نيوكاسل + IB', method: 'Spray/Inj' },
@@ -98,7 +99,7 @@ const TURKEY_VACC = [
   imports: [
     CommonModule, FormsModule, RouterLink, TranslateModule, DecimalPipe,
     HealthScoreWidgetComponent, ProfitIndicatorWidgetComponent, ForecastWidgetComponent,
-    DecisionSimulatorComponent, SupplierSurveyComponent, ReferralCardComponent, CleanupGuideComponent,
+    DecisionSimulatorComponent, SupplierSurveyComponent, ReferralCardComponent, CleanupGuideComponent, DisinfectantsGuideComponent,
   ],
   template: `
   <div class="page-wrapper" *ngIf="flock(); else loading">
@@ -498,6 +499,20 @@ const TURKEY_VACC = [
 
     <!-- 📅 اليوم -->
     <ng-container *ngIf="activeSection() === 'today'">
+      <!-- 🧹 تجهيز العنبر قبل الاستلام: بيفضل ظاهر لحد ما تخلّصه -->
+      <div *ngIf="prepActive()" class="card mb-4 border-2 border-green-200">
+        <h2 class="section-title">🧹 تجهيز العنبر قبل الاستلام</h2>
+        <p class="text-xs text-[var(--c-muted)] mb-3">
+          الخطوات كلها هنا لحد ما تخلّص. علّم كل خطوة وانت بتنفّذها، ولما تخلّص اضغط "خلّصت التجهيز".
+        </p>
+        <app-cleanup-guide [type]="flock()!.type" phase="before" [storageKey]="flock()!.id"></app-cleanup-guide>
+        <div class="mt-3"><app-disinfectants-guide></app-disinfectants-guide></div>
+        <button type="button" (click)="finishPrep()"
+                class="mt-3 w-full py-3 rounded-xl bg-green-600 text-white font-bold">
+          ✅ خلّصت التجهيز (إخفاء)
+        </button>
+      </div>
+
       <!-- الـ KPIs المؤشرات -->
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" *ngIf="analytics()">
         <div class="card text-center py-4" *ngFor="let k of kpis()">
@@ -1002,6 +1017,7 @@ const TURKEY_VACC = [
           الدورة انتهت وتقييمها اتسجّل. ابدأ فترة التنظيف: نضّف وطهّر وسيب العنبر يرتاح قبل الدفعة الجاية، وعلّم كل خطوة وانت بتخلّصها.
         </p>
         <app-cleanup-guide [type]="flock()!.type" phase="after" [storageKey]="flock()!.id"></app-cleanup-guide>
+        <div class="mt-3"><app-disinfectants-guide></app-disinfectants-guide></div>
       </div>
 
       <div class="card mt-4">
@@ -1072,6 +1088,14 @@ export class FlockDetailComponent implements OnInit {
   healthScore   = signal<any>(null);
   closingFlock  = signal(false);
   private initialTabApplied = false;
+  prepFlag = signal(false);
+  prepActive = () => this.prepFlag() && this.flock()?.status === 'active';
+  finishPrep() {
+    const id = this.flock()?.id;
+    if (!id) return;
+    setPrepFlag(id, false);
+    this.prepFlag.set(false);
+  }
   showSurvey    = signal(false);
   lang = localStorage.getItem('lang') ?? 'ar';
 
@@ -2154,6 +2178,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       breed: dataFromBackend.breed
     };
     this.flock.set(flockObj);
+    this.prepFlag.set(getPrepFlag(flockObj.id));
     // 🧹 قطيع منتهي بنفتحه أول مرة (من قايمة "دورات منتهية"): نبدأ من تاب التطهير والدورة الجاية
     if (!this.initialTabApplied) {
       this.initialTabApplied = true;

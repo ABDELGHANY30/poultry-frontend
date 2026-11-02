@@ -918,3 +918,18 @@ export function addDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   return localDateStr(new Date(y, m - 1, d + days));
 }
+
+// ───────── تجهيز العنبر جوه صفحة القطيع (من فورم الإضافة) ─────────
+const PREP_KEY = (flockId: string) => `cleanup:v1:prep:${flockId}`;
+
+export function getPrepFlag(flockId: string): boolean {
+  try { return localStorage.getItem(PREP_KEY(flockId)) === '1'; } catch { return false; }
+}
+export function setPrepFlag(flockId: string, on: boolean): void {
+  try { on ? localStorage.setItem(PREP_KEY(flockId), '1') : localStorage.removeItem(PREP_KEY(flockId)); } catch { /* تجاهل */ }
+}
+/** نقل تقدّم قايمة (مثلاً من صفحة التجهيز المستقلة) لمفتاح قطيع جديد */
+export function copyGuideState(fromKey: string, toKey: string, phase: GuidePhase): void {
+  const s = loadGuideState(fromKey, phase);
+  if (Object.keys(s.done).length) saveGuideState(toKey, phase, s);
+}

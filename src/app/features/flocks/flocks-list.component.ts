@@ -273,6 +273,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { copyGuideState, setPrepFlag } from './cleanup-guide.data';
 import { TranslateModule } from '@ngx-translate/core';
 import { FlockService } from '../../core/services/flock.service';
 import { Flock, FlockCreate, FlockType } from '../../core/models';
@@ -294,27 +295,7 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
       </button>
     </div>
 
-    <!-- 🧹 لسه هتنضف أو هتجهّز العنبر؟ ابدأ من هنا -->
-    <a routerLink="/flocks/prepare"
-       class="flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 no-underline text-green-800">
-      <span class="text-sm font-bold">🧹 هتنضف أو هتجهّز العنبر قبل الاستلام؟ ابدأ من هنا</span>
-      <span class="text-xs font-bold">←</span>
-    </a>
-
-    <!-- 🏁 دورات منتهية: لسه فيها التطهير والدورة الجاية، وكل واحدة بتقريرها -->
-    <div *ngIf="endedFlocks().length > 0" class="card">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="section-title mb-0">🏁 دورات منتهية</h2>
-        <a routerLink="/flocks/annual" class="text-xs font-bold text-green-700 no-underline">📊 التقرير السنوي</a>
-      </div>
-      <a *ngFor="let f of endedFlocks()" [routerLink]="['/flocks', f.id]"
-         class="flex items-center justify-between gap-2 py-2 border-t border-gray-100 no-underline text-[var(--c-text)]">
-        <span class="text-sm font-bold">{{ f.name }}</span>
-        <span class="text-[11px] text-green-700 font-bold">🧹 التطهير والدورة الجاية ←</span>
-      </a>
-    </div>
-    <a *ngIf="endedFlocks().length === 0" routerLink="/flocks/annual"
-       class="text-xs font-bold text-green-700 no-underline">📊 التقرير السنوي</a>
+    <a routerLink="/flocks/annual" class="text-xs font-bold text-green-700 no-underline">📊 التقارير والدورات المنتهية ←</a>
 
     <div *ngIf="showForm()" class="card animate-in border-2 border-primary-200">
       <h2 class="section-title">➕ {{ 'FLOCK.ADD' | translate }}</h2>
@@ -384,6 +365,19 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
               <label class="form-label">متوسط وزن الطائر حالياً (كجم) — اختياري</label>
               <input class="form-input" type="number" [(ngModel)]="openingWeightKg" min="0" step="0.01" />
             </ng-container>
+          </div>
+
+          <!-- 4.6 تجهيز العنبر قبل الاستلام (الكتاكيت لسه ماوصلتش) -->
+          <div *ngIf="!isExistingFlock" class="rounded-xl border border-green-200 bg-green-50/50 p-3">
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" class="mt-1" [(ngModel)]="preparing" />
+              <span>
+                <span class="form-label mb-0 block">🧹 لسه بجهّز العنبر (الكتاكيت ماوصلتش)</span>
+                <span class="text-xs block" style="opacity:.7">
+                  هيظهرلك دليل التنضيف والتجهيز قبل الاستلام ودليل المطهرات جوه صفحة القطيع، خطوة بخطوة، لحد ما تخلّصه.
+                </span>
+              </span>
+            </label>
           </div>
 
           <!-- 5. السلالة المختارة حسب النوع المختار -->
@@ -622,9 +616,6 @@ export class FlocksListComponent implements OnInit {
   // 🐔 القطعان النشطة بس هي اللي تتعرض في القايمة الرئيسية (مكان الإضافة)
   // القطعان المقفولة (closed) بتختفي من هنا تلقائيًا
   activeFlocks = () => this.flocks().filter(f => f.status === 'active');
-  // 🏁 الدورات المنتهية (أحدث 5) — لسه ليها التطهير والدورة الجاية
-  endedFlocks = () => this.flocks().filter(f => f.status !== 'active')
-    .sort((a, b) => String(b.startDate).localeCompare(String(a.startDate))).slice(0, 5);
   showForm = signal(false);
   Math = Math;
 
@@ -662,9 +653,11 @@ export class FlocksListComponent implements OnInit {
   currentCount: number | null = null;
   openingFeedKg: number | null = null;
   openingWeightKg: number | null = null;
+  preparing = false; // 🧹 لسه بجهّز العنبر: دليل التجهيز يظهر في صفحة القطيع
 
   onExistingToggle(on: boolean) {
     this.currentCount = on ? (this.form.initialCount || null) : null;
+    if (on) this.preparing = false;
   }
 
   ngOnInit() { 
@@ -724,6 +717,7 @@ export class FlocksListComponent implements OnInit {
     this.currentCount = null;
     this.openingFeedKg = null;
     this.openingWeightKg = null;
+    this.preparing = false;
   }
 
   isValid(): boolean {
@@ -753,8 +747,15 @@ export class FlocksListComponent implements OnInit {
       openingWeightKg: this.isExistingFlock && this.openingWeightKg ? Number(this.openingWeightKg) : null,
     };
 
+    const wasPreparing = this.preparing && !this.isExistingFlock;
+    const type = this.form.type;
     this.svc.createFlock(payload).subscribe({
-      next: () => {
+      next: (created: any) => {
+        // 🧹 فعّل دليل التجهيز لقطيعه، وانقل أي تقدّم كان معلّمه في صفحة التجهيز المستقلة
+        if (wasPreparing && created?.id) {
+          setPrepFlag(created.id, true);
+          copyGuideState('draft:' + type, created.id, 'before');
+        }
         this.resetForm();
         this.showForm.set(false);
         this.svc.getFlocks().subscribe(); 
