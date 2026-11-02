@@ -125,7 +125,7 @@ const TURKEY_VACC = [
           <h1 class="text-xl font-black">{{ flock()!.name }}</h1>
           <p class="text-white/70 text-sm mt-0.5">
             {{ flock()!.currentCount | number }} {{ 'FLOCK.BIRDS' | translate }} ·
-            {{ 'FLOCK.DAY' | translate }} {{ calculatedAge() }}
+            {{ 'FLOCK.DAY' | translate }} {{ calculatedAge() }}<span *ngIf="prepActive()"> · 🧹 قيد التجهيز</span>
           </p>
         </div>
         <div *ngIf="healthScore() as hs" class="text-center bg-white/15 rounded-2xl px-4 py-3">
@@ -148,6 +148,7 @@ const TURKEY_VACC = [
       </div>
     </div>
 
+    <ng-template #cycleProgramTpl>
     <!-- 📆 برنامج الدورة — فوق الفورم: معروض يوم النهاردة بس، وباقي الأيام/المراحل بتظهر بالضغط -->
     <div class="card mb-4" *ngIf="cycleProgram() as cp">
       <h2 class="section-title mb-3">📆 برنامج الدورة <span *ngIf="cp.offline" class="text-[10px] font-normal text-gray-500">(📴 من النسخة المخزّنة)</span></h2>
@@ -324,7 +325,11 @@ const TURKEY_VACC = [
         </div>
       </div>
     </div>
+    </ng-template>
+    <ng-container *ngIf="!prepActive()"><ng-container *ngTemplateOutlet="cycleProgramTpl"></ng-container></ng-container>
 
+    <!-- 🧹 وضع التجهيز: مفيش تسجيل يومي لحد ما القطيع يوصل -->
+    <ng-container *ngIf="!prepActive()">
     <!-- 📴 حالة الأوفلاين: سجلات محفوظة على الجهاز بانتظار النت -->
     <div *ngIf="isOffline() || pendingRecords().length || failedRecords().length || offlineSavedNotice() || syncMessage()" class="mb-4 space-y-2">
       <div *ngIf="isOffline() && offlineEnabled" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
@@ -481,6 +486,7 @@ const TURKEY_VACC = [
         </div>
       </div>
     </ng-template>
+    </ng-container>
 
     <p *ngIf="savedOk()" class="text-green-600 text-sm font-semibold text-center mb-4">
       ✅ تم الحفظ بنجاح وتحديث الشاشة!
@@ -514,7 +520,7 @@ const TURKEY_VACC = [
       </div>
 
       <!-- الـ KPIs المؤشرات -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" *ngIf="analytics()">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" *ngIf="analytics() && !prepActive()">
         <div class="card text-center py-4" *ngFor="let k of kpis()">
           <p class="text-xl mb-1">{{ k.icon }}</p>
           <p class="text-lg font-black" [style.color]="k.color">{{ k.value }}</p>
@@ -564,6 +570,8 @@ const TURKEY_VACC = [
           <button *ngIf="myAccess()?.is_owner !== false" type="button" (click)="deleteTask(t)" class="text-xs text-red-400 flex-shrink-0">🗑️</button>
         </div>
       </div>
+      <!-- 📆 في وضع التجهيز: برنامج الدورة تحت في الآخر بعد المهام اليومية لحد ما التجهيز يخلص -->
+      <ng-container *ngIf="prepActive()"><ng-container *ngTemplateOutlet="cycleProgramTpl"></ng-container></ng-container>
     </ng-container>
 
     <!-- 🎯 محاكي القرار + التوقعات -->
@@ -1119,6 +1127,7 @@ export class FlockDetailComponent implements OnInit {
     const base = this.myAccess()?.is_owner === false
       ? this.detailTabsAll.filter(t => t.key !== 'team')
       : [...this.detailTabsAll];
+    if (this.prepActive()) return base.filter(t => !['records', 'charts', 'decision'].includes(t.key));
     return this.flock()?.status === 'active'
       ? base
       : [...base, { key: 'cleanup' as const, label: '🧹 التطهير والدورة الجاية' }];
@@ -1892,6 +1901,7 @@ export class FlockDetailComponent implements OnInit {
   calculatedAge = () => {
     const f = this.flock();
     if (!f || !f.startDate) return 0;
+    if (this.prepActive()) return 0; // 🧹 لسه بيجهّز: القطيع ماوصلش، يوم 0
     const start = new Date(f.startDate);
     const today = new Date();
     const diffTime = Math.abs(today.getTime() - start.getTime());

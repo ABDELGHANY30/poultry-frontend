@@ -1,3 +1,4 @@
+import { getPrepFlag } from '../flocks/cleanup-guide.data';
 import { Component, OnInit, inject, computed, signal, effect, untracked, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -795,6 +796,7 @@ getCategoryNameAr(categoryKey: string): string {
     for (const f of this.flocks() as any[]) {
       if (!f?.id || !(f.id in dates)) continue;                 // لسه بيحمّل
       if (f.status && f.status !== 'active') continue;          // قطيع منتهي/مغلق: مفيش تنبيه
+      if (getPrepFlag(f.id)) continue;                          // 🧹 قيد التجهيز: لسه ماوصلش، مفيش تسجيل يومي
       const last = dates[f.id];
       const name = f.name || 'القطيع';
 
