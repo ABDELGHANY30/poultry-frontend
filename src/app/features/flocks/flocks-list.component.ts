@@ -272,7 +272,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { FlockService } from '../../core/services/flock.service';
 import { Flock, FlockCreate, FlockType } from '../../core/models';
@@ -293,6 +293,28 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
         {{ showForm() ? '✕' : '+' }} {{ showForm() ? ('COMMON.CANCEL' | translate) : ('FLOCK.ADD' | translate) }}
       </button>
     </div>
+
+    <!-- 🧹 لسه هتنضف أو هتجهّز العنبر؟ ابدأ من هنا -->
+    <a routerLink="/flocks/prepare"
+       class="flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 no-underline text-green-800">
+      <span class="text-sm font-bold">🧹 هتنضف أو هتجهّز العنبر قبل الاستلام؟ ابدأ من هنا</span>
+      <span class="text-xs font-bold">←</span>
+    </a>
+
+    <!-- 🏁 دورات منتهية: لسه فيها التطهير والدورة الجاية، وكل واحدة بتقريرها -->
+    <div *ngIf="endedFlocks().length > 0" class="card">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="section-title mb-0">🏁 دورات منتهية</h2>
+        <a routerLink="/flocks/annual" class="text-xs font-bold text-green-700 no-underline">📊 التقرير السنوي</a>
+      </div>
+      <a *ngFor="let f of endedFlocks()" [routerLink]="['/flocks', f.id]"
+         class="flex items-center justify-between gap-2 py-2 border-t border-gray-100 no-underline text-[var(--c-text)]">
+        <span class="text-sm font-bold">{{ f.name }}</span>
+        <span class="text-[11px] text-green-700 font-bold">🧹 التطهير والدورة الجاية ←</span>
+      </a>
+    </div>
+    <a *ngIf="endedFlocks().length === 0" routerLink="/flocks/annual"
+       class="text-xs font-bold text-green-700 no-underline">📊 التقرير السنوي</a>
 
     <div *ngIf="showForm()" class="card animate-in border-2 border-primary-200">
       <h2 class="section-title">➕ {{ 'FLOCK.ADD' | translate }}</h2>
@@ -595,10 +617,14 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
 })
 export class FlocksListComponent implements OnInit {
   private svc = inject(FlockService);
+  private route = inject(ActivatedRoute);
   flocks = this.svc.flocks;
   // 🐔 القطعان النشطة بس هي اللي تتعرض في القايمة الرئيسية (مكان الإضافة)
   // القطعان المقفولة (closed) بتختفي من هنا تلقائيًا
   activeFlocks = () => this.flocks().filter(f => f.status === 'active');
+  // 🏁 الدورات المنتهية (أحدث 5) — لسه ليها التطهير والدورة الجاية
+  endedFlocks = () => this.flocks().filter(f => f.status !== 'active')
+    .sort((a, b) => String(b.startDate).localeCompare(String(a.startDate))).slice(0, 5);
   showForm = signal(false);
   Math = Math;
 
@@ -643,6 +669,30 @@ export class FlocksListComponent implements OnInit {
 
   ngOnInit() { 
     this.svc.getFlocks().subscribe(); 
+    this.applyPrefillFromQuery();
+  }
+
+  // 🔁 دورة جديدة / وصلت الكتاكيت: لينكات من صفحة القطيع أو من صفحة التجهيز بتفتح الفورم ومعبّية
+  // ?add=1&type=broiler&name=...&breed=...&housing=floor&count=1000&start=2026-11-20
+  private applyPrefillFromQuery() {
+    const q = this.route.snapshot.queryParamMap;
+    if (q.get('add') !== '1') return;
+    const validTypes = ['broiler', 'layer', 'rabbit', 'turkey', 'duck', 'quail'];
+    const type = q.get('type') ?? '';
+    this.showForm.set(true);
+    if (validTypes.includes(type)) {
+      this.onTypeChange(type);                       // بيصفّر breed ويحسب خيارات التربية
+      const housing = q.get('housing');
+      if (housing && this.housingOptions.some(h => h.value === housing)) this.housingSystem = housing;
+      const breed = q.get('breed');
+      if (breed) this.form.breed = breed;
+    }
+    const name = q.get('name');
+    if (name) this.form.name = name;
+    const count = Number(q.get('count'));
+    if (count > 0) this.form.initialCount = count;
+    const start = q.get('start');
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) this.form.startDate = start;
   }
 
   onTypeChange(type: string) {

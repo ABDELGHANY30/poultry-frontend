@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { FlockService } from '../../core/services/flock.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserOfflineCacheService } from '../../core/services/user-offline-cache.service';
+import { AdsService } from '../../core/services/ads.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
 // ⚠️ الملفات دي حطها في src/app/shared/widgets/ (أو عدّل المسار حسب مكان ما تحطها فعلاً)
@@ -20,6 +21,8 @@ import { SupplierSurveyComponent } from '../../features/supplierSurvey/SupplierS
 // و@capacitor/share و@capacitor/clipboard متثبتين (npm install) — شوف
 // التعليق في أول referral-card.component.ts نفسه لتفاصيل التركيب
 import { ReferralCardComponent } from '../../features/referral_card.component.ts/referral-card.component';
+import { CleanupGuideComponent } from './cleanup-guide.component';
+import { CLEANUP_GUIDES, addDays, localDateStr as guideDateStr } from './cleanup-guide.data';
 
 const BROILER_VACC = [
   { day: 1,  nameEn: 'Hatchery: Marek + ND + IB', nameAr: 'المعمل: ماريك + نيوكاسل + IB', method: 'Spray/Inj' },
@@ -95,7 +98,7 @@ const TURKEY_VACC = [
   imports: [
     CommonModule, FormsModule, RouterLink, TranslateModule, DecimalPipe,
     HealthScoreWidgetComponent, ProfitIndicatorWidgetComponent, ForecastWidgetComponent,
-    DecisionSimulatorComponent, SupplierSurveyComponent, ReferralCardComponent,
+    DecisionSimulatorComponent, SupplierSurveyComponent, ReferralCardComponent, CleanupGuideComponent,
   ],
   template: `
   <div class="page-wrapper" *ngIf="flock(); else loading">
@@ -991,11 +994,37 @@ const TURKEY_VACC = [
     </div>
     </ng-container>
 
+    <!-- 🧹 بعد الدورة: التطهير وفترة الراحة + تجهيز الدورة الجاية (أو القفل بس) -->
+    <ng-container *ngIf="activeSection() === 'cleanup'">
+      <div class="card mt-4">
+        <h2 class="section-title">🧼 التطهير بعد الدورة</h2>
+        <p class="text-xs text-[var(--c-muted)] mb-3">
+          الدورة انتهت وتقييمها اتسجّل. ابدأ فترة التنظيف: نضّف وطهّر وسيب العنبر يرتاح قبل الدفعة الجاية، وعلّم كل خطوة وانت بتخلّصها.
+        </p>
+        <app-cleanup-guide [type]="flock()!.type" phase="after" [storageKey]="flock()!.id"></app-cleanup-guide>
+      </div>
+
+      <div class="card mt-4">
+        <h2 class="section-title">🐣 تجهيز الدورة الجاية</h2>
+        <p class="text-xs text-[var(--c-muted)] mb-3">
+          لو هتكمّل بدورة تانية، جهّز العنبر قبل وصول الكتاكيت. ولو مش هتكمّل مفيش أي حاجة تانية مطلوبة: الدورة محفوظة بتقريرها وشهادتها.
+        </p>
+        <app-cleanup-guide [type]="flock()!.type" phase="before" [storageKey]="flock()!.id + ':next'"></app-cleanup-guide>
+        <button type="button" (click)="startNextCycle()"
+                class="mt-4 w-full py-3 rounded-xl bg-green-600 text-white font-bold">
+          🔁 ابدأ دورة جديدة بنفس الإعدادات
+        </button>
+        <p class="text-[11px] text-gray-400 mt-2 mb-0">
+          الدورة الجديدة بتتسجّل كقطيع جديد (بسجلاتها وتقاريرها هي)، والدورة دي بتفضل محفوظة بتقريرها وشهادتها.
+        </p>
+      </div>
+    </ng-container>
+
     <!-- 🔒 قفل الدورة (لما تخلص التربية) — دايمًا ظاهر، مش جوه تاب، عشان يبقى سهل الوصول -->
     <div class="card mt-4" *ngIf="flock()!.status === 'active'">
       <button class="w-full py-3 rounded-xl bg-red-50 text-red-700 font-bold border border-red-200 hover:bg-red-100 transition"
               type="button" (click)="closeFlock()" [disabled]="closingFlock()">
-        {{ closingFlock() ? 'جاري القفل...' : (flock()!.type === 'layer' ? '🔒 قفل الدورة (انتهى الإنتاج)' : '🔒 قفل الدورة (انتهت التربية)') }}
+        {{ closingFlock() ? 'جاري الإنهاء...' : (flock()!.type === 'layer' ? '🏁 إنهاء الدورة وتسجيل التقييم (انتهى الإنتاج)' : '🏁 إنهاء الدورة وتسجيل التقييم (انتهت التربية)') }}
       </button>
     </div>
 
@@ -1034,6 +1063,7 @@ export class FlockDetailComponent implements OnInit {
   private http  = inject(HttpClient);
   private auth  = inject(AuthService);
   private store = inject(UserOfflineCacheService);
+  private ads   = inject(AdsService);
 
   flock     = signal<Flock | null>(null);
   analytics = signal<FlockAnalytics | null>(null);
@@ -1041,6 +1071,7 @@ export class FlockDetailComponent implements OnInit {
   savedOk   = signal(false);
   healthScore   = signal<any>(null);
   closingFlock  = signal(false);
+  private initialTabApplied = false;
   showSurvey    = signal(false);
   lang = localStorage.getItem('lang') ?? 'ar';
 
@@ -1049,7 +1080,7 @@ export class FlockDetailComponent implements OnInit {
   myAccess = signal<{ is_owner: boolean; can_add_records: boolean; can_view_financials: boolean; can_manage_team: boolean } | null>(null);
 
   // 🗂️ تابات صفحة تفاصيل القطيع — الهيدر وفورم اليوم والتنبيهات الحرجة دايمًا ظاهرين برة التابات
-  activeSection = signal<'today' | 'health' | 'charts' | 'decision' | 'records' | 'team'>('today');
+  activeSection = signal<'today' | 'health' | 'charts' | 'decision' | 'records' | 'team' | 'cleanup'>('today');
   detailTabsAll = [
     { key: 'today' as const, label: '📅 اليوم' },
     { key: 'health' as const, label: '💉 الصحة' },
@@ -1059,9 +1090,15 @@ export class FlockDetailComponent implements OnInit {
     { key: 'team' as const, label: '👷 الفريق' },
   ];
   // 👷 العضو المشارك (مش صاحب الحساب) ميشوفش تاب "الفريق" — إدارة الفريق لصاحب الحساب بس
-  detailTabs = () => this.myAccess()?.is_owner === false
-    ? this.detailTabsAll.filter(t => t.key !== 'team')
-    : this.detailTabsAll;
+  // 🧹 تاب التطهير بيظهر بعد قفل الدورة (التطهير + الدورة الجاية)
+  detailTabs = (): { key: 'today' | 'health' | 'charts' | 'decision' | 'records' | 'team' | 'cleanup'; label: string }[] => {
+    const base = this.myAccess()?.is_owner === false
+      ? this.detailTabsAll.filter(t => t.key !== 'team')
+      : [...this.detailTabsAll];
+    return this.flock()?.status === 'active'
+      ? base
+      : [...base, { key: 'cleanup' as const, label: '🧹 التطهير والدورة الجاية' }];
+  };
 
   showFormManually = signal(false);      // المستخدم فتح الفورم يدويًا حتى لو اليوم متسجل بالفعل
   skippedToday      = signal(false);      // ضغط "تخطي الآن" النهاردة لنفس القطيع ده
@@ -2117,6 +2154,11 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       breed: dataFromBackend.breed
     };
     this.flock.set(flockObj);
+    // 🧹 قطيع منتهي بنفتحه أول مرة (من قايمة "دورات منتهية"): نبدأ من تاب التطهير والدورة الجاية
+    if (!this.initialTabApplied) {
+      this.initialTabApplied = true;
+      if (flockObj.status !== 'active') this.activeSection.set('cleanup');
+    }
     void this.cacheSet(`flock_cache:${id}`, flockObj); // 📴 نسخة محلية (موبايل بس، ومربوطة بالمستخدم) عشان الشاشة تفتح من غير نت
   }
 }, error: async () => {
@@ -2156,22 +2198,46 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
     });
   }
 
+  // 🏁 إنهاء الدورة: بتتسجّل كمنتهية بتقريرها، بيظهر استبيان التقييم، وبعدها فترة التنظيف والدورة الجاية (لو عايز)
   closeFlock() {
     const flockId = this.flock()?.id;
     if (!flockId) return;
-    if (!confirm('هل أنت متأكد من قفل الدورة؟ الإجراء ده نهائي.')) return;
+    if (!confirm('تنهي الدورة دي؟ التسجيل اليومي هيقف عليها، وهتسجّل تقييمها وتبدأ فترة التنظيف، وتبدأ دورة جديدة لو حبيت. تقريرها بيفضل محفوظ لوحده.')) return;
 
     this.closingFlock.set(true);
     this.http.patch(`${environment.apiUrl}/flocks/${flockId}/close`, {}).subscribe({
       next: () => {
         this.closingFlock.set(false);
         this.showSurvey.set(true);
+        this.activeSection.set('cleanup');
         this.loadData(flockId);
+        // 📺 إعلان بيني بعد إنهاء الدورة بنجاح
+        setTimeout(() => { void this.ads.showInterstitial(); }, 800);
       },
       error: () => {
         this.closingFlock.set(false);
-        alert('حصل خطأ أثناء قفل الدورة.');
+        alert('حصل خطأ أثناء إنهاء الدورة.');
       }
+    });
+  }
+
+  // 🔁 دورة جديدة: بيفتح فورم إضافة قطيع معبّي بنفس النوع والسلالة والعدد، وتاريخ البداية بعد فترة الراحة
+  startNextCycle() {
+    const f: any = this.flock();
+    if (!f) return;
+    const rest = CLEANUP_GUIDES[f.type]?.rest;
+    const today = guideDateStr();
+    const start = rest ? addDays(today, rest.min) : today;
+    const base = String(f.name ?? '').replace(/\s*\(دورة \d+\)\s*$/, '');
+    this.router.navigate(['/flocks'], {
+      queryParams: {
+        add: 1,
+        type: f.type,
+        name: base ? `${base} (دورة جديدة)` : '',
+        breed: f.breed ?? '',
+        count: f.initialCount ?? f.initial_count ?? '',
+        start,
+      },
     });
   }
 
@@ -2194,15 +2260,10 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
   }
 
   onSurveyDone() {
-    const flockId = this.flock()?.id;
+    // ✅ التقييم اتسجّل: نقفل الاستبيان ونفضل في تاب التطهير والدورة الجاية (القطيع بيفضل ظاهر في "دورات منتهية")
     setTimeout(() => {
       this.showSurvey.set(false);
-      // 🧹 مسح القطيع من قايمة القطعان في الفرونت بعد ما الدورة اتقفلت والتقييم خلص
-      if (flockId) {
-        this.svc.removeFlockLocally(flockId);
-      }
-      // نرجع المستخدم لقايمة القطعان بعد ما القطيع ده خلص دوره
-      this.router.navigate(['/flocks']);
+      this.activeSection.set('cleanup');
     }, 2000);
   }
 
@@ -2310,6 +2371,8 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       resetForm();
       this.loadData(flockId); // 🔄 يعيد رسم الشاشة بالداتا الجديدة (وبيقفل الفورم لو ده تسجيل اليوم)
       setTimeout(() => this.savedOk.set(false), 3000);
+      // 📺 إعلان بيني بعد تسجيل سجل جديد بنجاح (مش مع التعديل). بعد ثانية عشان رسالة "تم الحفظ" تتشاف الأول
+      if (!isEditing) setTimeout(() => { void this.ads.showInterstitial(); }, 1000);
     };
 
     const showError = (err: any) => {
