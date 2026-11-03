@@ -506,7 +506,17 @@ const TURKEY_VACC = [
     <!-- 📅 اليوم -->
     <ng-container *ngIf="activeSection() === 'today'">
       <!-- 🧹 تجهيز العنبر قبل الاستلام: بيفضل ظاهر لحد ما تخلّصه -->
-      <div *ngIf="prepActive()" class="card mb-4 border-2 border-green-200">
+      <!-- 📅 الدورة لسه ماتبدأتش: تبدأ في تاريخ البدء، أو "ابدأ الآن" لو الكتاكيت وصلت بدري -->
+      <div *ngIf="prepActive()" class="card mb-4 border-2 border-amber-200 bg-amber-50/50">
+        <p class="text-sm font-bold mb-1">📅 الدورة هتبدأ في {{ flock()!.startDate | slice:0:10 }}</p>
+        <p class="text-xs text-[var(--c-muted)] mb-3">أيام الدورة بتتحسب من تاريخ الاستلام ده. لو الكتاكيت وصلت قبله أو هتبدأ دلوقتي، ابدأ من النهارده.</p>
+        <button type="button" (click)="startNow()" [disabled]="startingNow()"
+                class="w-full py-3 rounded-xl bg-amber-500 text-white font-bold">
+          ▶️ {{ startingNow() ? 'جاري البدء...' : 'ابدأ الآن' }}
+        </button>
+      </div>
+
+      <div *ngIf="prepCardVisible()" class="card mb-4 border-2 border-green-200">
         <h2 class="section-title">🧹 تجهيز العنبر قبل الاستلام</h2>
         <p class="text-xs text-[var(--c-muted)] mb-3">
           الخطوات كلها هنا لحد ما تخلّص. علّم كل خطوة وانت بتنفّذها، ولما تخلّص اضغط "خلّصت التجهيز".
@@ -1097,7 +1107,25 @@ export class FlockDetailComponent implements OnInit {
   closingFlock  = signal(false);
   private initialTabApplied = false;
   prepFlag = signal(false);
-  prepActive = () => this.prepFlag() && this.flock()?.status === 'active';
+  // 📅 تاريخ البدء لسه قدام: الدورة ماتبدأتش (العمر صفر والسجل مخفي) لحد ما التاريخ يجي أو يضغط "ابدأ الآن"
+  isFutureStart = () => {
+    const sd = String(this.flock()?.startDate ?? '').split('T')[0];
+    return !!sd && sd > this.localDateStr();
+  };
+  prepActive = () => this.flock()?.status === 'active' && this.isFutureStart();
+  // كارت قايمة التجهيز: بيفضل لحد ما يضغط "خلّصت التجهيز"
+  prepCardVisible = () => this.prepFlag() && this.flock()?.status === 'active';
+  startingNow = signal(false);
+  startNow() {
+    const id = this.flock()?.id;
+    if (!id) return;
+    if (!confirm('تبدأ الدورة النهارده؟ تاريخ البدء هيبقى النهارده والأيام هتتحسب من دلوقتي.')) return;
+    this.startingNow.set(true);
+    this.http.post(`${environment.apiUrl}/flocks/${id}/start-now`, { start_date: this.localDateStr() }).subscribe({
+      next: () => { this.startingNow.set(false); this.loadData(id); },
+      error: () => { this.startingNow.set(false); alert('حصل خطأ أثناء بدء الدورة، جرّب تاني.'); },
+    });
+  }
   finishPrep() {
     const id = this.flock()?.id;
     if (!id) return;
@@ -1901,10 +1929,10 @@ export class FlockDetailComponent implements OnInit {
   calculatedAge = () => {
     const f = this.flock();
     if (!f || !f.startDate) return 0;
-    if (this.prepActive()) return 0; // 🧹 لسه بيجهّز: القطيع ماوصلش، يوم 0
+    if (this.isFutureStart()) return 0; // 🧹 الدورة لسه ماتبدأتش: بتتحسب من يوم تاريخ البدء
     const start = new Date(f.startDate);
     const today = new Date();
-    const diffTime = Math.abs(today.getTime() - start.getTime());
+    const diffTime = today.getTime() - start.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 && diffDays < 150 ? diffDays : f.ageInDays;
   };

@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, AfterViewChecked, inject, signal, computed,
+  Component, OnInit, OnDestroy, AfterViewChecked, inject, signal, computed,
   ViewChild, ElementRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -11,6 +11,7 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
 // ⚠️ عدّل المسار ده لو اسم/مكان الملف مختلف عندك
 import { FlockService } from '../../core/services/flock.service';
+import { AdsService } from '../../core/services/ads.service';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
@@ -436,11 +437,12 @@ const SUGGESTIONS_AR = [
   </div>
   `,
 })
-export class AiAssistantComponent implements OnInit, AfterViewChecked {
+export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked {
   private http = inject(HttpClient);
   private auth = inject(AuthService);
   private sanitizer = inject(DomSanitizer);
   private flockService = inject(FlockService);
+  private ads = inject(AdsService);
 
   @ViewChild('msgContainer') private cont!: ElementRef<HTMLDivElement>;
 
@@ -475,7 +477,15 @@ export class AiAssistantComponent implements OnInit, AfterViewChecked {
   }
 
 
+  ngOnDestroy() {
+    // رجّع البانر لما المستخدم يسيب شاشة المساعد الذكي
+    this.ads.showBannerForPage();
+  }
+
   ngOnInit() {
+    // شيل البانر من شاشة المساعد الذكي (بيغطي خانة الكتابة)
+    this.ads.hideBannerForPage();
+
     const isGuest = !this.auth.isAuthenticated();
     if (isGuest) {
       // الزائر من غير حساب: من غير أي طلبات محتاجة تسجيل دخول (كانت هتفشل بـ 401)

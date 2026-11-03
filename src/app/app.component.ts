@@ -12,6 +12,7 @@ import { Component, inject, NgZone, OnInit } from "@angular/core";
 import { OfflineSyncService } from './core/services/offline-sync.service';
 import { AdsService } from './core/services/ads.service';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { Keyboard } from '@capacitor/keyboard';
 import { SplashComponent } from './features/splash/splash.component';
 import { CommonModule } from '@angular/common';
 import { App } from '@capacitor/app';
@@ -103,12 +104,27 @@ export class AppComponent implements OnInit {
     // ارتفاع الصفحة (--app-vh) بيتبع visualViewport، يعني بيتصغّر لوحده لما الكيبورد يفتح.
     // فالرفع الإضافي (kb-shift) لازم يبقى بس الجزء اللي لسه مغطّيه الكيبورد = الكيبورد - اللي اتصغّر فعلاً.
     // (على أندرويد 14/15 الصفحة بتتصغّر بالكامل، فالناتج صفر ومفيش مسافة زيادة.)
+    // ── إخفاء البانر لما الكيبورد يفتح (من أكتر من مصدر عشان يشتغل في كل الأجهزة) ──
+    // المصدر 1: أحداث plugin الكيبورد. المصدر 2: قيمة --keyboard-height. الكيبورد "مفتوح" لو أي واحد منهم قال كده.
+    let evOpen = false;
+    let khOpen = false;
+    let bannerHiddenByKb = false;
+    const syncBannerWithKeyboard = () => {
+      const open = evOpen || khOpen;
+      if (open === bannerHiddenByKb) return;
+      bannerHiddenByKb = open;
+      if (open) this.adsService.suspendBanner();
+      else this.adsService.resumeBanner();
+    };
+
     let baseH = Math.max(window.innerHeight, window.visualViewport?.height ?? 0);
     const readKh = () =>
       parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-height')) || 0;
 
     const updateKbShift = () => {
       const kh = readKh();
+      khOpen = kh > 0;
+      syncBannerWithKeyboard();
       const vvH = window.visualViewport?.height ?? window.innerHeight;
       if (kh <= 0) baseH = Math.max(window.innerHeight, vvH); // الكيبورد مقفول: نحدّث ارتفاع الشاشة الأصلي
       const alreadyShrunk = Math.max(0, baseH - vvH);
@@ -123,6 +139,11 @@ export class AppComponent implements OnInit {
     // (المتصفح بيسكرول من نفسه لو الحقل فعلاً متغطّي، وبأقل حركة ممكنة)
     const kbObserver = new MutationObserver(() => updateKbShift());
     kbObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+
+    Keyboard.addListener('keyboardWillShow', () => { evOpen = true;  syncBannerWithKeyboard(); });
+    Keyboard.addListener('keyboardDidShow',  () => { evOpen = true;  syncBannerWithKeyboard(); });
+    Keyboard.addListener('keyboardWillHide', () => { evOpen = false; syncBannerWithKeyboard(); });
+    Keyboard.addListener('keyboardDidHide',  () => { evOpen = false; syncBannerWithKeyboard(); });
   }
 
   async onSplashFinished() {

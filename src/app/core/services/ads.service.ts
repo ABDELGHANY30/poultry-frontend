@@ -34,6 +34,12 @@ const INTERSTITIAL_COOLDOWN_MS = 3 * 60 * 1000; // 3 دقايق بين كل إع
 export class AdsService {
   private initialized = false;
 
+  // Banner
+  private bannerVisible = false;      // البانر معروض فعلاً (اتنده عليه showBanner ومتشالش)
+  private bannerHiddenNative = false; // البانر مخفي دلوقتي على مستوى الـ native
+  private keyboardOpen = false;       // الكيبورد مفتوح
+  private pageHidden = false;         // الصفحة الحالية (زي المساعد الذكي) مش عايزة بانر
+
   // Rewarded
   private rewardedLoaded = false;
   private loadingRewarded = false;
@@ -90,7 +96,7 @@ export class AdsService {
 
   // ---------------- Banner ----------------
 
-  /** يظهر بانر ثابت. نادِ عليه في الصفحات اللي عايز البانر يبان فيها. */
+  /** يظهر بانر ثابت. نادِ عليه مرة واحدة بعد init(). */
   async showBanner(position: 'top' | 'bottom' = 'bottom') {
     if (!this.initialized) return;
 
@@ -107,6 +113,9 @@ export class AdsService {
 
     try {
       await AdMob.showBanner(options);
+      this.bannerVisible = true;
+      this.bannerHiddenNative = false;
+      await this.syncBanner(); // لو الصفحة الحالية أو الكيبورد مانعين البانر، يتخفى فوراً
     } catch (e) {
       console.error('showBanner failed', e);
     }
@@ -116,6 +125,8 @@ export class AdsService {
     try {
       await AdMob.hideBanner();
     } catch {}
+    this.bannerVisible = false;
+    this.bannerHiddenNative = false;
     document.documentElement.style.setProperty('--banner-height', '0px');
   }
 
@@ -123,7 +134,53 @@ export class AdsService {
     try {
       await AdMob.removeBanner();
     } catch {}
+    this.bannerVisible = false;
+    this.bannerHiddenNative = false;
     document.documentElement.style.setProperty('--banner-height', '0px');
+  }
+
+  /** يخفي البانر مؤقتاً لما الكيبورد يفتح. */
+  async suspendBanner() {
+    this.keyboardOpen = true;
+    await this.syncBanner();
+  }
+
+  /** يرجّع البانر لما الكيبورد يقفل (لو الصفحة الحالية تسمح). */
+  async resumeBanner() {
+    this.keyboardOpen = false;
+    await this.syncBanner();
+  }
+
+  /** نادِ عليها من أي صفحة مش عايز فيها بانر (مثلاً في ngOnInit). */
+  async hideBannerForPage() {
+    this.pageHidden = true;
+    await this.syncBanner();
+  }
+
+  /** نادِ عليها لما تسيب الصفحة دي (مثلاً في ngOnDestroy) عشان البانر يرجع. */
+  async showBannerForPage() {
+    this.pageHidden = false;
+    await this.syncBanner();
+  }
+
+  /** يطابق حالة البانر الفعلية مع اللي مفروض يكون (معروض، مفيش كيبورد، والصفحة تسمح). */
+  private async syncBanner() {
+    if (!this.bannerVisible) return;
+
+    const shouldShow = !this.pageHidden && !this.keyboardOpen;
+
+    if (shouldShow && this.bannerHiddenNative) {
+      this.bannerHiddenNative = false;
+      try {
+        await AdMob.resumeBanner(); // بيطلق SizeChanged فالـ padding بيرجع تلقائياً
+      } catch {}
+    } else if (!shouldShow && !this.bannerHiddenNative) {
+      this.bannerHiddenNative = true;
+      try {
+        await AdMob.hideBanner();
+      } catch {}
+      document.documentElement.style.setProperty('--banner-height', '0px');
+    }
   }
 
   // ---------------- Interstitial ----------------
