@@ -10,31 +10,34 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   template: `
-  <div class="page-wrapper min-h-screen flex items-center justify-center p-4"
-       style="background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
+  <div class="relative flex p-4 overflow-x-hidden"
+       style="min-height:100vh;min-height:100dvh;
+              padding-bottom:calc(1rem + env(safe-area-inset-bottom));
+              background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
 
     <!-- Decorative circles -->
-    <div class="absolute top-10 start-10 w-40 h-40 rounded-full bg-white/5 -z-0"></div>
-    <div class="absolute bottom-10 end-10 w-60 h-60 rounded-full bg-white/3 -z-0"></div>
+    <div class="fixed top-10 start-10 w-40 h-40 rounded-full bg-white/5 pointer-events-none"></div>
+    <div class="fixed bottom-10 end-10 w-60 h-60 rounded-full bg-white/5 pointer-events-none"></div>
 
-    <div class="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+    <!-- m-auto = centered when there is room, scrollable (never clipped) when there isn't -->
+    <div class="relative z-10 m-auto bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
 
       <!-- Top banner -->
-      <div class="text-white text-center py-8 px-6"
+      <div class="text-white text-center py-5 px-6 sm:py-8"
            style="background:linear-gradient(135deg,#1a4a2e 0%,#2d9e5f 100%)">
-        <div class="text-6xl mb-3">🐔</div>
-        <h1 class="text-xl font-black mb-1">{{ 'AUTH.LOGIN_TITLE' | translate }}</h1>
+        <div class="text-4xl sm:text-6xl mb-2 sm:mb-3">🐔</div>
+        <h1 class="text-lg sm:text-xl font-black mb-1">{{ 'AUTH.LOGIN_TITLE' | translate }}</h1>
         <p class="text-white/70 text-sm">{{ 'AUTH.LOGIN_SUB' | translate }}</p>
       </div>
 
       <!-- Form -->
-      <div class="p-7">
+      <div class="p-5 sm:p-7">
         <div class="mb-4">
           <label class="form-label">{{ 'AUTH.EMAIL' | translate }}</label>
           <input class="form-input" type="email" [(ngModel)]="email"
                  placeholder="farmer@example.com" (keydown.enter)="login()" />
         </div>
-        <div class="mb-6">
+        <div class="mb-5 sm:mb-6">
           <label class="form-label">{{ 'AUTH.PASSWORD' | translate }}</label>
           <div class="relative">
             <input class="form-input w-full pe-12" [type]="showPassword() ? 'text' : 'password'"
@@ -60,12 +63,12 @@ import { AuthService } from '../../core/services/auth.service';
         <p class="text-center text-sm text-[var(--c-muted)]">
           {{ 'AUTH.NO_ACCOUNT' | translate }}
           <a routerLink="/auth/register" class="text-primary-700 font-bold hover:underline no-underline">
-        {{ 'AUTH.REGISTER_LINK' | translate }}
+            {{ 'AUTH.REGISTER_LINK' | translate }}
           </a>
         </p>
       </div>
     </div>
-</div>
+  </div>
   `,
 })
 export class LoginComponent {

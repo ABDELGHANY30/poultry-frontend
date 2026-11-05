@@ -37,9 +37,9 @@ export const DEFAULT_PRICES: Record<string, DefaultPrice> = {
   chick_price_quail:    { label: 'سعر كتكوت السمان', unit: 'طائر', price: 3 },
   chick_price_duck:     { label: 'سعر بطة صغيرة', unit: 'طائر', price: 18 },
   battery_cage_slot:    { label: 'تجهيز قفص بطارية (للطائر الواحد)', unit: 'طائر', price: 45 },
-  medicine_per_bird:    { label: 'أدوية وتحصينات (للطائر/الدورة)', unit: 'طائر', price: 3 },
-  labor_per_bird:       { label: 'عمالة (للطائر/الدورة)', unit: 'طائر', price: 2 },
-  utilities_per_bird:   { label: 'كهرباء ومياه (للطائر/الدورة)', unit: 'طائر', price: 1.5 },
+  medicine_per_bird:    { label: 'أدوية وتحصينات (للطائر/الدورة - اختياري)', unit: 'طائر', price: 3 },
+  labor_per_bird:       { label: 'عمالة (للطائر/الدورة - اختياري)', unit: 'طائر', price: 2 },
+  utilities_per_bird:   { label: 'كهرباء ومياه (للطائر/الدورة - اختياري)', unit: 'طائر', price: 1.5 },
 };
 
 export const VALID_EQUIPMENT_CATEGORIES = [
@@ -116,9 +116,13 @@ export class CalculatorPricesService {
     for (const [key, raw] of entries) {
       const newPrice = Number(raw);
       if (!isFinite(newPrice) || raw === null || (raw as any) === '') continue; // خانة فاضية/غلط: نتجاهلها
-      const oldPrice = this.overrides.items[key] ?? DEFAULT_PRICES[key]?.price ?? null;
+      if (newPrice < 0) continue; // سعر سالب: نتجاهله
+      const defaultPrice = DEFAULT_PRICES[key]?.price;
+      const oldPrice = this.overrides.items[key] ?? defaultPrice ?? null;
       if (oldPrice === newPrice) continue;
-      this.overrides.items[key] = newPrice;
+      // لو رجّع السعر لقيمته الافتراضية، نمسح التخصيص بدل ما يفضل معلّم "مخصص"
+      if (defaultPrice !== undefined && newPrice === defaultPrice) delete this.overrides.items[key];
+      else this.overrides.items[key] = newPrice;
       this.overrides.history.push({
         key, label: DEFAULT_PRICES[key]?.label ?? key,
         old_price: oldPrice, new_price: newPrice, changed_at: now,
@@ -133,7 +137,8 @@ export class CalculatorPricesService {
   /** نفس POST /calculator/prices/reset (keys فاضية = رجّع الكل) */
   async resetPrices(keys?: string[] | null): Promise<any> {
     const now = new Date().toISOString();
-    const resetKeys = keys ?? Object.keys(this.overrides.items);
+    // null أو قائمة فاضية = رجّع الكل (كانت القائمة الفاضية مبتعملش حاجة)
+    const resetKeys = keys && keys.length ? keys : Object.keys(this.overrides.items);
     for (const key of resetKeys) {
       const old = this.overrides.items[key];
       delete this.overrides.items[key];

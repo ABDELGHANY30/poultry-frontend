@@ -29,6 +29,9 @@ export function fmt(x: number, digits = 0): string {
   return pyRound(x, digits).toFixed(digits);
 }
 
+/** ceil آمن ضد أخطاء الفاصلة العائمة (مثلاً 7.000000000000001 كانت بتتقرّب لـ 8) */
+const ceilSafe = (x: number): number => Math.ceil(pyRound(x, 9));
+
 const POULTRY_TYPES: PoultryType[] = ['broiler', 'layer', 'turkey', 'rabbit', 'quail', 'duck'];
 const HOUSING_SYSTEMS: HousingSystem[] = ['floor_litter', 'battery_cage'];
 const SEASONS: Season[] = ['summer', 'winter', 'moderate'];
@@ -64,6 +67,30 @@ const MIN_SENSIBLE_CYCLE_DAYS: Record<PoultryType, number> = {
   broiler: 21, layer: 150, turkey: 70, rabbit: 30, quail: 21, duck: 30,
 };
 
+// ثوابت التهوية "CFM لكل رطل وزن حي" - لازم الوزن يتحوّل لأرطال قبل الضرب
+// (الكود القديم كان بيضربها في الكيلو فالتهوية كانت أقل بحوالي 2.2 مرة)
+const KG_TO_LB = 2.20462;
+const M3H_PER_CFM = 1.699;
+
+const VENT_CFM_PER_LB: Record<PoultryType, Record<Season, number>> = {
+  broiler: { summer: 0.9, winter: 0.1, moderate: 0.4 },
+  layer: { summer: 0.9, winter: 0.1, moderate: 0.4 },
+  turkey: { summer: 1.2, winter: 0.15, moderate: 0.5 },
+  rabbit: { summer: 1.5, winter: 0.3, moderate: 0.8 },
+  quail: { summer: 0.9, winter: 0.1, moderate: 0.4 },
+  duck: { summer: 0.7, winter: 0.12, moderate: 0.35 },
+};
+
+/** وزن افتراضي مناسب لكل نوع (كان 2.0 كجم لكل الأنواع) */
+export const DEFAULT_WEIGHT_KG: Record<PoultryType, number> = {
+  broiler: 2.0, layer: 1.8, turkey: 9.0, rabbit: 3.0, quail: 0.25, duck: 3.0,
+};
+
+// علف البياض: مرحلة تربية (لحد بداية الإنتاج) أقل من مرحلة البيض
+const LAYER_POINT_OF_LAY_DAYS = 140;
+const LAYER_REARING_FEED_KG_PER_DAY = 0.06;
+const LAYER_LAYING_FEED_KG_PER_DAY = 0.12;
+
 const STOCKING_DENSITY: Record<PoultryType, Partial<Record<HousingSystem, number>>> = {
   broiler: { floor_litter: 0.065, battery_cage: 0.035 },
   layer: { floor_litter: 0.2, battery_cage: 0.045 },
@@ -94,7 +121,7 @@ export interface FarmInput {
   house_length?: number | null;
   house_width?: number | null;
   house_height?: number | null;
-  avg_weight_kg: number;
+  avg_weight_kg: number | null;
   target_age_days: number | null;
   egypt_location: string;
 }
@@ -104,8 +131,29 @@ class PoultryFarmCalculator {
   tips: string[] = [];
 
   constructor(private f: FarmInput) {
+    this.validate();
+    this.resolveWeight();
     this.resolveCycleDays();
     this.checkHousingValidity();
+  }
+
+  /** رفض القيم غير المنطقية بدل Infinity / أرقام سالبة */
+  private validate() {
+    const f = this.f;
+    if (!(f.bird_count > 0) || !isFinite(f.bird_count)) throw new Error('عدد الحيوانات لازم يكون رقم أكبر من صفر');
+    if (f.avg_weight_kg != null && !(f.avg_weight_kg > 0)) throw new Error('متوسط الوزن لازم يكون أكبر من صفر');
+    if (f.target_age_days != null && !(f.target_age_days > 0)) throw new Error('مدة الدورة لازم تكون أكبر من صفر');
+    const dims: [string, number | null | undefined][] = [
+      ['الطول', f.house_length], ['العرض', f.house_width], ['الارتفاع', f.house_height],
+    ];
+    for (const [label, v] of dims) {
+      if (v != null && v < 0) throw new Error(`${label} مينفعش يكون سالب`);
+    }
+  }
+
+  private resolveWeight() {
+    const f = this.f;
+    if (f.avg_weight_kg == null) f.avg_weight_kg = DEFAULT_WEIGHT_KG[f.poultry_type] ?? 2.0;
   }
 
   private resolveCycleDays() {
@@ -165,6 +213,7 @@ class PoultryFarmCalculator {
         housing_system: f.housing_system,
         season: f.season,
         target_age_days_used: f.target_age_days,
+        avg_weight_kg_used: f.avg_weight_kg,
       },
       area: { required_m2: area.required_m2, animals_per_m2: area.birds_per_m2 },
       ventilation: {
@@ -189,6 +238,7 @@ class PoultryFarmCalculator {
         bell_drinkers: water.bells,
         daily_liters: water.daily_liters,
         water_lines: water.lines,
+        primary_drinker: water.primary_drinker,
       },
       feed: {
         feeders_count: feed.feeders,
@@ -242,7 +292,7 @@ class PoultryFarmCalculator {
       }
     }
 
-    const requiredM2 = Math.ceil(f.bird_count * density);
+    const requiredM2 = ceilSafe(f.bird_count * density);
 
     if (f.house_length && f.house_width) {
       const actualM2 = f.house_length * f.house_width;
@@ -267,42 +317,34 @@ class PoultryFarmCalculator {
   private calcVentilation() {
     const f = this.f;
     const n = f.bird_count;
-    const w = f.avg_weight_kg;
-    const s = f.season;
-    let cfm: number;
+    const weightLb = (f.avg_weight_kg as number) * KG_TO_LB;
+    const table = VENT_CFM_PER_LB[f.poultry_type];
+    const cfmPerLb = table ? table[f.season] : 0.5;
 
-    switch (f.poultry_type) {
-      case 'broiler':
-        cfm = w * (s === 'summer' ? 0.9 : s === 'winter' ? 0.1 : 0.4);
-        break;
-      case 'layer':
-        cfm = s === 'summer' ? 0.5 : 0.1;
-        break;
-      case 'turkey':
-        cfm = w * (s === 'summer' ? 1.2 : s === 'winter' ? 0.15 : 0.5);
-        this.tips.push('الرومي يحتاج تهوية اعلى من الدجاج بسبب كبر حجمه وحساسيته للامونيا');
-        break;
-      case 'rabbit':
-        cfm = w * (s === 'summer' ? 1.5 : s === 'winter' ? 0.3 : 0.8);
-        this.tips.push('الارانب حساسة جدا للامونيا - تاكد من تجديد الهواء كل 5 دقائق على الاقل');
-        break;
-      case 'quail':
-        cfm = s === 'summer' ? 0.3 : 0.05;
-        break;
-      case 'duck':
-        cfm = w * (s === 'summer' ? 0.7 : s === 'winter' ? 0.12 : 0.35);
-        this.tips.push(
-          'البط: الفرشة تتبلل بسرعة اكبر من الدجاج بسبب طبيعة تعامله مع الماء - ' +
-          'تهوية جيدة ضرورية لمنع ارتفاع الامونيا حتى لو الطقس معتدل'
-        );
-        break;
-      default:
-        cfm = w * 0.5;
+    if (f.poultry_type === 'turkey') {
+      this.tips.push('الرومي يحتاج تهوية اعلى من الدجاج بسبب كبر حجمه وحساسيته للامونيا');
+    } else if (f.poultry_type === 'rabbit') {
+      this.tips.push('الارانب حساسة جدا للامونيا - تاكد من تجديد الهواء كل 5 دقائق على الاقل');
+    } else if (f.poultry_type === 'duck') {
+      this.tips.push(
+        'البط: الفرشة تتبلل بسرعة اكبر من الدجاج بسبب طبيعة تعامله مع الماء - ' +
+        'تهوية جيدة ضرورية لمنع ارتفاع الامونيا حتى لو الطقس معتدل'
+      );
     }
 
-    const totalM3Hr = n * cfm * 1.699;
+    const totalCfm = n * weightLb * cfmPerLb;
+    const totalM3Hr = totalCfm * M3H_PER_CFM;
     const fanCap = 5000;
-    const fans = Math.max(Math.ceil(totalM3Hr / fanCap), 2);
+    const fans = Math.max(ceilSafe(totalM3Hr / fanCap), 2);
+
+    // ارتفاع العنبر: كان مدخل ومش مستخدم خالص - دلوقتي بيحسب سرعة تجديد الهواء
+    if (f.house_length && f.house_width && f.house_height && totalM3Hr > 0) {
+      const volume = f.house_length * f.house_width * f.house_height;
+      const seconds = volume / (totalM3Hr / 3600);
+      this.tips.push(
+        `حجم العنبر: ${fmt(volume, 0)} م3 - عند التهوية المحسوبة الهواء بيتجدد كل ${fmt(seconds, 0)} ثانية تقريبا`
+      );
+    }
 
     return {
       airflow: pyRound(totalM3Hr),
@@ -322,23 +364,25 @@ class PoultryFarmCalculator {
 
     const airflowM3Min = ventilation.airflow / 60;
     const padVelocity = 80;
-    const padsArea = airflowM3Min / padVelocity;
+    let padsArea = airflowM3Min / padVelocity;
     const padHeight = 1.5;
-    let padsLength = Math.ceil(padsArea / padHeight);
+    let padsLength = ceilSafe(padsArea / padHeight);
 
     if (f.house_width) {
-      const minLength = Math.ceil(f.house_width * 0.7);
+      const minLength = ceilSafe(f.house_width * 0.7);
       if (padsLength < minLength) padsLength = minLength;
     }
 
+    // المساحة الفعلية بعد ما الطول يترفع للحد الأدنى (كانت بتفضل مساحة الهواء الأصغر
+    // فسعر الباد كان بيطلع أقل بكتير من الحقيقي)
+    padsArea = padsLength * padHeight;
     const pumpLpm = padsLength * 5.5;
-    const pumpHp = Math.ceil(pumpLpm / 60);
 
     this.tips.push(
       `كوولينج باد (Evaporative Cooling):\n` +
       `   الطول: ${padsLength} متر × الارتفاع: ${padHeight} م\n` +
       `   النوع: CEL-DEK 7090 (سمك 10 سم)\n` +
-      `   مضخة المياه: ${fmt(pumpLpm, 0)} لتر/دقيقة (${pumpHp} HP)\n` +
+      `   مضخة المياه: ${fmt(pumpLpm, 0)} لتر/دقيقة\n` +
       `   خزان تعويض: 200-500 لتر\n` +
       `   نظف الباد شهريا لمنع تراكم الاملاح`
     );
@@ -486,15 +530,20 @@ class PoultryFarmCalculator {
     const dailyLiters = dailyPer * n;
     const nipples = Math.ceil(n / birdsPerNipple);
     const bells = Math.ceil(n / birdsPerBell);
-    const lines = f.house_length ? Math.ceil((f.house_width || 10) / 3) : Math.ceil(n / 1000);
+    // كان الشرط بيفحص الطول وبيستخدم العرض
+    const lines = f.house_width ? Math.max(1, ceilSafe(f.house_width / 3)) : Math.max(1, ceilSafe(n / 1000));
+    // النيبلات والشاربات بدائل لبعض - البط على الأحواض، الباقي على النيبلات
+    const primaryDrinker = f.poultry_type === 'duck' ? 'bell' : 'nipple';
+    const primaryLabel = primaryDrinker === 'bell' ? 'الشاربات/الأحواض' : 'النيبلات';
 
     this.tips.push(
       `المياه اليومي: ${fmt(dailyLiters, 0)} لتر\n` +
       `   تاكد من ضغط المياه: 20-30 PSI للنيبل\n` +
-      `   نظف الشاربات يوميا وعقم اسبوعيا`
+      `   نظف الشاربات يوميا وعقم اسبوعيا\n` +
+      `   النيبلات والشاربات بدائل لبعض - اختار نظام واحد (التكلفة محسوبة على ${primaryLabel})`
     );
 
-    return { nipples, bells, daily_liters: pyRound(dailyLiters), lines };
+    return { nipples, bells, daily_liters: pyRound(dailyLiters), lines, primary_drinker: primaryDrinker };
   }
 
   // ── العلف ──────────────────────────────────────────────────
@@ -511,12 +560,21 @@ class PoultryFarmCalculator {
         birdsPerTube = 60;
         feederType = 'صواني للكتاكيت اسبوعين ثم انابيب الية';
         break;
-      case 'layer':
-        dailyAvg = 0.12;
-        totalPerBird = dailyAvg * days;
+      case 'layer': {
+        // مرحلة تربية (لحد بداية الانتاج) بعلف أقل + مرحلة بيض بـ 120 جم/يوم
+        const rearingDays = Math.min(days, LAYER_POINT_OF_LAY_DAYS);
+        const layingDays = Math.max(0, days - LAYER_POINT_OF_LAY_DAYS);
+        totalPerBird = rearingDays * LAYER_REARING_FEED_KG_PER_DAY + layingDays * LAYER_LAYING_FEED_KG_PER_DAY;
+        dailyAvg = totalPerBird / days;
         birdsPerTube = 15;
         feederType = 'معالف جرابيل او اوتوماتيك';
+        this.tips.push(
+          `علف البياض: افترضنا ${LAYER_POINT_OF_LAY_DAYS} يوم تربية ` +
+          `(${fmt(LAYER_REARING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم) ثم انتاج ` +
+          `(${fmt(LAYER_LAYING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم)`
+        );
         break;
+      }
       case 'turkey':
         totalPerBird = f.avg_weight_kg * 2.5;
         dailyAvg = totalPerBird / days;
@@ -792,7 +850,7 @@ export function calculateFarm(d: CalculatorInput): any {
     house_length: d.house_length,
     house_width: d.house_width,
     house_height: d.house_height,
-    avg_weight_kg: d.avg_weight_kg ?? 2.0,
+    avg_weight_kg: d.avg_weight_kg ?? null, // null = الوزن الافتراضي للنوع
     target_age_days: d.target_age_days ?? null,
     egypt_location: d.egypt_location ?? 'delta',
   };
@@ -828,28 +886,37 @@ export function calculateCosts(
     : heaterText.includes('كهرباء') ? 'electric_heater_small' : 'gas_brooder';
   const heatingCost = result.heating.heaters_count * p(heaterKey);
 
-  const waterCost = result.water.nipple_drinkers * p('nipple_drinker') + result.water.bell_drinkers * p('bell_drinker');
+  // النيبلات والشاربات بدائل لبعض: بنحسب النظام الأساسي بس (كان بيتحسب الاتنين مع بعض)
+  const waterCost = result.water.primary_drinker === 'bell'
+    ? result.water.bell_drinkers * p('bell_drinker')
+    : result.water.nipple_drinkers * p('nipple_drinker');
   const feedEquipmentCost = result.feed.feeders_count * p('feeder_tube');
   const lightingCost = result.lighting.bulbs_count * p('led_bulb');
-  const litterCost = result.litter.tons * p('litter_ton');
-  const feedCycleCost = result.feed.total_cycle_kg * p(`feed_${poultryType}_kg`);
-
   const cageCost = result.input?.housing_system === 'battery_cage'
     ? result.input.animal_count * p('battery_cage_slot')
     : 0;
 
-  const parts: Record<string, number> = {
+  // ── بنود تشغيل الدورة (بتتكرر كل دورة): فرشة + علف + كتاكيت ──
+  const litterCost = result.litter.tons * p('litter_ton');
+  const feedCycleCost = result.feed.total_cycle_kg * p(`feed_${poultryType}_kg`);
+  const chicksCost = (result.input?.animal_count ?? 0) * p(`chick_price_${poultryType}`);
+
+  // معدات بتتشترى مرة واحدة
+  const equipmentParts: Record<string, number> = {
     fans: fansCost, cooling: coolingCost, heating: heatingCost,
     water_equipment: waterCost, feed_equipment: feedEquipmentCost,
-    lighting: lightingCost, litter: litterCost, cage_setup: cageCost,
+    lighting: lightingCost, cage_setup: cageCost,
   };
-  const equipmentTotal = Object.entries(parts)
+  const equipmentTotal = Object.entries(equipmentParts)
     .filter(([k]) => !excluded.has(k))
     .reduce((s, [, v]) => s + v, 0);
-  const grandTotal = equipmentTotal + feedCycleCost;
+
+  const litterCounted = excluded.has('litter') ? 0 : litterCost;
+  const cycleOperatingTotal = feedCycleCost + chicksCost + litterCounted;
+  const grandTotal = equipmentTotal + cycleOperatingTotal;
 
   const breakdown: Record<string, number> = {};
-  for (const [k, v] of Object.entries(parts)) breakdown[k] = pyRound(v);
+  for (const [k, v] of Object.entries({ ...equipmentParts, litter: litterCost })) breakdown[k] = pyRound(v);
 
   return {
     currency: 'EGP',
@@ -857,16 +924,30 @@ export function calculateCosts(
     excluded_categories: [...excluded].sort(),
     equipment_total: pyRound(equipmentTotal),
     feed_cycle_cost: pyRound(feedCycleCost),
+    chicks_cost: pyRound(chicksCost),
+    litter_cost: pyRound(litterCounted),
+    cycle_operating_total: pyRound(cycleOperatingTotal),
     grand_total: pyRound(grandTotal),
     used_custom_prices: usedCustomPrices,
-    note: 'تكلفة تقديرية بناءً على آخر أسعار مسجلة يدوياً، قد تختلف عن سعر السوق الفعلي وقت الشراء',
+    note: 'تكلفة تقديرية لأول دورة: المعدات (مرة واحدة) + علف وكتاكيت وفرشة الدورة. ' +
+          'مش شاملة الأدوية والعمالة والكهرباء (موجودة في الجدوى الاقتصادية). ' +
+          'الأسعار من آخر أسعار مسجلة يدوياً وقد تختلف عن سعر السوق وقت الشراء',
   };
 }
 
 // ══════════════════════════════════════════════════════════════
 // 📈 الجدوى الاقتصادية
 // ══════════════════════════════════════════════════════════════
-const DEFAULT_EGGS_PER_CYCLE: Partial<Record<PoultryType, number>> = { layer: 300, quail: 250 };
+// 🥚 البيض الافتراضي للطائر بيتحسب من مدة الدورة نفسها (قبل كده كان رقم ثابت 300
+// بغض النظر عن المدة، فكان بيتعارض مع علف الدورة المحسوب لنفس المدة)
+const EGG_LAYING_START_DAY: Partial<Record<PoultryType, number>> = { layer: 140, quail: 45 };
+const EGG_LAYING_RATE: Partial<Record<PoultryType, number>> = { layer: 0.85, quail: 0.80 };
+
+export function defaultEggsPerBird(type: PoultryType, cycleDays: number): number {
+  const start = EGG_LAYING_START_DAY[type] ?? 140;
+  const rate = EGG_LAYING_RATE[type] ?? 0.8;
+  return pyRound(Math.max(0, cycleDays - start) * rate);
+}
 const DEFAULT_MORTALITY_PERCENT: Record<PoultryType, number> = {
   broiler: 5, layer: 8, turkey: 8, rabbit: 10, quail: 12, duck: 6,
 };
@@ -884,7 +965,7 @@ export interface ProfitabilityInput {
   medicine_cost_per_bird?: number | null;
   labor_cost_per_bird?: number | null;
   utilities_cost_per_bird?: number | null;
-  avg_weight_kg?: number;
+  avg_weight_kg?: number | null;
   selling_price_per_kg?: number | null;
   is_egg_production?: boolean | null;
   eggs_per_bird_cycle?: number | null;
@@ -892,16 +973,37 @@ export interface ProfitabilityInput {
   broken_eggs_percent?: number;
 }
 
+function validateProfitability(d: ProfitabilityInput): void {
+  if (!(d.bird_count > 0)) throw new Error('عدد الحيوانات لازم يكون أكبر من صفر');
+  const nonNegative: [string, number | null | undefined][] = [
+    ['سعر العلف', d.feed_price_per_kg], ['سعر الكتكوت', d.chick_price], ['إجمالي العلف', d.total_feed_kg],
+    ['نسبة المصاريف الأخرى', d.other_costs_percent], ['مصاريف الأدوية', d.medicine_cost_per_bird],
+    ['مصاريف العمالة', d.labor_cost_per_bird], ['مصاريف الكهرباء والمياه', d.utilities_cost_per_bird],
+    ['سعر بيع الكيلو', d.selling_price_per_kg], ['سعر البيضة', d.egg_price], ['عدد البيض', d.eggs_per_bird_cycle],
+  ];
+  for (const [label, v] of nonNegative) {
+    if (v != null && v < 0) throw new Error(`${label} مينفعش يكون سالب`);
+  }
+  const pct: [string, number | null | undefined][] = [['نسبة النفوق', d.mortality_percent], ['نسبة الكسر', d.broken_eggs_percent]];
+  for (const [label, v] of pct) {
+    if (v != null && !(v >= 0 && v <= 100)) throw new Error(`${label} لازم تكون بين 0 و 100`);
+  }
+  if (d.cycle_days != null && !(d.cycle_days > 0)) throw new Error('مدة الدورة لازم تكون أكبر من صفر');
+  if (d.avg_weight_kg != null && !(d.avg_weight_kg > 0)) throw new Error('متوسط الوزن لازم يكون أكبر من صفر');
+}
+
 /** بديل POST /calculator/profitability */
 export function calculateProfitability(d: ProfitabilityInput): any {
   const type = d.poultry_type as PoultryType;
   if (!POULTRY_TYPES.includes(type)) throw new Error(`'${d.poultry_type}' is not a valid PoultryType`);
 
+  validateProfitability(d);
+
   const warnings: string[] = [];
   const cycleDays = d.cycle_days ?? DEFAULT_CYCLE_DAYS[type] ?? 35;
   const mortality = d.mortality_percent ?? DEFAULT_MORTALITY_PERCENT[type] ?? 8;
   const otherPct = d.other_costs_percent ?? DEFAULT_OTHER_COSTS_PERCENT_OF_FEED;
-  const avgWeight = d.avg_weight_kg ?? 2.0;
+  const avgWeight = d.avg_weight_kg ?? DEFAULT_WEIGHT_KG[type] ?? 2.0;
   const brokenPct = d.broken_eggs_percent ?? 3.0;
   const isEgg = d.is_egg_production ?? (type === 'layer');
   let eggsPerBird = d.eggs_per_bird_cycle ?? null;
@@ -909,7 +1011,16 @@ export function calculateProfitability(d: ProfitabilityInput): any {
   const sellPrice = d.selling_price_per_kg ?? null;
 
   if (isEgg) {
-    if (eggsPerBird == null) eggsPerBird = DEFAULT_EGGS_PER_CYCLE[type] ?? 280;
+    if (eggsPerBird == null) {
+      eggsPerBird = defaultEggsPerBird(type, cycleDays);
+      if (eggsPerBird === 0) {
+        const start = EGG_LAYING_START_DAY[type] ?? 140;
+        warnings.push(
+          `⚠️ مدة الدورة (${cycleDays} يوم) أقل من عمر بداية الإنتاج (${start} يوم) - ` +
+          `مفيش بيض متوقع. حدد مدة دورة أطول أو دخّل عدد البيض بنفسك`
+        );
+      }
+    }
     if (eggPrice == null) warnings.push('⚠️ سعر البيضة مش متحدد - الإيراد المتوقع هيطلع صفر لحد ما تدخله');
   } else if (sellPrice == null) {
     warnings.push('⚠️ سعر بيع الكيلو مش متحدد - الإيراد المتوقع هيطلع صفر لحد ما تدخله');
@@ -944,7 +1055,7 @@ export function calculateProfitability(d: ProfitabilityInput): any {
   if (isEgg) {
     const totalEggs = surviving * (eggsPerBird || 0) * (1 - brokenPct / 100);
     revenue = totalEggs * (eggPrice || 0);
-    revenueBreakdown = { total_eggs_expected: pyRound(totalEggs), egg_price: eggPrice || 0 };
+    revenueBreakdown = { total_eggs_expected: pyRound(totalEggs), eggs_per_bird_used: eggsPerBird, egg_price: eggPrice || 0 };
   } else {
     const liveWeight = surviving * avgWeight;
     revenue = liveWeight * (sellPrice || 0);

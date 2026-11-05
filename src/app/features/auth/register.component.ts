@@ -26,9 +26,11 @@ const COMMON_PASSWORDS = [
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   template: `
-<div class="page-wrapper min-h-screen flex items-center justify-center p-4"
-          style="background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+<div class="flex p-4 overflow-x-hidden"
+          style="min-height:100vh;min-height:100dvh;
+                 padding-bottom:calc(1rem + env(safe-area-inset-bottom));
+                 background:linear-gradient(135deg,#0b2416 0%,#154128 50%,#1e7d48 100%)">
+    <div class="m-auto bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
       <div class="text-white text-center py-7 px-6"
            style="background:linear-gradient(135deg,#1a4a2e 0%,#2d9e5f 100%)">
         <div class="text-5xl mb-3">🐣</div>
@@ -41,8 +43,10 @@ const COMMON_PASSWORDS = [
           <!-- الاسم -->
           <div class="col-span-2">
             <label class="form-label">{{ 'AUTH.NAME' | translate }}</label>
-            <input class="form-input" [(ngModel)]="form.name" placeholder="أحمد المزارع"
-                   autocomplete="name" (blur)="touch('name')"
+            <input #nameEl class="form-input" [(ngModel)]="form.name" placeholder="أحمد المزارع"
+                   autocomplete="name" enterkeyhint="next"
+                   (keydown.enter)="$event.preventDefault(); emailEl.focus()"
+                   (blur)="touch('name')"
                    [style.border-color]="shown('name') ? '#f87171' : ''" />
             @if (shown('name')) {
               <p class="text-red-500 text-xs mt-1">⚠️ {{ shown('name') }}</p>
@@ -52,8 +56,10 @@ const COMMON_PASSWORDS = [
           <!-- الإيميل -->
           <div class="col-span-2">
             <label class="form-label">{{ 'AUTH.EMAIL' | translate }}</label>
-            <input class="form-input" type="email" [(ngModel)]="form.email"
+            <input #emailEl class="form-input" type="email" [(ngModel)]="form.email"
                    placeholder="farmer@example.com" autocomplete="email" dir="ltr"
+                   enterkeyhint="next"
+                   (keydown.enter)="$event.preventDefault(); passEl.focus()"
                    (blur)="touch('email')"
                    [style.border-color]="shown('email') ? '#f87171' : ''" />
             @if (shown('email')) {
@@ -71,13 +77,15 @@ const COMMON_PASSWORDS = [
           <div class="col-span-2">
             <label class="form-label">{{ 'AUTH.PASSWORD' | translate }}</label>
             <div class="relative">
-              <input class="form-input w-full" [type]="showPassword() ? 'text' : 'password'"
+              <input #passEl class="form-input w-full" [type]="showPassword() ? 'text' : 'password'"
                      [(ngModel)]="form.password" placeholder="••••••••"
                      autocomplete="new-password" dir="ltr"
                      style="padding-inline-start:44px"
+                     enterkeyhint="next"
+                     (keydown.enter)="$event.preventDefault(); phoneEl.focus()"
                      (blur)="touch('password')"
                      [style.border-color]="shown('password') ? '#f87171' : ''" />
-                     <button type="button"
+                     <button type="button" tabindex="-1"
                       class="absolute top-1/2 -translate-y-1/2 text-lg leading-none"
                       style="inset-inline-start:12px"
                       (click)="showPassword.set(!showPassword())"
@@ -108,8 +116,11 @@ const COMMON_PASSWORDS = [
           <div class="col-span-2">
             <label class="form-label">رقم الموبايل</label>
             <input
+              #phoneEl
               class="form-input"
               type="tel"
+              enterkeyhint="go"
+              (keydown.enter)="$event.preventDefault(); phoneEl.blur(); register()"
               inputmode="numeric"
               autocomplete="tel"
               [(ngModel)]="form.phone"

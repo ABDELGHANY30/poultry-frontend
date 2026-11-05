@@ -1,6 +1,6 @@
-
-import { Component, OnInit, signal, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
+import { SubscriptionLike } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { LEARNING_BUNDLE } from './learning-data';
 
@@ -27,7 +27,7 @@ import { LEARNING_BUNDLE } from './learning-data';
     <!-- Main Tabs -->
     <div class="grid grid-cols-4 gap-2 mb-4">
       <button *ngFor="let tab of mainTabs"
-              (click)="activeTab.set(tab.id)"
+              (click)="changeTab(tab.id)"
               class="py-2.5 rounded-2xl text-xs font-bold transition flex flex-col items-center gap-1"
               [class.text-white]="activeTab() === tab.id"
               [class.shadow-md]="activeTab() === tab.id"
@@ -46,7 +46,7 @@ import { LEARNING_BUNDLE } from './learning-data';
         <p class="text-sm font-bold text-gray-600 mb-3">اختر نوع الطائر أو الحيوان:</p>
         <div class="grid grid-cols-2 gap-3">
           <div *ngFor="let t of poultryTypes"
-               (click)="selectedType.set(t.id)"
+               (click)="openType(t.id)"
                class="rounded-2xl p-5 flex flex-col items-center gap-2 cursor-pointer border-2 transition hover:shadow-md"
                [style.background]="t.color"
                [style.border-color]="t.accent">
@@ -58,7 +58,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
       <!-- البرامج بعد اختيار النوع -->
       <div *ngIf="selectedType() && !selectedProgram()">
-        <button (click)="selectedType.set(null)"
+        <button (click)="goBack()"
                 class="flex items-center gap-1 text-green-600 font-bold text-sm mb-4">
           ← رجوع
         </button>
@@ -86,7 +86,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
       <!-- تفاصيل البرنامج -->
       <div *ngIf="selectedProgram()">
-        <button (click)="selectedProgram.set(null)"
+        <button (click)="goBack()"
                 class="flex items-center gap-1 text-green-600 font-bold text-sm mb-4">
           ← رجوع
         </button>
@@ -208,7 +208,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
         <div class="space-y-2">
           <div *ngFor="let d of filteredDiseases()"
-               (click)="selectedDisease.set(d)"
+               (click)="openDisease(d)"
                class="bg-white dark:bg-gray-800 rounded-2xl border p-4 flex items-center gap-3 cursor-pointer hover:shadow-md transition"
                [style.border-color]="d.levelColor + '44'">
             <div class="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
@@ -230,7 +230,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
       <!-- تفاصيل مرض -->
       <div *ngIf="selectedDisease()">
-        <button (click)="selectedDisease.set(null)"
+        <button (click)="goBack()"
                 class="flex items-center gap-1 text-green-600 font-bold text-sm mb-4">
           ← رجوع
         </button>
@@ -363,7 +363,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
         <div class="space-y-3">
           <div *ngFor="let lesson of filteredLessons()"
-               (click)="selectedLesson.set(lesson)"
+               (click)="openLesson(lesson)"
                class="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 cursor-pointer hover:border-green-300 hover:bg-green-50 transition shadow-sm">
             <div class="w-12 h-12 rounded-2xl bg-green-100 flex items-center justify-center text-2xl flex-shrink-0">
               {{ lesson.icon }}
@@ -393,7 +393,7 @@ import { LEARNING_BUNDLE } from './learning-data';
 
       <!-- درس مفتوح -->
       <div *ngIf="selectedLesson()">
-        <button (click)="selectedLesson.set(null)"
+        <button (click)="goBack()"
                 class="flex items-center gap-1 text-green-600 font-bold text-sm mb-4">
           ← رجوع
         </button>
@@ -426,7 +426,7 @@ import { LEARNING_BUNDLE } from './learning-data';
   </div>
   `
 })
-export class LearningComponent implements OnInit {
+export class LearningComponent implements OnInit, OnDestroy {
   activeTab = signal('programs');
   selectedType = signal<string | null>(null);
   selectedProgram = signal<any>(null);
@@ -531,8 +531,79 @@ export class LearningComponent implements OnInit {
     });
   });
 
+  // ── تحكم زر الرجوع (موبايل/متصفح) ───────────────────────
+  // كل مستوى جوه مركز التعلم (نوع / برنامج / مرض / درس) بيضيف خطوة في تاريخ المتصفح،
+  // فزر الرجوع بيقفل المستوى الحالي بس بدل ما يطلع من الصفحة كلها.
+  private location = inject(Location);
+  private popSub?: SubscriptionLike;
+  private depth = 0;      // عدد الخطوات اللي ضفناها في التاريخ
+  private skipPops = 0;   // عدد أحداث الرجوع اللي لازم نتجاهلها (لما نفك التاريخ بنفسنا)
+
   ngOnInit(): void {
     this.applyBundle(LEARNING_BUNDLE);
+    this.popSub = this.location.subscribe(() => this.onPop());
+  }
+
+  ngOnDestroy(): void {
+    this.popSub?.unsubscribe();
+  }
+
+  private pushLevel(): void {
+    this.depth++;
+    this.location.go(this.location.path(), '', { learning: this.depth });
+  }
+
+  private onPop(): void {
+    if (this.skipPops > 0) { this.skipPops--; return; }
+    if (this.depth === 0) return;
+    this.depth--;
+    this.closeTopLevel();
+  }
+
+  private closeTopLevel(): void {
+    switch (this.activeTab()) {
+      case 'programs':
+        if (this.selectedProgram()) this.selectedProgram.set(null);
+        else if (this.selectedType()) this.selectedType.set(null);
+        break;
+      case 'diseases': this.selectedDisease.set(null); break;
+      case 'lessons':  this.selectedLesson.set(null);  break;
+    }
+  }
+
+  // زراير "رجوع" جوه الشاشة بتستخدم نفس مسار زر الموبايل عشان يفضلوا متزامنين
+  goBack(): void {
+    if (this.depth > 0) this.location.back();
+    else this.closeTopLevel();
+  }
+
+  changeTab(id: string): void {
+    if (id === this.activeTab()) return;
+    if (this.depth > 0) {
+      this.skipPops++;
+      window.history.go(-this.depth);
+      this.depth = 0;
+    }
+    this.selectedType.set(null);
+    this.selectedProgram.set(null);
+    this.selectedDisease.set(null);
+    this.selectedLesson.set(null);
+    this.activeTab.set(id);
+  }
+
+  openType(id: string): void {
+    this.selectedType.set(id);
+    this.pushLevel();
+  }
+
+  openDisease(d: any): void {
+    this.selectedDisease.set(d);
+    this.pushLevel();
+  }
+
+  openLesson(l: any): void {
+    this.selectedLesson.set(l);
+    this.pushLevel();
   }
 
   // بيوزع بيانات مركز التعلم المدمجة على متغيرات الكومبوننت
@@ -549,6 +620,7 @@ export class LearningComponent implements OnInit {
     this.searchQuery.set('');
     this.typeFilter.set('all');
     this.selectedProgram.set(prog);
+    this.pushLevel();
   }
 
   typeIcon(type: string): string {
@@ -556,5 +628,3 @@ export class LearningComponent implements OnInit {
     return map[type] ?? '📌';
   }
 }
-
-

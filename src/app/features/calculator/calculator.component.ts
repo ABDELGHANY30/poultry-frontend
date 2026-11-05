@@ -189,10 +189,11 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
         <span *ngIf="!loading()">🔢 احسب المتطلبات</span>
         <span *ngIf="loading()">جاري الحساب...</span>
       </button>
+      <p *ngIf="calcError()" class="text-xs text-red-500 text-center">{{ calcError() }}</p>
     </div>
 
     <!-- Results -->
-    <div *ngIf="result()" class="space-y-4">
+    <div *ngIf="result()" id="calc-results" class="space-y-4">
 
       <!-- 🎯 المدة الفعلية المستخدمة في الحساب (مفيدة خصوصاً لو المستخدم سابها فاضية) -->
       <div *ngIf="result().input?.target_age_days_used" class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-600 text-center">
@@ -223,7 +224,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
         <div class="bg-amber-50 rounded-2xl p-4 text-center">
           <p class="text-2xl font-black text-amber-700">{{ result().water?.daily_liters }}</p>
           <p class="text-xs text-amber-600 font-semibold mt-1">لتر مياه/يوم</p>
-          <p class="text-xs text-gray-400">{{ result().water?.nipple_drinkers }} نيبل</p>
+          <p class="text-xs text-gray-400">{{ result().water?.primary_drinker === 'bell' ? (result().water?.bell_drinkers + ' حوض/شارب') : (result().water?.nipple_drinkers + ' نيبل') }}</p>
         </div>
         <div class="bg-purple-50 rounded-2xl p-4 text-center">
           <p class="text-2xl font-black text-purple-700">{{ result().feed?.daily_kg }}</p>
@@ -242,7 +243,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
         </div>
         <div class="bg-green-50 rounded-2xl p-4 text-center mb-3">
           <p class="text-2xl font-black text-green-700">{{ result().costs?.grand_total | number }}</p>
-          <p class="text-xs text-green-600 font-semibold mt-1">جنيه إجمالي تقديري</p>
+          <p class="text-xs text-green-600 font-semibold mt-1">جنيه إجمالي تقديري لأول دورة</p>
         </div>
         <div class="space-y-2 text-sm">
           <div class="flex justify-between">
@@ -252,6 +253,10 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           <div class="flex justify-between">
             <span class="text-gray-500">علف الدورة كاملة</span>
             <span class="font-bold">{{ result().costs?.feed_cycle_cost | number }} ج</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">كتاكيت الدورة</span>
+            <span class="font-bold">{{ result().costs?.chicks_cost | number }} ج</span>
           </div>
           <div class="border-t pt-2 mt-2 space-y-1.5">
             <ng-container *ngFor="let cat of costCategories">
@@ -266,6 +271,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
               </div>
             </ng-container>
           </div>
+          <p class="text-xs text-gray-400">الفرشة بتتحسب مع تشغيل الدورة (علف + كتاكيت + فرشة) مش مع المعدات</p>
           <p class="text-xs text-gray-400" *ngIf="excludedCategories().length">
             ✓ البنود المشطوبة فوق حددت إنها عندك بالفعل ومتحسبتش في الإجمالي
           </p>
@@ -391,7 +397,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             <span class="font-bold">{{ result().water?.nipple_drinkers }}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-500">شاربات بلدي</span>
+            <span class="text-gray-500">شاربات بلدي (بديل عن النيبلات)</span>
             <span class="font-bold">{{ result().water?.bell_drinkers }}</span>
           </div>
           <div class="flex justify-between">
@@ -502,7 +508,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             </div>
             <div>
               <label class="form-label">📦 متوسط بيض/دجاجة (اختياري)</label>
-              <input [(ngModel)]="profitForm.eggs_per_bird_cycle" type="number" class="form-input" placeholder="300 (افتراضي)"/>
+              <input [(ngModel)]="profitForm.eggs_per_bird_cycle" type="number" class="form-input" placeholder="حسب مدة الدورة (افتراضي)"/>
             </div>
           </ng-container>
 
@@ -530,7 +536,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             </div>
           </div>
           <p class="text-xs text-gray-400">
-            القيم دي جايه من "أسعارك" اللي عدّلتها فوق. سيبها فاضية لو عايز نحسب مصاريف أخرى كنسبة 20% من العلف بدل كده.
+            لو سبتها فاضية بنحسب مصاريف أخرى كنسبة 20% من تكلفة العلف (بتتناسب مع نوع ومدة الدورة). لو دخّلت أرقامك بنستخدمها بدل النسبة. (بتتملى تلقائياً بس لو حفظت سعر مخصص ليها في "أسعارك")
           </p>
         </div>
 
@@ -540,6 +546,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           <span *ngIf="!profitLoading()">📊 احسب الربح المتوقع</span>
           <span *ngIf="profitLoading()">جاري الحساب...</span>
         </button>
+        <p *ngIf="profitError()" class="text-xs text-red-500 text-center mt-2">{{ profitError() }}</p>
 
         <!-- نتيجة الجدوى الاقتصادية -->
         <div *ngIf="profitResult()" class="mt-4 space-y-3">
@@ -638,6 +645,8 @@ export class CalculatorComponent implements OnInit {
   private pricesSvc = inject(CalculatorPricesService);
   mode = signal<'finance' | 'nrc'>('finance');
   loading = signal(false);
+  calcError = signal('');
+  profitError = signal('');
   result = signal<any>(null);
   exportingPdf = signal(false);
   exportPdfError = signal('');
@@ -703,7 +712,7 @@ export class CalculatorComponent implements OnInit {
       const data = await this.pricesSvc.setExcludedCategories(updated);
       this.pricesData.set(data);
       this.excludedCategories.set(data.excluded_categories || updated);
-      if (this.result()) await this.calculate(); // إعادة حساب الإجمالي فورًا بعد التغيير
+      if (this.result()) await this.calculate(false); // إعادة حساب صامتة: من غير ما نمسح النتيجة أو نسكرول
     } catch {
       this.excludedCategories.set(prev); // فشل الحفظ - رجّع الحالة زي ما كانت
       this.exclusionError.set('❌ حصل خطأ، حاول تاني');
@@ -812,6 +821,7 @@ export class CalculatorComponent implements OnInit {
 
     this.profitLoading.set(true);
     this.profitResult.set(null);
+    this.profitError.set('');
 
     const body: any = {
       bird_count: this.form.bird_count,
@@ -842,6 +852,7 @@ export class CalculatorComponent implements OnInit {
       this.profitResult.set(calculateProfitability(body));
     } catch (e) {
       console.error('فشل حساب الجدوى:', e);
+      this.profitError.set('❌ ' + ((e as any)?.message || 'حصل خطأ في حساب الجدوى'));
     }
     this.profitLoading.set(false);
   }
@@ -877,9 +888,12 @@ export class CalculatorComponent implements OnInit {
     const feed = items[`feed_${this.form.poultry_type}_kg`];
     if (chick) this.profitForm.chick_price = chick.price;
     if (feed) this.profitForm.feed_price_per_kg = feed.price;
-    if (items['medicine_per_bird']) this.profitForm.medicine_cost_per_bird = items['medicine_per_bird'].price;
-    if (items['labor_per_bird']) this.profitForm.labor_cost_per_bird = items['labor_per_bird'].price;
-    if (items['utilities_per_bird']) this.profitForm.utilities_cost_per_bird = items['utilities_per_bird'].price;
+    // المصاريف المفصّلة: بنملاها بس لو المستخدم حفظ رقم مخصص بنفسه. القيم الافتراضية
+    // العامة (3 + 2 + 1.5 ج للطائر) كانت بتتحط دايماً لكل الأنواع والمدد (نفس الرقم للفروج
+    // 35 يوم والبياض 400 يوم!) ومكانتش بتسيب نسبة الـ 20% من العلف تشتغل أبداً.
+    this.profitForm.medicine_cost_per_bird = items['medicine_per_bird']?.is_custom ? items['medicine_per_bird'].price : null;
+    this.profitForm.labor_cost_per_bird = items['labor_per_bird']?.is_custom ? items['labor_per_bird'].price : null;
+    this.profitForm.utilities_cost_per_bird = items['utilities_per_bird']?.is_custom ? items['utilities_per_bird'].price : null;
   }
 
   onPoultryTypeChange(): void {
@@ -917,10 +931,11 @@ export class CalculatorComponent implements OnInit {
     try {
       const data = await this.pricesSvc.updatePrices(this.priceEdits);
       this.pricesData.set(data);
+      this.applyStoredProfitPrices(); // حقول الجدوى كانت بتفضل بالسعر القديم
       this.priceHistory.set(this.pricesSvc.getHistory());
       this.pricesSavedMsg.set(okMsg);
       setTimeout(() => this.pricesSavedMsg.set(''), 3000);
-      if (recalc && this.result()) await this.calculate();
+      if (recalc && this.result()) await this.calculate(false);
     } catch {
       this.pricesSaveError.set(true);
       this.pricesSavedMsg.set('❌ حصل خطأ أثناء الحفظ، حاول تاني');
@@ -934,6 +949,7 @@ export class CalculatorComponent implements OnInit {
       const data = await this.pricesSvc.resetPrices([key]);
       this.pricesData.set(data);
       this.priceEdits[key] = data.items[key]?.price;
+      this.applyStoredProfitPrices();
       this.priceHistory.set(this.pricesSvc.getHistory());
     } catch {
       this.pricesSaveError.set(true);
@@ -941,11 +957,17 @@ export class CalculatorComponent implements OnInit {
     }
   }
 
-  async calculate(): Promise<void> {
+  // userInitiated = true  → ضغطة المستخدم على "احسب": بنمسح النتيجة القديمة ونسكرول للنتايج
+  // userInitiated = false → إعادة حساب تلقائية (عندي بالفعل / تعديل سعر معدّة):
+  //   مبنمسحش النتيجة (عشان الصفحة متقصرش وتطلع لفوق) ومبنسكرولش، والأرقام بتتحدّث مكانها
+  async calculate(userInitiated = true): Promise<void> {
     if (!this.form.bird_count) return;
     this.loading.set(true);
-    this.result.set(null);
-    this.profitResult.set(null);
+    this.calcError.set('');
+    if (userInitiated) {
+      this.result.set(null);
+      this.profitResult.set(null);
+    }
 
     try {
       await this.pricesSvc.ready;
@@ -960,11 +982,14 @@ export class CalculatorComponent implements OnInit {
         res.costs = null; // نفس سلوك الباك اند: فشل التكلفة ميكسرش الحساب الأساسي
       }
       this.result.set(res);
-      setTimeout(() => {
-        document.querySelector('.space-y-4')?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      if (userInitiated) {
+        setTimeout(() => {
+          document.getElementById('calc-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
     } catch (e) {
       console.error('فشل الحساب:', e);
+      this.calcError.set('❌ ' + ((e as any)?.message || 'حصل خطأ أثناء الحساب'));
     } finally {
       this.loading.set(false);
     }
