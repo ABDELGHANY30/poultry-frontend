@@ -551,11 +551,12 @@ class PoultryFarmCalculator {
     const f = this.f;
     const n = f.bird_count;
     const days = f.target_age_days as number;
+    const weight = f.avg_weight_kg as number; // اتحدد في resolveWeight()
     let dailyAvg: number, totalPerBird: number, birdsPerTube: number, feederType: string;
 
     switch (f.poultry_type) {
       case 'broiler':
-        totalPerBird = f.avg_weight_kg * 1.8;
+        totalPerBird = weight * 1.8;
         dailyAvg = totalPerBird / days;
         birdsPerTube = 60;
         feederType = 'صواني للكتاكيت اسبوعين ثم انابيب الية';
@@ -576,7 +577,7 @@ class PoultryFarmCalculator {
         break;
       }
       case 'turkey':
-        totalPerBird = f.avg_weight_kg * 2.5;
+        totalPerBird = weight * 2.5;
         dailyAvg = totalPerBird / days;
         birdsPerTube = 15;
         feederType = 'معالف واسعة او جرابيل كبيرة';
@@ -610,7 +611,7 @@ class PoultryFarmCalculator {
         feederType = 'معالف خاصة بالسمان';
         break;
       case 'duck':
-        totalPerBird = f.avg_weight_kg * 2.4;
+        totalPerBird = weight * 2.4;
         dailyAvg = totalPerBird / days;
         birdsPerTube = 40;
         feederType = 'معالف مقاومة للماء (البط ينثر الماء على العلف بمنقاره)';
