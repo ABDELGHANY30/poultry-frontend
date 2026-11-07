@@ -29,6 +29,19 @@ export function fmt(x: number, digits = 0): string {
   return pyRound(x, digits).toFixed(digits);
 }
 
+/** حرارة البصلة المبللة (معادلة Stull 2011) - صالحة لـ RH 5-99% وحرارة -20 لـ 50 م */
+const wetBulbC = (t: number, rh: number): number =>
+  t * Math.atan(0.151977 * Math.sqrt(rh + 8.313659))
+  + Math.atan(t + rh) - Math.atan(rh - 1.676331)
+  + 0.00391838 * rh ** 1.5 * Math.atan(0.023101 * rh)
+  - 4.686035;
+
+// كفاءة الكوولينج باد الفعلية في بيوت الفروج بالمناخ المتوسطي 47-84% (متوسط ~70%)
+// والإجهاد الحراري بيبدأ فوق 30 م، والباد بيشتغل كويس لما الرطوبة تحت ~60%
+const PAD_EFFICIENCY = 0.70;
+const HEAT_STRESS_C = 30;
+const HIGH_RH_PERCENT = 60;
+
 /** ceil آمن ضد أخطاء الفاصلة العائمة (مثلاً 7.000000000000001 كانت بتتقرّب لـ 8) */
 const ceilSafe = (x: number): number => Math.ceil(pyRound(x, 9));
 
@@ -60,7 +73,7 @@ export const POULTRY_LABELS: Record<PoultryType, { label: string; icon: string }
 };
 
 export const DEFAULT_CYCLE_DAYS: Record<PoultryType, number> = {
-  broiler: 35, layer: 400, turkey: 140, rabbit: 70, quail: 42, duck: 65,
+  broiler: 35, layer: 400, turkey: 112, rabbit: 70, quail: 42, duck: 49,
 };
 
 const MIN_SENSIBLE_CYCLE_DAYS: Record<PoultryType, number> = {
@@ -72,24 +85,58 @@ const MIN_SENSIBLE_CYCLE_DAYS: Record<PoultryType, number> = {
 const KG_TO_LB = 2.20462;
 const M3H_PER_CFM = 1.699;
 
+// المراجع (CFM لكل رطل وزن حي) - 1 م3/س/كجم = 0.267 CFM/رطل:
+//  فروج/بياض صيف 1.5 = 5.6 م3/س/كجم: Lohmann "السعة المطلوبة" 4، Hy-Line 1 CFM/رطل، تصميم التونل الأمريكي
+//    ~1.1 CFM/رطل (طيور كبيرة + باد)، مراجع المناخ الحار 5-7، Sodeca 4-5 → قيمة وسط للمناخ الحار.
+//  شتاء (حد أدنى): فروج 0.2 (جدول Aviagen)، بياض 0.1 (Aviagen)، Lohmann 0.4 م3/س/كجم، أرانب 1 م3/س/كجم
+//  معتدل: انتقالي = 30-50% من سعة التونل (Cobb) ≈ 0.4 × الصيف
+//  رومي: صيف 5-7 م3/س/كجم، شتاء 1-2 (جامعة VFU)، NC State: 0.8-1.1 CFM/رطل مع باد
+//  بط: ممارسين بكين: من 0.5 لـ 8 م3/س/كجم → صيف 2.0، شتاء 0.13
+//  أرانب: 6-9 م3/س/كجم في الصيف الحار (أبحاث مصرية)
+//  سمان: من جدول DIN 18910 لطائر 0.31 كجم: 2.8 م3/س (فوق 25 درجة) و1.75 (تحت 25) = 2.4 و1.5 CFM/رطل
 const VENT_CFM_PER_LB: Record<PoultryType, Record<Season, number>> = {
-  broiler: { summer: 0.9, winter: 0.1, moderate: 0.4 },
-  layer: { summer: 0.9, winter: 0.1, moderate: 0.4 },
-  turkey: { summer: 1.2, winter: 0.15, moderate: 0.5 },
-  rabbit: { summer: 1.5, winter: 0.3, moderate: 0.8 },
-  quail: { summer: 0.9, winter: 0.1, moderate: 0.4 },
-  duck: { summer: 0.7, winter: 0.12, moderate: 0.35 },
+  broiler: { summer: 1.5, winter: 0.2, moderate: 0.6 },
+  layer: { summer: 1.5, winter: 0.1, moderate: 0.6 },
+  turkey: { summer: 1.4, winter: 0.27, moderate: 0.6 },
+  rabbit: { summer: 1.6, winter: 0.3, moderate: 0.7 },
+  quail: { summer: 2.4, winter: 0.3, moderate: 1.5 },
+  duck: { summer: 2.0, winter: 0.13, moderate: 0.8 },
 };
+
+// سعة الشفاط عند ضغط سكون ~0.10 بوصة ماء (الواقعي، مش free-air):
+//  - 18 بوصة: 1500-2000 CFM (جامعة Utah) → 3400 م3/س
+//  - 36 بوصة: ~9000 CFM (Aviagen layer guide) → 15300 م3/س
+const FAN_18_M3H = 3400;
+const FAN_36_M3H = 15300;
+const FAN_36_THRESHOLD_M3H = 30000; // فوق ده بنستخدم شفاط 36 بدل عدد كبير من 18
+
+// كوولينج باد: معدل غسيل CELdek = 60 لتر/دقيقة لكل م2 من السطح العلوي (Munters)
+// سمك 10 سم → 6 لتر/دقيقة لكل متر طول
+const PAD_WASH_L_MIN_PER_M = 6.0;
+
+// أقصى وزن حي/م2 للفروج على الأرضي (Cobb: 30-42 حسب نظام التهوية/التبريد)
+const BROILER_MAX_KG_PER_M2 = 33;
 
 /** وزن افتراضي مناسب لكل نوع (كان 2.0 كجم لكل الأنواع) */
 export const DEFAULT_WEIGHT_KG: Record<PoultryType, number> = {
   broiler: 2.0, layer: 1.8, turkey: 9.0, rabbit: 3.0, quail: 0.25, duck: 3.0,
 };
 
-// علف البياض: مرحلة تربية (لحد بداية الإنتاج) أقل من مرحلة البيض
-const LAYER_POINT_OF_LAY_DAYS = 140;
-const LAYER_REARING_FEED_KG_PER_DAY = 0.06;
-const LAYER_LAYING_FEED_KG_PER_DAY = 0.12;
+// علف البياض (Hy-Line): التربية لحد 17 أسبوع = 5.2-6.3 كجم (~6.0)، والإنتاج 101-112 جم/يوم (بني/وردي)
+// و92-100 جم (أبيض). بداية الإنتاج الفعلية عند 18 أسبوع.
+const LAYER_POINT_OF_LAY_DAYS = 126;
+const LAYER_REARING_FEED_KG_PER_DAY = 0.048; // 126 يوم × 0.048 = 6.05 كجم
+const LAYER_LAYING_FEED_KG_PER_DAY = 0.11;
+
+// سمان: ~16 جم/يوم متوسط لحد 45 يوم (FCR 2.6-2.8 لوزن 240 جم)، وفي الإنتاج 25-28 جم/يوم
+const QUAIL_REARING_DAYS = 45;
+const QUAIL_REARING_FEED_KG_PER_DAY = 0.016;
+const QUAIL_LAYING_FEED_KG_PER_DAY = 0.026;
+
+// أرانب: قبل الفطام (28 يوم) علف بسيط، بعد الفطام ~125-133 جم/يوم (FCR 3.1-3.5). مش شامل علف الأم.
+const RABBIT_WEANING_DAYS = 28;
+const RABBIT_PREWEAN_FEED_KG_PER_DAY = 0.01;
+const RABBIT_FATTENING_FEED_KG_PER_DAY = 0.13;
 
 const STOCKING_DENSITY: Record<PoultryType, Partial<Record<HousingSystem, number>>> = {
   broiler: { floor_litter: 0.065, battery_cage: 0.035 },
@@ -124,6 +171,9 @@ export interface FarmInput {
   avg_weight_kg: number | null;
   target_age_days: number | null;
   egypt_location: string;
+  // اختياري: حرارة ورطوبة الجو الخارجي وقت الذروة (بدل ما نخمّن حسب المنطقة)
+  outdoor_temp_c?: number | null;
+  outdoor_rh_percent?: number | null;
 }
 
 class PoultryFarmCalculator {
@@ -149,6 +199,8 @@ class PoultryFarmCalculator {
     for (const [label, v] of dims) {
       if (v != null && v < 0) throw new Error(`${label} مينفعش يكون سالب`);
     }
+    if (f.outdoor_temp_c != null && !(f.outdoor_temp_c >= -20 && f.outdoor_temp_c <= 50)) throw new Error('حرارة الجو لازم تكون بين -20 و 50 درجة');
+    if (f.outdoor_rh_percent != null && !(f.outdoor_rh_percent >= 5 && f.outdoor_rh_percent <= 99)) throw new Error('الرطوبة لازم تكون بين 5 و 99%');
   }
 
   private resolveWeight() {
@@ -276,6 +328,18 @@ class PoultryFarmCalculator {
     const f = this.f;
     let density = STOCKING_DENSITY[f.poultry_type]?.[f.housing_system] ?? 0.1;
 
+    // الفروج الأرضي: الكثافة بالوزن (كجم/م2) مش بعدد الطيور بس - طائر 3 كجم محتاج مساحة أكبر
+    if (f.poultry_type === 'broiler' && f.housing_system === 'floor_litter') {
+      const byWeight = (f.avg_weight_kg as number) / BROILER_MAX_KG_PER_M2;
+      if (byWeight > density) {
+        density = byWeight;
+        this.tips.push(
+          `وزن ${fmt(f.avg_weight_kg as number, 1)} كجم: المساحة اتزودت عشان الكثافة متزيدش عن ` +
+          `${BROILER_MAX_KG_PER_M2} كجم/م2 (Cobb: الحد الأقصى 30-42 حسب التهوية والتبريد)`
+        );
+      }
+    }
+
     if (f.season === 'summer') {
       if (f.poultry_type === 'rabbit') {
         density *= 1.3;
@@ -334,7 +398,9 @@ class PoultryFarmCalculator {
 
     const totalCfm = n * weightLb * cfmPerLb;
     const totalM3Hr = totalCfm * M3H_PER_CFM;
-    const fanCap = 5000;
+    const use36 = totalM3Hr > FAN_36_THRESHOLD_M3H;
+    const fanCap = use36 ? FAN_36_M3H : FAN_18_M3H;
+    const fanSize = use36 ? '36 بوصة (900mm)' : '18 بوصة (450mm)';
     const fans = Math.max(ceilSafe(totalM3Hr / fanCap), 2);
 
     // ارتفاع العنبر: كان مدخل ومش مستخدم خالص - دلوقتي بيحسب سرعة تجديد الهواء
@@ -349,7 +415,7 @@ class PoultryFarmCalculator {
     return {
       airflow: pyRound(totalM3Hr),
       fans_count: fans,
-      fan_specs: '18 بوصة (450mm)',
+      fan_specs: fanSize,
       fan_capacity: fanCap,
       inlets: 0,
     };
@@ -376,7 +442,7 @@ class PoultryFarmCalculator {
     // المساحة الفعلية بعد ما الطول يترفع للحد الأدنى (كانت بتفضل مساحة الهواء الأصغر
     // فسعر الباد كان بيطلع أقل بكتير من الحقيقي)
     padsArea = padsLength * padHeight;
-    const pumpLpm = padsLength * 5.5;
+    const pumpLpm = padsLength * PAD_WASH_L_MIN_PER_M;
 
     this.tips.push(
       `كوولينج باد (Evaporative Cooling):\n` +
@@ -408,6 +474,30 @@ class PoultryFarmCalculator {
       );
     }
 
+    // تأثير المنطقة: لو دخّل حرارة ورطوبة الذروة نقدّر حرارة الهواء بعد الباد
+    if (f.outdoor_temp_c != null && f.outdoor_rh_percent != null) {
+      const tOut = f.outdoor_temp_c;
+      const rh = f.outdoor_rh_percent;
+      const wb = wetBulbC(tOut, rh);
+      const tPad = tOut - PAD_EFFICIENCY * (tOut - wb);
+      this.tips.push(
+        `تقدير التبريد: الجو ${fmt(tOut, 0)} م ورطوبة ${fmt(rh, 0)}% (مبلل ${fmt(wb, 1)} م) - ` +
+        `الهواء بعد الباد حوالي ${fmt(tPad, 1)} م (كفاءة ${fmt(PAD_EFFICIENCY * 100, 0)}%)`
+      );
+      if (tPad > HEAT_STRESS_C) {
+        this.warnings.push(
+          `⚠️ حرارة الهواء بعد الباد المتوقعة ${fmt(tPad, 1)} م أعلى من ${HEAT_STRESS_C} م ` +
+          `(بداية الإجهاد الحراري) وهتزيد جوه العنبر - قلل الكثافة او ضيف تبريد (رشاشات/Fogging)`
+        );
+      }
+      if (rh > HIGH_RH_PERCENT) {
+        this.warnings.push(
+          `⚠️ الرطوبة ${fmt(rh, 0)}% اعلى من ${HIGH_RH_PERCENT}%: كفاءة الباد بتقل جدا ` +
+          `(مناطق الساحل) - اعتمد على سرعة الهواء (تونل) اكتر`
+        );
+      }
+    }
+
     return {
       pads_area: pyRound(padsArea, 1),
       pads_length: padsLength,
@@ -426,16 +516,21 @@ class PoultryFarmCalculator {
     let specs: string;
 
     if (f.poultry_type === 'rabbit') {
-      heaters = Math.ceil(f.bird_count / 50);
-      type = 'دفاية كهرباء او حامل غاز صغير';
-      specs = 'للصغار اقل من 3 اسابيع: 30-32 درجة - البالغة تتحمل حتى 10 درجة';
+      // الأرانب البالغة والصغار بعد الفطام بتتحمل 5-33 م (الأفضل 15-25) فمش محتاجة دفاية
+      // للتسمين. التدفئة بس لحديثي الولادة في صندوق الولادة (EU welfare factsheet، Cervera & Carmona)
+      // وعددها بيعتمد على عدد الامهات مش عدد المسمنين، فمش بنحسبها هنا (كان 1 لكل 50 بدون مصدر)
+      heaters = 0;
+      type = 'غير مطلوب للتسمين (دفاية صغيرة لصناديق الولادة فقط)';
+      specs = 'اول اسبوع: 30-32 درجة جوه صندوق الولادة - باقي العنبر 15-25 درجة';
       this.tips.push(
-        'الارانب البالغة تتحمل البرد جيدا (حتى 10 درجة)\n' +
-        '   الصغار اقل من 3 اسابيع تحتاج 30-32 درجة\n' +
+        'الارانب البالغة والمفطومة تتحمل 5-33 درجة (الافضل 15-25)\n' +
+        '   الحد الادنى المنصوح 15 درجة للولادة والرضاعة والتسمين (18-21 مثالي)\n' +
+        '   الصغار حديثي الولادة بس محتاجين 30-32 درجة في صندوق الولادة\n' +
+        '   لو العنبر نزل عن 15 درجة شتاء دفّي قسم الولادة بدفاية كهرباء صغيرة (عددها حسب عدد الامهات)\n' +
         '   وفر فرشة سميكة في الشتاء'
       );
     } else if (f.poultry_type === 'turkey') {
-      heaters = Math.ceil(f.bird_count / 400);
+      heaters = Math.ceil(f.bird_count / 300); // مراجع الرومي: ابدأ بـ 300 بطة أو أقل لكل هوفر
       type = 'حامل غاز (Brooder) كبير';
       specs = 'اسبوع 1: 37 درجة - تنخفض 3 درجة/اسبوع حتى 20 درجة';
       this.tips.push(
@@ -456,9 +551,9 @@ class PoultryFarmCalculator {
         '   ريش البط عازل للماء والبرد بشكل طبيعي بعد اول اسبوعين'
       );
     } else if (f.housing_system === 'floor_litter') {
-      heaters = Math.ceil(f.bird_count / 600);
+      heaters = Math.ceil(f.bird_count / 1000);
       type = 'حامل غاز (Brooder)';
-      specs = 'حامل غاز 30,000 BTU - يغطي 600 كتكوت';
+      specs = 'حامل غاز 17,000-30,000 BTU - يغطي 1000-1250 كتكوت (Ross: 970 BTU/م2 في منطقة التحضين)';
       this.tips.push(
         'درجة الحرارة تحت الحامل اسبوع 1: 35 درجة\n' +
         '   تنخفض 3 درجة كل اسبوع حتى تصل 22 درجة'
@@ -482,7 +577,7 @@ class PoultryFarmCalculator {
       case 'broiler':
         dailyPer = 0.18 * (summer ? 1.8 : 1.0);
         if (summer) this.tips.push('الصيف: ضاعف مصادر المياه وتاكد من برودة المياه (10-15 درجة)');
-        birdsPerNipple = 8; birdsPerBell = 80;
+        birdsPerNipple = 8; birdsPerBell = 60; // Ross: نيبل لكل 10-12 (8-10 للأوزان الأكبر/الحر)، Aviagen: شارب لكل 60 في المناخ الحار
         break;
       case 'layer':
         dailyPer = summer ? 0.4 : 0.25;
@@ -508,11 +603,13 @@ class PoultryFarmCalculator {
         );
         break;
       case 'quail':
-        dailyPer = 0.05;
+        // لحم: ~0.05 لتر/يوم، بياض: 74-129 مل/يوم (دراسة بلغارية) → 0.10. الصيف ×1.5
+        dailyPer = (f.target_age_days as number <= QUAIL_REARING_DAYS ? 0.05 : 0.10) * (summer ? 1.5 : 1.0);
         birdsPerNipple = 5; birdsPerBell = 30;
         break;
       case 'duck':
-        dailyPer = summer ? 0.65 : 0.4;
+        // Metzer/Cornell: متوسط 0.8 لتر/بطة/يوم لحد 7 أسابيع (بتسرّب)، ممارسين: 0.6-0.7
+        dailyPer = summer ? 0.85 : 0.6;
         birdsPerNipple = 15;
         birdsPerBell = 15;
         this.tips.push(
@@ -587,12 +684,15 @@ class PoultryFarmCalculator {
           '   اسبوع 5-12 (grower): بروتين 22%\n' +
           '   اسبوع 13+ (finisher): بروتين 18%\n' +
           '   FCR المستهدف: 2.5-2.8\n' +
+          '   للديوك دخّل وزن 18-20 كجم ومدة 140 يوم، وللإناث 9-10 كجم و112 يوم\n' +
           '   لا تستخدم علف الدجاج للرومي'
         );
         break;
-      case 'rabbit':
-        dailyAvg = 0.13;
-        totalPerBird = dailyAvg * days;
+      case 'rabbit': {
+        const prewean = Math.min(days, RABBIT_WEANING_DAYS);
+        const fattening = Math.max(0, days - RABBIT_WEANING_DAYS);
+        totalPerBird = prewean * RABBIT_PREWEAN_FEED_KG_PER_DAY + fattening * RABBIT_FATTENING_FEED_KG_PER_DAY;
+        dailyAvg = totalPerBird / days;
         birdsPerTube = 8;
         feederType = 'معالف خاصة بالارانب (J-feeder) او صناديق علف';
         this.tips.push(
@@ -601,17 +701,22 @@ class PoultryFarmCalculator {
           '   ارانب الانتاج: علف pelleted + دريس البرسيم\n' +
           '   لا تزيد الحبوب - تسبب انتفاخ\n' +
           '   دريس البرسيم: 100-200 جم/ارنب/يوم\n' +
-          '   الارانب الحوامل والمرضعة: زيادة 30-50%'
+          '   الارانب الحوامل والمرضعة: زيادة 30-50%\n' +
+          '   الحساب ده للصغار بس (مش شامل علف الام)'
         );
         break;
-      case 'quail':
-        dailyAvg = 0.025;
-        totalPerBird = dailyAvg * days;
+      }
+      case 'quail': {
+        const rearing = Math.min(days, QUAIL_REARING_DAYS);
+        const laying = Math.max(0, days - QUAIL_REARING_DAYS);
+        totalPerBird = rearing * QUAIL_REARING_FEED_KG_PER_DAY + laying * QUAIL_LAYING_FEED_KG_PER_DAY;
+        dailyAvg = totalPerBird / days;
         birdsPerTube = 30;
         feederType = 'معالف خاصة بالسمان';
         break;
+      }
       case 'duck':
-        totalPerBird = weight * 2.4;
+        totalPerBird = weight * 2.3; // بكين: FCR 2.0-2.25 في التجارب (Lohmann/Grimaud) → 2.3 للتشغيل الفعلي
         dailyAvg = totalPerBird / days;
         birdsPerTube = 40;
         feederType = 'معالف مقاومة للماء (البط ينثر الماء على العلف بمنقاره)';
@@ -620,7 +725,7 @@ class PoultryFarmCalculator {
           '   بروتين اعلى من الدجاج في كل مرحلة (بادئ 20-22%)\n' +
           '   النياسين (فيتامين B3) مهم جدا - نقصه يسبب تشوه ارجل\n' +
           '   لا تستخدم علف بياض دجاج (كالسيوم عالي يضر كلى البط)\n' +
-          '   FCR المستهدف: 2.2-2.6 (افضل نسبيا من الفروج)'
+          '   FCR المستهدف: 2.0-2.4 (بكين حديث 1.8-2.25 في التجارب)'
         );
         break;
       default:
@@ -832,6 +937,8 @@ export interface CalculatorInput {
   avg_weight_kg?: number | null;
   target_age_days?: number | null;
   egypt_location?: string;
+  outdoor_temp_c?: number | null;
+  outdoor_rh_percent?: number | null;
 }
 
 /** بديل POST /calculator/calculate (الحساب فقط — التكلفة بتتضاف بـ calculateCosts) */
@@ -854,6 +961,8 @@ export function calculateFarm(d: CalculatorInput): any {
     avg_weight_kg: d.avg_weight_kg ?? null, // null = الوزن الافتراضي للنوع
     target_age_days: d.target_age_days ?? null,
     egypt_location: d.egypt_location ?? 'delta',
+    outdoor_temp_c: d.outdoor_temp_c ?? null,
+    outdoor_rh_percent: d.outdoor_rh_percent ?? null,
   };
   return new PoultryFarmCalculator(farm).calculate();
 }
@@ -941,7 +1050,8 @@ export function calculateCosts(
 // ══════════════════════════════════════════════════════════════
 // 🥚 البيض الافتراضي للطائر بيتحسب من مدة الدورة نفسها (قبل كده كان رقم ثابت 300
 // بغض النظر عن المدة، فكان بيتعارض مع علف الدورة المحسوب لنفس المدة)
-const EGG_LAYING_START_DAY: Partial<Record<PoultryType, number>> = { layer: 140, quail: 45 };
+const EGG_LAYING_START_DAY: Partial<Record<PoultryType, number>> = { layer: 126, quail: 45 };
+// Hy-Line: متوسط hen-day من أسبوع 18 = 0.81 (أبيض) - 0.89 (بني)؛ سمان ~285-295 بيضة/سنة = 0.80
 const EGG_LAYING_RATE: Partial<Record<PoultryType, number>> = { layer: 0.85, quail: 0.80 };
 
 export function defaultEggsPerBird(type: PoultryType, cycleDays: number): number {
@@ -970,6 +1080,7 @@ export interface ProfitabilityInput {
   selling_price_per_kg?: number | null;
   is_egg_production?: boolean | null;
   eggs_per_bird_cycle?: number | null;
+  cull_hen_price_per_kg?: number | null; // بيع الدجاج المستبعد في آخر الدورة (بياض)
   egg_price?: number | null;
   broken_eggs_percent?: number;
 }
@@ -980,7 +1091,7 @@ function validateProfitability(d: ProfitabilityInput): void {
     ['سعر العلف', d.feed_price_per_kg], ['سعر الكتكوت', d.chick_price], ['إجمالي العلف', d.total_feed_kg],
     ['نسبة المصاريف الأخرى', d.other_costs_percent], ['مصاريف الأدوية', d.medicine_cost_per_bird],
     ['مصاريف العمالة', d.labor_cost_per_bird], ['مصاريف الكهرباء والمياه', d.utilities_cost_per_bird],
-    ['سعر بيع الكيلو', d.selling_price_per_kg], ['سعر البيضة', d.egg_price], ['عدد البيض', d.eggs_per_bird_cycle],
+    ['سعر بيع الكيلو', d.selling_price_per_kg], ['سعر البيضة', d.egg_price], ['عدد البيض', d.eggs_per_bird_cycle], ['سعر الدجاج المستبعد', d.cull_hen_price_per_kg],
   ];
   for (const [label, v] of nonNegative) {
     if (v != null && v < 0) throw new Error(`${label} مينفعش يكون سالب`);
@@ -1055,8 +1166,17 @@ export function calculateProfitability(d: ProfitabilityInput): any {
   let revenueBreakdown: any;
   if (isEgg) {
     const totalEggs = surviving * (eggsPerBird || 0) * (1 - brokenPct / 100);
-    revenue = totalEggs * (eggPrice || 0);
-    revenueBreakdown = { total_eggs_expected: pyRound(totalEggs), eggs_per_bird_used: eggsPerBird, egg_price: eggPrice || 0 };
+    const eggsRevenue = totalEggs * (eggPrice || 0);
+    // الدجاج المستبعد بيتباع في آخر الدورة (كان مش محسوب خالص)
+    const cullRevenue = surviving * avgWeight * (d.cull_hen_price_per_kg || 0);
+    revenue = eggsRevenue + cullRevenue;
+    revenueBreakdown = {
+      eggs_revenue: pyRound(eggsRevenue, 2),
+      cull_hens_revenue: pyRound(cullRevenue, 2),
+      total_eggs_expected: pyRound(totalEggs),
+      eggs_per_bird_used: eggsPerBird,
+      egg_price: eggPrice || 0,
+    };
   } else {
     const liveWeight = surviving * avgWeight;
     revenue = liveWeight * (sellPrice || 0);

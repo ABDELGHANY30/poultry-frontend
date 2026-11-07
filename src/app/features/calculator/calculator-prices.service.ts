@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Preferences } from '@capacitor/preferences';
+import type { MarketEntry, MarketSnapshot } from './calculator-live-data';
+import { MARKET_COST_KEYS, MARKET_SELL_KEYS, isMarketStale, isMarketUsable } from './calculator-live-data';
 
 /**
  * تخزين أسعار المستخدم محلياً على الجهاز (بديل price_store.py).
@@ -48,6 +50,7 @@ export const VALID_EQUIPMENT_CATEGORIES = [
 ];
 
 const STORAGE_KEY = 'calculator_user_prices_v1';
+const MARKET_STORAGE_KEY = 'calculator_market_snapshot_v1';
 const MAX_HISTORY_ENTRIES = 200;
 
 interface HistoryEntry { key: string; label: string; old_price: number | null; new_price: number | null; changed_at: string }
@@ -65,6 +68,8 @@ const emptyOverrides = (): UserOverrides => ({
 @Injectable({ providedIn: 'root' })
 export class CalculatorPricesService {
   private overrides: UserOverrides = emptyOverrides();
+  /** آخر لقطة لأسعار السوق (بتتحفظ على الجهاز عشان الحاسبة تشتغل أوفلاين) */
+  private market: MarketSnapshot | null = null;
   /** استنى الـ promise ده قبل أي قراءة/حساب عشان تضمن إن البيانات اتحملت من الجهاز */
   readonly ready: Promise<void> = this.load();
 
@@ -79,6 +84,59 @@ export class CalculatorPricesService {
       console.error('فشل قراءة الأسعار المحفوظة، هنستخدم الافتراضية:', e);
       this.overrides = emptyOverrides();
     }
+    try {
+      const { value } = await Preferences.get({ key: MARKET_STORAGE_KEY });
+      if (value) this.market = JSON.parse(value);
+    } catch {
+      this.market = null;
+    }
+  }
+
+  // ── أسعار السوق ───────────────────────────────────────────
+
+  /** سعر السوق لمفتاح معين لو موجود ومش أقدم من الحد الأقصى */
+  private marketEntry(key: string): MarketEntry | undefined {
+    const e = this.market?.items?.[key];
+    return isMarketUsable(e) ? e : undefined;
+  }
+
+  /** السعر الأساسي (من غير تخصيص المستخدم): السوق لو متاح، وإلا الافتراضي */
+  private baselinePrice(key: string): number | undefined {
+    if ((MARKET_COST_KEYS as readonly string[]).includes(key)) {
+      const m = this.marketEntry(key);
+      if (m) return m.price;
+    }
+    return DEFAULT_PRICES[key]?.price;
+  }
+
+  async setMarketSnapshot(snapshot: MarketSnapshot | null): Promise<void> {
+    this.market = snapshot;
+    if (snapshot) await Preferences.set({ key: MARKET_STORAGE_KEY, value: JSON.stringify(snapshot) });
+    else await Preferences.remove({ key: MARKET_STORAGE_KEY });
+  }
+
+  /** ملخص حالة السوق للعرض: آخر جلب + عدد الأسعار المستخدمة فعلاً + هل فيها قديم */
+  getMarketStatus(): { fetched_at: string | null; applied: number; stale: boolean; newest: string | null } {
+    const items = this.market?.items ?? {};
+    const costKeys = (MARKET_COST_KEYS as readonly string[]).filter(k => this.marketEntry(k));
+    const usable = Object.entries(items).filter(([, e]) => isMarketUsable(e));
+    const stale = usable.some(([k, e]) => isMarketStale(k, e));
+    const newest = usable.map(([, e]) => e.updated_at).sort().pop() ?? null;
+    return { fetched_at: this.market?.fetched_at ?? null, applied: costKeys.length, stale, newest };
+  }
+
+  /** سعر بيع الكيلو الحي لنوع الطائر من السوق (للجدوى) */
+  getMarketSellPrice(poultryType: string): (MarketEntry & { stale: boolean }) | null {
+    const key = MARKET_SELL_KEYS[poultryType];
+    const e = key ? this.marketEntry(key) : undefined;
+    return e ? { ...e, stale: isMarketStale(key, e) } : null;
+  }
+
+  /** سعر البيضة من السوق (أبيض/أحمر) */
+  getMarketEggPrice(color: 'white' | 'red'): (MarketEntry & { stale: boolean }) | null {
+    const key = color === 'white' ? 'egg_white' : 'egg_red';
+    const e = this.marketEntry(key);
+    return e ? { ...e, stale: isMarketStale(key, e) } : null;
   }
 
   private async persist(): Promise<void> {
@@ -90,12 +148,19 @@ export class CalculatorPricesService {
     const items: Record<string, any> = {};
     for (const [key, val] of Object.entries(DEFAULT_PRICES)) {
       const custom = this.overrides.items[key];
+      const market = (MARKET_COST_KEYS as readonly string[]).includes(key) ? this.marketEntry(key) : undefined;
       items[key] = {
         label: val.label,
         unit: val.unit,
-        price: custom !== undefined ? custom : val.price,
+        // الأولوية: سعر المستخدم المخصص > سعر السوق > الافتراضي
+        price: custom !== undefined ? custom : (market ? market.price : val.price),
         default_price: val.price,
         is_custom: custom !== undefined,
+        source: custom !== undefined ? 'custom' : (market ? 'market' : 'default'),
+        market_price: market?.price ?? null,
+        market_source: market?.source ?? null,
+        market_updated_at: market?.updated_at ?? null,
+        market_stale: market ? isMarketStale(key, market) : false,
       };
     }
     return {
@@ -117,11 +182,13 @@ export class CalculatorPricesService {
       const newPrice = Number(raw);
       if (!isFinite(newPrice) || raw === null || (raw as any) === '') continue; // خانة فاضية/غلط: نتجاهلها
       if (newPrice < 0) continue; // سعر سالب: نتجاهله
-      const defaultPrice = DEFAULT_PRICES[key]?.price;
-      const oldPrice = this.overrides.items[key] ?? defaultPrice ?? null;
+      // السعر الأساسي = سعر السوق (لو متاح) أو الافتراضي. لو المستخدم حفظ من غير ما يعدّل،
+      // السعر بيساوي الأساسي فمش هيتسجل كتخصيص (وإلا سعر السوق كان هيتثبّت بدل ما يتحدّث).
+      const baseline = this.baselinePrice(key);
+      const oldPrice = this.overrides.items[key] ?? baseline ?? null;
       if (oldPrice === newPrice) continue;
-      // لو رجّع السعر لقيمته الافتراضية، نمسح التخصيص بدل ما يفضل معلّم "مخصص"
-      if (defaultPrice !== undefined && newPrice === defaultPrice) delete this.overrides.items[key];
+      // لو رجّع السعر للأساسي، نمسح التخصيص بدل ما يفضل معلّم "مخصص"
+      if (baseline !== undefined && newPrice === baseline) delete this.overrides.items[key];
       else this.overrides.items[key] = newPrice;
       this.overrides.history.push({
         key, label: DEFAULT_PRICES[key]?.label ?? key,
@@ -142,7 +209,7 @@ export class CalculatorPricesService {
     for (const key of resetKeys) {
       const old = this.overrides.items[key];
       delete this.overrides.items[key];
-      const def = DEFAULT_PRICES[key]?.price ?? null;
+      const def = this.baselinePrice(key) ?? null;
       if (old !== undefined && old !== def) {
         this.overrides.history.push({
           key, label: DEFAULT_PRICES[key]?.label ?? key,

@@ -2,6 +2,9 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CalculatorPricesService } from './calculator-prices.service';
+import { CalculatorLiveDataService } from './calculator-live-data.service';
+import { GOVERNORATES, findGovernorate, suggestSeason, weatherForCalc } from './calculator-live-data';
+import type { WeatherSummary } from './calculator-live-data';
 import {
   calculateFarm, calculateCosts, calculateProfitability, getHousingOptions,
   POULTRY_LABELS, HOUSING_LABELS, PoultryType, HousingSystem,
@@ -79,8 +82,17 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           <p class="text-sm font-bold text-gray-700">💰 أسعارك</p>
           <span *ngIf="pricesLastUpdated()" class="text-xs text-gray-400">آخر تعديل ليك: {{ pricesLastUpdated() }}</span>
         </div>
+        <div class="flex items-center justify-between text-xs -mt-1">
+          <span *ngIf="marketStatus()?.applied" [class.text-blue-600]="!marketStatus()?.stale" [class.text-amber-600]="marketStatus()?.stale">
+            📈 أسعار السوق مطبّقة ({{ marketStatus()?.applied }}) · {{ marketNewestLabel() }}<span *ngIf="marketStatus()?.stale"> · قديمة</span>
+          </span>
+          <span *ngIf="!marketStatus()?.applied" class="text-gray-400">📈 أسعار السوق مش متاحة - بنستخدم الافتراضية</span>
+          <button type="button" (click)="refreshMarket(true)" [disabled]="marketLoading()" class="font-semibold text-blue-600">
+            {{ marketLoading() ? '...' : '🔄 تحديث' }}
+          </button>
+        </div>
         <p class="text-xs text-gray-400 -mt-2">
-          دي الأسعار الافتراضية. لو عندك سعر مختلف عدّله وهيتحفظ
+          الأسعار دي من السوق لو متاحة (وإلا افتراضية). لو عندك سعر مختلف عدّله وهيتحفظ
           <span class="font-semibold text-gray-500">في حسابك الشخصي بس</span>.
           <span class="block mt-0.5">💡 أسعار المعدات (شفاطات، تبريد، تدفئة...) هتلاقيها تحت جنب تفصيل التكلفة بعد الحساب مباشرة.</span>
         </p>
@@ -94,6 +106,13 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
                       title="رجّع للسعر الافتراضي"
                       class="text-xs text-gray-400 hover:text-red-500 flex-shrink-0">↺</button>
             </div>
+            <p *ngIf="priceItems()[key]?.source === 'market'" class="text-[10px] mb-1 leading-tight"
+               [class.text-blue-500]="!priceItems()[key]?.market_stale" [class.text-amber-600]="priceItems()[key]?.market_stale">
+              📈 من السوق: {{ priceItems()[key]?.market_source }}<span *ngIf="priceItems()[key]?.market_stale"> (قديم)</span>
+            </p>
+            <p *ngIf="priceItems()[key]?.source === 'custom' && priceItems()[key]?.market_price" class="text-[10px] mb-1 text-gray-400">
+              📈 السوق: {{ priceItems()[key]?.market_price }}
+            </p>
             <div class="flex items-center gap-1">
               <input type="number" [(ngModel)]="priceEdits[key]" class="form-input text-sm py-1 px-2"/>
               <span class="text-xs text-gray-400 whitespace-nowrap">{{ priceItems()[key]?.unit }}</span>
@@ -129,6 +148,45 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
         </div>
       </div>
 
+      <!-- ☁️ طقس محافظتك: بيملأ الحرارة والرطوبة بتوع التبريد ويقترح الموسم -->
+      <div class="bg-sky-50 rounded-2xl p-3 space-y-2">
+        <div class="flex items-center gap-2">
+          <p class="text-sm font-bold text-sky-800 flex-1">☁️ طقس محافظتك</p>
+          <select [(ngModel)]="governorate" (ngModelChange)="onGovernorateChange()"
+                  class="form-input text-sm py-1 px-2 w-auto">
+            <option *ngFor="let g of governorates" [value]="g.name">{{ g.name }}</option>
+          </select>
+        </div>
+        <p *ngIf="weatherLoading()" class="text-xs text-gray-400">جاري تحميل الطقس...</p>
+        <p *ngIf="!weatherLoading() && !weather()" class="text-xs text-gray-400">
+          الطقس مش متاح دلوقتي - تقدر تدخّل الحرارة والرطوبة بإيدك تحت.
+        </p>
+        <ng-container *ngIf="weather()?.today as t">
+          <div class="flex items-center justify-between text-sm">
+            <span>النهارده: <b>{{ t.max }}°</b> / {{ t.min }}° <span class="text-xs text-gray-500">{{ t.condition }}</span></span>
+            <span *ngIf="weather()?.tomorrow as tm" class="text-xs text-gray-500">بكره: {{ tm.max }}° / {{ tm.min }}°</span>
+          </div>
+          <p class="text-xs text-gray-500">
+            رطوبة وقت الذروة: {{ weatherRh() ?? '—' }}%
+            <span *ngIf="weatherRh() !== null && !weatherRhIsPeak()">(متوسط اليوم)</span>
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" (click)="applyWeather()"
+                    class="text-xs font-bold px-3 py-1.5 rounded-xl bg-sky-600 text-white">
+              🌡️ استخدم طقس النهارده في التبريد
+            </button>
+            <button *ngIf="suggestedSeason() && suggestedSeason() !== form.season" type="button"
+                    (click)="applySuggestedSeason()"
+                    class="text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-sky-300 text-sky-700">
+              الموسم المقترح: {{ seasonLabel(suggestedSeason()) }} ← طبّق
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            لتصميم عنبر جديد استخدم أعلى حرارة صيفية، مش طقس النهارده.
+          </p>
+        </ng-container>
+      </div>
+
       <!-- الموسم -->
       <div>
         <label class="form-label">🌡️ الموسم</label>
@@ -143,9 +201,9 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
       <div>
         <label class="form-label">📍 المنطقة الجغرافية</label>
         <select [(ngModel)]="form.egypt_location" class="form-input">
-          <option value="delta">الدلتا / السواحل</option>
+          <option value="delta">الدلتا والقاهرة</option>
           <option value="upper">الصعيد</option>
-          <option value="coastal">السواحل (الساحل الشمالي)</option>
+          <option value="coastal">الساحل الشمالي (رطوبة عالية)</option>
         </select>
       </div>
 
@@ -165,6 +223,18 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             <label class="form-label">الارتفاع (م)</label>
             <input [(ngModel)]="form.house_height" type="number" class="form-input" placeholder="2.5"/>
           </div>
+        </div>
+      </div>
+
+      <!-- حرارة ورطوبة الذروة (اختياري): بتحسّن تقدير التبريد حسب منطقتك -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">🌡️ أعلى حرارة صيفاً (°م) - اختياري</label>
+          <input [(ngModel)]="form.outdoor_temp_c" type="number" class="form-input" [placeholder]="tempPlaceholder()"/>
+        </div>
+        <div>
+          <label class="form-label">💧 الرطوبة وقتها (%) - اختياري</label>
+          <input [(ngModel)]="form.outdoor_rh_percent" type="number" class="form-input" [placeholder]="rhPlaceholder()"/>
         </div>
       </div>
 
@@ -237,8 +307,12 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
       <div class="card" *ngIf="result().costs">
         <div class="flex items-center justify-between mb-3">
           <h3 class="font-bold text-gray-800">💰 التكلفة التقديرية</h3>
-          <span class="text-xs" [class.text-green-600]="result().costs?.used_custom_prices" [class.text-gray-400]="!result().costs?.used_custom_prices">
-            {{ result().costs?.used_custom_prices ? '✏️ بأسعارك الشخصية' : 'بالأسعار الافتراضية' }}
+          <span class="text-xs" [class.text-green-600]="result().costs?.used_custom_prices"
+                [class.text-blue-600]="!result().costs?.used_custom_prices && result().costs?.used_market_prices"
+                [class.text-gray-400]="!result().costs?.used_custom_prices && !result().costs?.used_market_prices">
+            {{ result().costs?.used_custom_prices && result().costs?.used_market_prices ? '✏️ بأسعارك + 📈 السوق'
+               : result().costs?.used_custom_prices ? '✏️ بأسعارك الشخصية'
+               : result().costs?.used_market_prices ? '📈 بأسعار السوق' : 'بالأسعار الافتراضية' }}
           </span>
         </div>
         <div class="bg-green-50 rounded-2xl p-4 text-center mb-3">
@@ -498,6 +572,9 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           <div *ngIf="form.poultry_type !== 'layer'">
             <label class="form-label">💵 سعر بيع الكيلو (جنيه)</label>
             <input [(ngModel)]="profitForm.selling_price_per_kg" type="number" step="0.5" class="form-input" placeholder="65"/>
+            <p *ngIf="marketSellHint() as h" class="text-[10px] mt-1" [class.text-blue-500]="!h.stale" [class.text-amber-600]="h.stale">
+              📈 {{ h.source }}: {{ h.price }} ج<span *ngIf="h.stale"> (قديم)</span>
+            </p>
           </div>
 
           <!-- 🥚 حقول خاصة بالبياض -->
@@ -505,10 +582,19 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             <div>
               <label class="form-label">🥚 سعر البيضة (جنيه)</label>
               <input [(ngModel)]="profitForm.egg_price" type="number" step="0.1" class="form-input" placeholder="2.5"/>
+              <p *ngIf="eggHint() as e" class="text-[10px] mt-1" [class.text-blue-500]="!e.stale" [class.text-amber-600]="e.stale">
+                📈 السوق: أبيض {{ e.white ?? '—' }} · أحمر {{ e.red ?? '—' }}<span *ngIf="e.stale"> (قديم)</span>
+                <button *ngIf="e.white" type="button" (click)="useEggPrice('white')" class="underline mr-1">استخدم الأبيض</button>
+                <button *ngIf="e.red" type="button" (click)="useEggPrice('red')" class="underline mr-1">الأحمر</button>
+              </p>
             </div>
             <div>
               <label class="form-label">📦 متوسط بيض/دجاجة (اختياري)</label>
               <input [(ngModel)]="profitForm.eggs_per_bird_cycle" type="number" class="form-input" placeholder="حسب مدة الدورة (افتراضي)"/>
+            </div>
+            <div>
+              <label class="form-label">🐔 سعر كيلو الدجاج المستبعد (اختياري)</label>
+              <input [(ngModel)]="profitForm.cull_hen_price_per_kg" type="number" step="0.5" class="form-input" placeholder="بيع الدجاج في آخر الدورة"/>
             </div>
           </ng-container>
 
@@ -590,6 +676,10 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
               <span class="text-gray-500">إجمالي البيض المتوقع</span>
               <span class="font-bold">{{ profitResult().revenue?.total_eggs_expected | number }} بيضة</span>
             </div>
+            <div class="flex justify-between" *ngIf="profitResult().revenue?.cull_hens_revenue">
+              <span class="text-gray-500">منها: بيع الدجاج المستبعد</span>
+              <span class="font-bold">{{ profitResult().revenue?.cull_hens_revenue | number }} جنيه</span>
+            </div>
             <div class="flex justify-between" *ngIf="profitResult().revenue?.total_live_weight_kg">
               <span class="text-gray-500">إجمالي الوزن الحي المتوقع</span>
               <span class="font-bold">{{ profitResult().revenue?.total_live_weight_kg | number }} كجم</span>
@@ -643,6 +733,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
 })
 export class CalculatorComponent implements OnInit {
   private pricesSvc = inject(CalculatorPricesService);
+  private live = inject(CalculatorLiveDataService);
   mode = signal<'finance' | 'nrc'>('finance');
   loading = signal(false);
   calcError = signal('');
@@ -760,6 +851,8 @@ export class CalculatorComponent implements OnInit {
     house_length: null as number | null,
     house_width: null as number | null,
     house_height: null as number | null,
+    outdoor_temp_c: null as number | null,
+    outdoor_rh_percent: null as number | null,
     avg_weight_kg: 2.0,  // فروج: 2.2 / رومي: 8-10 / أرانب: 2.5-4
     target_age_days: null as number | null,
   };
@@ -799,6 +892,97 @@ export class CalculatorComponent implements OnInit {
   cycleDaysPlaceholder = () => String(this.cycleDaysDefaults[this.form.poultry_type] ?? 35);
   weightPlaceholder = () => this.weightDefaults[this.form.poultry_type] ?? '2.0';
 
+  // أمثلة بس (مش بتتطبق في الحساب): متوسطات الشهر الأحر - القاهرة يونيو 35°م/43%، إسكندرية أغسطس 31°م/70%،
+  // أسوان رطوبة 15-40%. دخّل أرقام ذروة أقرب محطة أرصاد لمنطقتك.
+  tempPlaceholder = () => ({ delta: 'مثال: 35', coastal: 'مثال: 31', upper: 'حسب محطتك' } as Record<string, string>)[this.form.egypt_location] ?? '40';
+  rhPlaceholder = () => ({ delta: 'مثال: 43', coastal: 'مثال: 70', upper: 'غالباً 15-40' } as Record<string, string>)[this.form.egypt_location] ?? '30';
+
+  // ── ☁️ الطقس (من /weather/summary) ────────────────────────
+  governorates = GOVERNORATES;
+  governorate: string = (() => {
+    try {
+      const saved = localStorage.getItem('calc_governorate') ?? localStorage.getItem('governorate');
+      return findGovernorate(saved)?.name ?? 'القاهرة';
+    } catch { return 'القاهرة'; }
+  })();
+  weather = signal<WeatherSummary | null>(null);
+  weatherLoading = signal(false);
+  private weatherCalc = computed(() => weatherForCalc(this.weather()?.today ?? null));
+  weatherRh = computed(() => this.weatherCalc()?.rh ?? null);
+  weatherRhIsPeak = computed(() => this.weatherCalc()?.rhIsPeak ?? false);
+  suggestedSeason = computed(() => suggestSeason(this.weather()?.today ?? null));
+  seasonLabel = (s: string | null) => ({ summer: 'صيف', winter: 'شتاء', moderate: 'معتدل' } as Record<string, string>)[s ?? ''] ?? '';
+
+  async loadWeather(): Promise<void> {
+    this.weatherLoading.set(true);
+    try {
+      this.weather.set(await this.live.fetchWeather(this.governorate));
+    } finally {
+      this.weatherLoading.set(false);
+    }
+  }
+
+  onGovernorateChange(): void {
+    const g = findGovernorate(this.governorate);
+    if (g) {
+      this.form.egypt_location = g.region; // تقريبي: الدلتا والقاهرة / الصعيد / الساحل
+      try { localStorage.setItem('calc_governorate', g.name); } catch { /* تجاهل */ }
+    }
+    void this.loadWeather();
+  }
+
+  /** بيحط حرارة ورطوبة (وقت الذروة) النهارده في خانتي التبريد - والمستخدم يقدر يعدّلهم */
+  applyWeather(): void {
+    const w = this.weatherCalc();
+    if (!w) return;
+    this.form.outdoor_temp_c = w.temp;
+    this.form.outdoor_rh_percent = w.rh;
+  }
+
+  applySuggestedSeason(): void {
+    const s = this.suggestedSeason();
+    if (s) this.form.season = s;
+  }
+
+  // ── 📈 أسعار السوق (من /prices/latest) ─────────────────────
+  marketLoading = signal(false);
+  marketStatus = signal<{ fetched_at: string | null; applied: number; stale: boolean; newest: string | null } | null>(null);
+  marketNewestLabel = computed(() => {
+    const d = this.marketStatus()?.newest;
+    return d ? new Date(d).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' }) : '';
+  });
+
+  async refreshMarket(userInitiated = false): Promise<void> {
+    this.marketLoading.set(true);
+    try {
+      const snapshot = await this.live.fetchMarket();
+      if (snapshot) {
+        await this.pricesSvc.setMarketSnapshot(snapshot);
+      } else if (userInitiated) {
+        this.pricesSavedMsg.set('تعذّر تحديث أسعار السوق دلوقتي - بنستخدم آخر أسعار محفوظة');
+        this.pricesSaveError.set(true);
+      }
+      await this.loadPrices(); // بيعيد بناء الأسعار وحقول الجدوى
+      if (this.result()) await this.calculate(false);
+    } finally {
+      this.marketLoading.set(false);
+    }
+  }
+
+  marketSellHint = () => this.pricesSvc.getMarketSellPrice(this.form.poultry_type);
+  eggHint = () => {
+    const w = this.pricesSvc.getMarketEggPrice('white');
+    const r = this.pricesSvc.getMarketEggPrice('red');
+    return w || r ? { white: w?.price ?? null, red: r?.price ?? null, stale: !!(w?.stale || r?.stale) } : null;
+  };
+  useEggPrice(color: 'white' | 'red'): void {
+    const e = this.pricesSvc.getMarketEggPrice(color);
+    if (e) { this.profitForm.egg_price = e.price; this.autoEgg = e.price; }
+  }
+  // آخر قيمة اتملت تلقائياً من السوق (عشان منمسحش اللي المستخدم كتبه بإيده)
+  private autoSelling: number | null = null;
+  private autoEgg: number | null = null;
+
   // ── 💰 الجدوى الاقتصادية ─────────────────────────────────
   profitLoading = signal(false);
   profitResult = signal<any>(null);
@@ -809,6 +993,7 @@ export class CalculatorComponent implements OnInit {
     selling_price_per_kg: null as number | null,
     egg_price: null as number | null,
     eggs_per_bird_cycle: null as number | null,
+    cull_hen_price_per_kg: null as number | null,
     mortality_percent: null as number | null,
     medicine_cost_per_bird: null as number | null,
     labor_cost_per_bird: null as number | null,
@@ -844,6 +1029,7 @@ export class CalculatorComponent implements OnInit {
     if (this.form.poultry_type === 'layer') {
       body.egg_price = this.profitForm.egg_price;
       if (this.profitForm.eggs_per_bird_cycle !== null) body.eggs_per_bird_cycle = this.profitForm.eggs_per_bird_cycle;
+      if (this.profitForm.cull_hen_price_per_kg !== null) body.cull_hen_price_per_kg = this.profitForm.cull_hen_price_per_kg;
     } else {
       body.selling_price_per_kg = this.profitForm.selling_price_per_kg;
     }
@@ -861,7 +1047,12 @@ export class CalculatorComponent implements OnInit {
     // أنظمة التربية ثابتة جوه التطبيق (مفيش نداء شبكة)
     this.housingOptionsMap.set(getHousingOptions());
     this.onPoultryTypeChange(); // تأكيد إن نظام التربية الحالي صالح للنوع الافتراضي
-    await this.loadPrices();
+    const g = findGovernorate(this.governorate);
+    if (g) this.form.egypt_location = g.region;
+    await this.loadPrices(); // أسعار الجهاز + آخر لقطة سوق محفوظة (شغالة أوفلاين)
+    // بيانات حيّة بدون ما تعطّل الشاشة: لو فشلت بنكمل بآخر أسعار محفوظة/الافتراضية
+    void this.refreshMarket(false);
+    void this.loadWeather();
   }
 
   async loadPrices(): Promise<void> {
@@ -875,6 +1066,7 @@ export class CalculatorComponent implements OnInit {
       edits[key] = data.items[key].price;
     }
     this.priceEdits = edits;
+    this.marketStatus.set(this.pricesSvc.getMarketStatus());
     this.applyStoredProfitPrices();
   }
 
@@ -894,6 +1086,21 @@ export class CalculatorComponent implements OnInit {
     this.profitForm.medicine_cost_per_bird = items['medicine_per_bird']?.is_custom ? items['medicine_per_bird'].price : null;
     this.profitForm.labor_cost_per_bird = items['labor_per_bird']?.is_custom ? items['labor_per_bird'].price : null;
     this.profitForm.utilities_cost_per_bird = items['utilities_per_bird']?.is_custom ? items['utilities_per_bird'].price : null;
+
+    // سعر بيع الكيلو وسعر البيضة من السوق: بنملاهم بس لو فاضيين أو لسه بقيمة السوق السابقة،
+    // فاللي المستخدم كتبه بإيده مبيتمسحش (سعر الفراخ مثلاً مختلف بين نوع وتاني)
+    const sell = this.pricesSvc.getMarketSellPrice(this.form.poultry_type)?.price ?? null;
+    if (this.profitForm.selling_price_per_kg === null || this.profitForm.selling_price_per_kg === this.autoSelling) {
+      this.profitForm.selling_price_per_kg = sell;
+      this.autoSelling = sell;
+    }
+    if (this.form.poultry_type === 'layer') {
+      const egg = this.pricesSvc.getMarketEggPrice('white')?.price ?? null;
+      if (this.profitForm.egg_price === null || this.profitForm.egg_price === this.autoEgg) {
+        this.profitForm.egg_price = egg;
+        this.autoEgg = egg;
+      }
+    }
   }
 
   onPoultryTypeChange(): void {
@@ -978,6 +1185,7 @@ export class CalculatorComponent implements OnInit {
           res, this.form.poultry_type, prices.items,
           prices.excluded_categories || [], prices.has_custom_prices,
         );
+        res.costs.used_market_prices = Object.values(prices.items).some((i: any) => i.source === 'market');
       } catch {
         res.costs = null; // نفس سلوك الباك اند: فشل التكلفة ميكسرش الحساب الأساسي
       }

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
 import { CommonModule, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -6,11 +6,20 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
 // ⚠️ عدّل المسار ده حسب مكان الملف عندك
 import { FlockService } from '../../core/services/flock.service';
+import { AuthService } from '../../core/services/auth.service';
+import { UserOfflineCacheService } from '../../core/services/user-offline-cache.service';
+import { PendingRecordsService } from '../../core/services/pending-records.service';
+import * as Offline from './offline-report-engine'; // ⚠️ حطه جنب الملف ده (أو عدّل المسار)
+import { ReportLineChartComponent } from './report-line-chart.component'; // ⚠️ حطه جنب الملف ده (أو عدّل المسار)
+import { ChartSeries } from './chart-utils';
+
+/** key: مفتاح كاش آخر نسخة — local: بناء التقرير على الجهاز لو مفيش نت */
+interface LoadOpts { key?: string; local?: () => Promise<any | null>; }
 
 @Component({
   selector: 'app-reports',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgTemplateOutlet],
+  imports: [CommonModule, FormsModule, NgTemplateOutlet, ReportLineChartComponent],
   template: `
   <div class="page-wrapper">
     <div class="flex items-center justify-between mb-4">
@@ -28,14 +37,10 @@ import { FlockService } from '../../core/services/flock.service';
         <h2 class="section-title">⚖️ {{ lang === 'ar' ? 'مقارنة معدل التحويل الغذائي (FCR)' : 'FCR Comparison' }}</h2>
         <div class="space-y-2 mt-3">
           <div *ngFor="let f of fcrData()" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-            <span class="text-sm font-semibold text-gray-700">{{ f.flock_name }}</span>
-            <span class="text-sm font-black"
-                  [class.text-green-600]="f.fcr && f.fcr <= 1.8"
-                  [class.text-amber-600]="f.fcr && f.fcr > 1.8 && f.fcr <= 2.0"
-                  [class.text-red-600]="f.fcr && f.fcr > 2.0"
-                  [class.text-gray-400]="!f.fcr">
-              {{ f.fcr ?? '—' }}
+            <span class="text-sm font-semibold text-gray-700">{{ f.flock_name }}
+              <span class="text-[10px] font-normal text-gray-400">{{ typeLabel(f.flock_type) }}</span>
             </span>
+            <span class="text-sm font-black" [ngClass]="fcrClass(f)">{{ f.fcr ?? '—' }}</span>
           </div>
           <div *ngIf="fcrData().length === 0" class="text-center py-4 text-gray-400 text-sm">
             {{ lang === 'ar' ? 'لا توجد بيانات كافية بعد' : 'Not enough data yet' }}
@@ -45,19 +50,12 @@ import { FlockService } from '../../core/services/flock.service';
 
       <!-- Mortality Trend -->
       <div class="card">
-        <h2 class="section-title">📉 {{ lang === 'ar' ? 'اتجاه النفوق اليومي' : 'Daily Mortality Trend' }}</h2>
-        <div class="mt-3 space-y-1">
-          <div *ngFor="let d of mortalityData()" class="flex items-center gap-2">
-            <span class="text-xs text-gray-400 w-20 flex-shrink-0">{{ d.date }}</span>
-            <div class="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-              <div class="h-full bg-red-400 rounded-full" 
-                   [style.width]="barWidth(d.mortality) + '%'"></div>
-            </div>
-            <span class="text-xs font-bold text-gray-600 w-8 text-end">{{ d.mortality }}</span>
-          </div>
-          <div *ngIf="mortalityData().length === 0" class="text-center py-4 text-gray-400 text-sm">
-            {{ lang === 'ar' ? 'لا توجد بيانات نفوق' : 'No mortality data' }}
-          </div>
+        <h2 class="section-title">📉 {{ lang === 'ar' ? 'اتجاه النفوق اليومي' : 'Daily Mortality Trend' }}
+          <span *ngIf="selectedFlockName()" class="text-xs font-normal text-gray-400">— {{ selectedFlockName() }}</span>
+        </h2>
+        <div class="mt-3">
+          <app-report-line-chart [labels]="mortalityLabels()" [series]="mortalitySeries()" mode="bars" [zeroBased]="true"
+                                 [height]="140" ariaLabel="اتجاه النفوق اليومي"></app-report-line-chart>
         </div>
       </div>
 
@@ -66,7 +64,7 @@ import { FlockService } from '../../core/services/flock.service';
       <!-- 📅 تقارير اليوم / الشهر / نهاية الدورة -->
       <div class="card">
         <div class="flex items-center gap-2 mb-3">
-          <select [(ngModel)]="selectedFlockId" (ngModelChange)="onFlockChange()"
+          <select [(ngModel)]="selectedFlockId" (ngModelChange)="onFlockSelected()"
                   class="form-input flex-1 text-sm">
             <option value="" disabled>اختر قطيع</option>
             <option *ngFor="let f of flocks()" [value]="f.id">{{ f.name }}</option>
@@ -74,7 +72,7 @@ import { FlockService } from '../../core/services/flock.service';
         </div>
 
         <!-- 📋 قالب مشترك لعرض قائمة الأحداث والأسباب — يُستخدم في كل التابات (يوم/أسبوع/شهر/سنة/دورة) -->
-        <ng-template #eventsBlock let-events="events" let-eventsSummary="eventsSummary">
+        <ng-template #eventsBlock let-events="events" let-eventsSummary="eventsSummary" let-truncated="truncated">
           <div *ngIf="events && events.length" class="border-t pt-3 mt-1">
             <div class="flex items-center justify-between mb-2">
               <div class="text-xs font-bold text-gray-500">📋 الأحداث المسجلة وأسبابها</div>
@@ -96,6 +94,7 @@ import { FlockService } from '../../core/services/flock.service';
                 <div class="text-gray-500 leading-relaxed">السبب: {{ e.reason_ar }}</div>
               </div>
             </div>
+            <div *ngIf="truncated" class="text-[10px] text-gray-400 text-center mt-2">تم عرض أهم الأحداث فقط (الأخطر أولاً)</div>
           </div>
           <div *ngIf="events && events.length === 0" class="border-t pt-3 mt-1 text-center text-xs text-gray-400">
             ✅ مفيش أحداث أو انحرافات تستحق الذكر في هذه الفترة
@@ -139,18 +138,43 @@ import { FlockService } from '../../core/services/flock.service';
           </div>
           <div class="text-[10px] text-gray-400 mt-1">{{ fin.note }}</div>
         </ng-template>
-        <ng-template #trendChartBlock let-breakdown="breakdown">
-          <div *ngIf="breakdown && breakdown.length > 1" class="border-t pt-3 mb-2">
-            <div class="text-xs font-bold text-gray-500 mb-2">📉 اتجاه النفوق والعلف خلال الفترة</div>
-            <svg viewBox="0 0 280 60" class="w-full h-16" preserveAspectRatio="none">
-              <polyline [attr.points]="sparklinePoints(breakdown, 'mortality')" fill="none" stroke="#ef4444" stroke-width="2"/>
-              <polyline [attr.points]="sparklinePoints(breakdown, 'feed_kg')" fill="none" stroke="#3b82f6" stroke-width="2"/>
-            </svg>
-            <div class="flex gap-3 text-[10px] text-gray-400 mt-1">
-              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> النفوق</span>
-              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> العلف (كجم)</span>
+        <!-- ⚠️ ملاحظات جودة البيانات (اكتمال التسجيل، أيام ناقصة...) -->
+        <ng-template #qualityBlock let-notes="notes" let-pct="pct">
+          <div *ngIf="notes && notes.length" class="bg-amber-50 border border-amber-100 rounded-xl p-2.5 text-[11px] text-amber-800 mb-3">
+            <div class="font-bold mb-1">⚠️ ملاحظات على جودة البيانات<span *ngIf="pct !== null && pct !== undefined"> ({{ pct }}% اكتمال تسجيل)</span></div>
+            <div *ngFor="let n of notes">• {{ n }}</div>
+          </div>
+        </ng-template>
+
+        <!-- 📊 مؤشرات إضافية للفترة (تظهر بس لو متاحة) -->
+        <ng-template #extraKpis let-r="r">
+          <div *ngIf="r.avg_daily_gain_g != null || r.avg_hen_day_pct != null || r.broken_egg_pct != null || r.mortality_pct != null" class="grid grid-cols-2 gap-2 text-sm mb-3">
+            <div *ngIf="r.mortality_pct != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">النفوق من العدد الابتدائي</div><div class="font-black text-red-600">{{ r.mortality_pct }}%</div></div>
+            <div *ngIf="r.avg_daily_gain_g != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">متوسط الزيادة اليومية</div><div class="font-black text-green-600">{{ r.avg_daily_gain_g }} جم</div></div>
+            <div *ngIf="r.avg_hen_day_pct != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">نسبة الإنتاج (Hen-day)</div><div class="font-black">{{ r.avg_hen_day_pct }}%</div></div>
+            <div *ngIf="r.broken_egg_pct != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">نسبة كسر البيض</div><div class="font-black" [class.text-red-600]="r.broken_egg_pct > 5">{{ r.broken_egg_pct }}%</div></div>
+          </div>
+        </ng-template>
+
+        <!-- 📉 رسوم الاتجاه: كل مؤشر برسمه ومحاوره (مفيش خلط وحدات) والمستهدف خط متقطع -->
+        <ng-template #trendChartBlock let-charts="charts">
+          <div *ngIf="charts" class="border-t pt-3 mb-2 space-y-3">
+            <div>
+              <div class="text-xs font-bold text-gray-500 mb-1">☠️ النفوق اليومي</div>
+              <app-report-line-chart [labels]="charts.labels" [series]="charts.mortality" mode="bars" [zeroBased]="true" [height]="130" ariaLabel="النفوق اليومي"></app-report-line-chart>
             </div>
-            <div class="text-[9px] text-gray-300 mt-1">* كل خط بمقياسه الخاص (الشكل يهم أكتر من القيمة المطلقة)</div>
+            <div *ngIf="charts.hasFeed">
+              <div class="text-xs font-bold text-gray-500 mb-1">🌾 العلف اليومي (كجم)</div>
+              <app-report-line-chart [labels]="charts.labels" [series]="charts.feed" [zeroBased]="true" unit="كجم" [height]="130" ariaLabel="العلف اليومي"></app-report-line-chart>
+            </div>
+            <div *ngIf="charts.hasWeight">
+              <div class="text-xs font-bold text-gray-500 mb-1">⚖️ متوسط الوزن (كجم) <span class="font-normal text-gray-400">— الخط المتقطع = مستهدف البرنامج</span></div>
+              <app-report-line-chart [labels]="charts.labels" [series]="charts.weight" unit="كجم" [height]="130" ariaLabel="متوسط الوزن"></app-report-line-chart>
+            </div>
+            <div *ngIf="charts.hasTemp">
+              <div class="text-xs font-bold text-gray-500 mb-1">🌡️ الحرارة (°م)</div>
+              <app-report-line-chart [labels]="charts.labels" [series]="charts.temp" unit="°" [height]="130" ariaLabel="الحرارة"></app-report-line-chart>
+            </div>
           </div>
         </ng-template>
 
@@ -164,6 +188,22 @@ import { FlockService } from '../../core/services/flock.service';
                   [class.text-gray-500]="activeTab() !== t.key">
             {{ t.label }}
           </button>
+        </div>
+
+        <div *ngIf="offlineNote() || isOffline()" class="bg-gray-100 border border-gray-200 text-gray-600 rounded-xl p-2.5 text-[11px] leading-relaxed mb-3">
+          {{ offlineNote() || (offlineSupported ? '📴 مفيش نت — بنعرض اللي محفوظ على جهازك' : '📴 مفيش نت — التقارير على الويب بتحتاج اتصال') }}
+        </div>
+        <div *ngIf="syncNotice() as msg" class="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-2.5 text-xs font-bold mb-3">{{ msg }}</div>
+        <div *ngIf="!isOffline() && pendingCountSelected() > 0" class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-2.5 text-xs mb-3">
+          ⏳ {{ pendingCountSelected() }} تسجيل لسه ما اتبعتش للسيرفر وهو مش داخل في التقرير ده.
+          <button type="button" (click)="syncNow()" [disabled]="syncing()" class="font-bold text-green-700 underline mr-1">
+            {{ syncing() ? 'جاري الإرسال...' : 'ابعتهم دلوقتي' }}
+          </button>
+        </div>
+        <div *ngIf="loading()" class="text-center text-xs text-gray-400 py-2">⏳ جاري تحميل التقرير...</div>
+        <div *ngIf="loadError() as err" class="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs mb-3 flex items-center justify-between gap-2">
+          <span>{{ err }}</span>
+          <button (click)="onFlockChange()" class="font-bold underline whitespace-nowrap">إعادة المحاولة</button>
         </div>
 
         <div *ngIf="!selectedFlockId && activeTab() !== 'farm'" class="text-center py-6 text-gray-400 text-sm">اختر قطيع الأول</div>
@@ -202,11 +242,12 @@ import { FlockService } from '../../core/services/flock.service';
                   <div class="flex gap-3 text-xs text-gray-500">
                     <span>نفوق {{ f.total_mortality }}</span>
                     <span>علف {{ f.total_feed_kg }} كجم</span>
+                    <span *ngIf="f.completeness_pct != null" [class.text-amber-600]="f.completeness_pct < 70">تسجيل {{ f.completeness_pct }}%</span>
                   </div>
                   <div *ngIf="f.top_events?.length" class="mt-2 space-y-1">
                     <div *ngFor="let e of f.top_events" class="text-[11px] text-gray-500">• {{ e.title_ar }}</div>
                   </div>
-                  <button (click)="selectedFlockId = f.flock_id; selectTab('daily')" class="text-[11px] text-green-600 font-bold mt-2">فتح تقرير القطيع →</button>
+                  <button (click)="openFlock(f.flock_id)" class="text-[11px] text-green-600 font-bold mt-2">فتح تقرير القطيع →</button>
                 </div>
               </div>
             </div>
@@ -231,16 +272,21 @@ import { FlockService } from '../../core/services/flock.service';
               <div class="bg-gray-50 rounded-xl p-2.5">
                 <div class="text-[11px] text-gray-400">الوزن</div>
                 <div class="font-black">{{ r.avg_weight_kg ?? '—' }} كجم
-                  <span *ngIf="r.weight_delta !== null" class="text-xs text-green-600">(+{{ r.weight_delta }})</span>
+                  <span *ngIf="r.weight_delta !== null && r.weight_delta !== undefined" class="text-xs" [class.text-green-600]="r.weight_delta >= 0" [class.text-red-500]="r.weight_delta < 0">({{ r.weight_delta >= 0 ? '+' : '' }}{{ r.weight_delta }})</span>
                 </div>
               </div>
               <div class="bg-gray-50 rounded-xl p-2.5">
                 <div class="text-[11px] text-gray-400">العلف</div>
-                <div class="font-black">{{ r.feed_consumed_kg ?? '—' }} كجم</div>
+                <div class="font-black">{{ r.feed_consumed_kg ?? '—' }} <span *ngIf="r.feed_consumed_kg !== null && r.feed_consumed_kg !== undefined">كجم</span></div>
+                <div *ngIf="r.feed_consumed_kg === null || r.feed_consumed_kg === undefined" class="text-[10px] text-gray-400">غير مسجل</div>
               </div>
               <div class="bg-gray-50 rounded-xl p-2.5">
                 <div class="text-[11px] text-gray-400">الحرارة</div>
                 <div class="font-black">{{ r.temperature_celsius ?? '—' }}°</div>
+              </div>
+              <div *ngIf="r.water_consumed_l !== null && r.water_consumed_l !== undefined" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">المياه</div>
+                <div class="font-black">{{ r.water_consumed_l }} لتر</div>
               </div>
               <div *ngIf="r.egg_count !== null && r.egg_count !== undefined" class="bg-gray-50 rounded-xl p-2.5">
                 <div class="text-[11px] text-gray-400">إنتاج البيض</div>
@@ -279,7 +325,7 @@ import { FlockService } from '../../core/services/flock.service';
               </div>
             </div>
 
-            <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary }"></ng-container>
+            <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary, truncated: r.events_truncated }"></ng-container>
 
             <div *ngIf="r.narrative" class="bg-green-50 border border-green-100 rounded-xl p-3 text-sm leading-relaxed mt-3">
               📋 {{ r.narrative }}
@@ -307,7 +353,9 @@ import { FlockService } from '../../core/services/flock.service';
                 <div class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">متوسط الحرارة</div><div class="font-black">{{ r.avg_temperature ?? '—' }}°</div></div>
               </div>
 
-              <ng-container *ngTemplateOutlet="trendChartBlock; context: { breakdown: r.daily_breakdown }"></ng-container>
+              <ng-container *ngTemplateOutlet="extraKpis; context: { r: r }"></ng-container>
+              <ng-container *ngTemplateOutlet="qualityBlock; context: { notes: r.data_quality_notes, pct: r.completeness_pct }"></ng-container>
+              <ng-container *ngTemplateOutlet="trendChartBlock; context: { charts: weeklyCharts() }"></ng-container>
               <ng-container *ngTemplateOutlet="comparisonBlock; context: { comparison: r.comparison }"></ng-container>
 
               <div *ngIf="r.financial as fin" class="border-t pt-3 text-xs mb-2">
@@ -315,7 +363,7 @@ import { FlockService } from '../../core/services/flock.service';
                 <ng-container *ngTemplateOutlet="financialBlock; context: { fin: fin }"></ng-container>
               </div>
 
-              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary }"></ng-container>
+              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary, truncated: r.events_truncated }"></ng-container>
 
               <div *ngIf="r.narrative" class="bg-green-50 border border-green-100 rounded-xl p-3 text-sm leading-relaxed mt-3">
                 📋 {{ r.narrative }}
@@ -344,7 +392,9 @@ import { FlockService } from '../../core/services/flock.service';
                 <div class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">متوسط الحرارة</div><div class="font-black">{{ r.avg_temperature ?? '—' }}°</div></div>
               </div>
 
-              <ng-container *ngTemplateOutlet="trendChartBlock; context: { breakdown: r.daily_breakdown }"></ng-container>
+              <ng-container *ngTemplateOutlet="extraKpis; context: { r: r }"></ng-container>
+              <ng-container *ngTemplateOutlet="qualityBlock; context: { notes: r.data_quality_notes, pct: r.completeness_pct }"></ng-container>
+              <ng-container *ngTemplateOutlet="trendChartBlock; context: { charts: monthlyCharts() }"></ng-container>
               <ng-container *ngTemplateOutlet="comparisonBlock; context: { comparison: r.comparison }"></ng-container>
 
               <div *ngIf="r.financial as fin" class="border-t pt-3 text-xs mb-2">
@@ -352,7 +402,7 @@ import { FlockService } from '../../core/services/flock.service';
                 <ng-container *ngTemplateOutlet="financialBlock; context: { fin: fin }"></ng-container>
               </div>
 
-              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary }"></ng-container>
+              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary, truncated: r.events_truncated }"></ng-container>
 
               <div *ngIf="r.narrative" class="bg-green-50 border border-green-100 rounded-xl p-3 text-sm leading-relaxed mt-3">
                 {{ r.narrative }}
@@ -378,6 +428,8 @@ import { FlockService } from '../../core/services/flock.service';
                 <div class="bg-gray-50 rounded-xl p-2.5" *ngIf="r.total_eggs !== null"><div class="text-[11px] text-gray-400">إجمالي البيض</div><div class="font-black">{{ r.total_eggs }}</div></div>
               </div>
 
+              <ng-container *ngTemplateOutlet="extraKpis; context: { r: r }"></ng-container>
+              <ng-container *ngTemplateOutlet="qualityBlock; context: { notes: r.data_quality_notes, pct: r.completeness_pct }"></ng-container>
               <div *ngIf="r.monthly_breakdown?.length" class="mb-3">
                 <div class="text-xs font-bold text-gray-500 mb-2">التوزيع الشهري</div>
                 <div class="space-y-1">
@@ -396,7 +448,7 @@ import { FlockService } from '../../core/services/flock.service';
                 <ng-container *ngTemplateOutlet="financialBlock; context: { fin: fin }"></ng-container>
               </div>
 
-              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary }"></ng-container>
+              <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary, truncated: r.events_truncated }"></ng-container>
 
               <div *ngIf="r.narrative" class="bg-green-50 border border-green-100 rounded-xl p-3 text-sm leading-relaxed mt-3">
                 📋 {{ r.narrative }}
@@ -419,6 +471,15 @@ import { FlockService } from '../../core/services/flock.service';
               <div class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">التحصينات</div><div class="font-black">{{ r.vaccinations_completed }}</div></div>
             </div>
 
+            <div *ngIf="r.epef != null || r.final_weight_kg != null || r.feed_per_dozen_eggs_kg != null || r.total_feed_kg" class="grid grid-cols-2 gap-2 text-sm">
+              <div *ngIf="r.epef != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">مؤشر الكفاءة EPEF</div><div class="font-black">{{ r.epef }}</div></div>
+              <div *ngIf="r.final_weight_kg != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">آخر وزن مسجل</div><div class="font-black">{{ r.final_weight_kg }} كجم</div></div>
+              <div *ngIf="r.total_feed_kg" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">إجمالي العلف</div><div class="font-black">{{ r.total_feed_kg | number:'1.0-0' }} كجم</div></div>
+              <div *ngIf="r.feed_per_dozen_eggs_kg != null" class="bg-gray-50 rounded-xl p-2.5"><div class="text-[11px] text-gray-400">علف لكل دستة بيض</div><div class="font-black">{{ r.feed_per_dozen_eggs_kg }} كجم</div></div>
+            </div>
+            <div *ngIf="r.fcr_note" class="text-[10px] text-gray-400">{{ r.fcr_note }}</div>
+            <ng-container *ngTemplateOutlet="qualityBlock; context: { notes: r.data_quality_notes, pct: r.completeness_pct }"></ng-container>
+
             <!-- 💰 الأداء المالي الفعلي -->
             <div *ngIf="r.financial as fin" class="border-t pt-3">
               <div class="text-xs font-bold text-gray-500 mb-2">💰 الأداء المالي</div>
@@ -429,10 +490,15 @@ import { FlockService } from '../../core/services/flock.service';
                 <span class="text-gray-400 text-sm">جنيه صافي</span>
               </div>
               <div class="space-y-1 text-xs">
-                <div class="flex justify-between"><span class="text-gray-500">الإيراد</span><span class="font-bold">{{ fin.revenue | number:'1.0-0' }} ج</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">تكلفة العلف</span><span class="text-red-500">-{{ fin.feed_cost | number:'1.0-0' }} ج</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">تكلفة الكتاكيت</span><span class="text-red-500">-{{ fin.chick_cost | number:'1.0-0' }} ج</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">تكاليف تشغيل تقديرية</span><span class="text-red-500">-{{ fin.overhead_estimated | number:'1.0-0' }} ج</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">{{ fin.basis?.revenue === 'actual' ? 'الإيراد (فعلي)' : 'الإيراد (تقديري)' }}</span><span class="font-bold">{{ fin.revenue | number:'1.0-0' }} ج</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">{{ fin.basis?.feed === 'actual' ? 'تكلفة العلف (فعلية)' : 'تكلفة العلف (تقديرية)' }}</span><span class="text-red-500">-{{ fin.feed_cost | number:'1.0-0' }} ج</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">{{ fin.basis?.chicks === 'actual' ? 'تكلفة الكتاكيت (فعلية)' : 'تكلفة الكتاكيت (تقديرية)' }}</span><span class="text-red-500">-{{ fin.chick_cost | number:'1.0-0' }} ج</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">{{ fin.basis?.overhead === 'actual' ? 'مصاريف تشغيل (فعلية)' : 'تكاليف تشغيل تقديرية' }}</span><span class="text-red-500">-{{ fin.overhead_estimated | number:'1.0-0' }} ج</span></div>
+              </div>
+              <div *ngIf="fin.cost_per_kg != null || fin.profit_per_bird != null" class="space-y-1 text-xs border-t mt-2 pt-2">
+                <div *ngIf="fin.cost_per_kg != null" class="flex justify-between"><span class="text-gray-500">تكلفة الكيلو</span><span class="font-bold">{{ fin.cost_per_kg | number:'1.0-2' }} ج</span></div>
+                <div *ngIf="fin.profit_per_bird != null" class="flex justify-between"><span class="text-gray-500">ربح الطائر</span><span class="font-bold" [class.text-green-600]="fin.profit_per_bird >= 0" [class.text-red-500]="fin.profit_per_bird < 0">{{ fin.profit_per_bird | number:'1.0-2' }} ج</span></div>
+                <div *ngIf="fin.margin_pct != null" class="flex justify-between"><span class="text-gray-500">هامش الربح</span><span class="font-bold">{{ fin.margin_pct }}%</span></div>
               </div>
               <div class="text-[10px] text-gray-400 mt-2">{{ fin.note }}</div>
             </div>
@@ -440,7 +506,7 @@ import { FlockService } from '../../core/services/flock.service';
               مفيش بيانات أسعار كافية لحساب الأداء المالي لهذه الدورة
             </div>
 
-            <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary }"></ng-container>
+            <ng-container *ngTemplateOutlet="eventsBlock; context: { events: r.events, eventsSummary: r.events_summary, truncated: r.events_truncated }"></ng-container>
 
             <div *ngIf="r.narrative" class="bg-green-50 border border-green-100 rounded-xl p-4 text-sm leading-relaxed whitespace-pre-line">
               📋 {{ r.narrative }}
@@ -508,11 +574,52 @@ import { FlockService } from '../../core/services/flock.service';
 export class ReportsComponent implements OnInit {
   private http = inject(HttpClient);
   private flockSvc = inject(FlockService);
+  private auth = inject(AuthService);
+  private store = inject(UserOfflineCacheService);
+  private pendingSvc = inject(PendingRecordsService);
   lang = localStorage.getItem('lang') ?? 'ar';
 
   fcrData = signal<any[]>([]);
-  mortalityData = signal<any[]>([]);
-  maxMortality = signal(1);
+  // 📉 رسم النفوق: مصفوفات ثابتة المرجع (بتتبدل بس لما البيانات توصل) عشان الرسم ما يتعادش كل دورة
+  mortalityLabels = signal<string[]>([]);
+  mortalitySeries = signal<ChartSeries[]>([]);
+
+  // ⏳ حالة التحميل + رسالة الخطأ (بدل ما الشاشة تفضل فاضية من غير تفسير)
+  loading = signal(false);
+  loadError = signal<string | null>(null);
+
+  // 📴 أوفلاين: متاح على الموبايل بس (على الويب مفيش تخزين محلي حسب سياسة الأمان في UserOfflineCacheService)
+  offlineSupported = this.store.enabled;
+  isOffline = signal(typeof navigator !== 'undefined' && navigator.onLine === false);
+  /** رسالة بتظهر لما التقرير الحالي جاي من نسخة محفوظة / محسوب على الجهاز / فيه تسجيلات لسه ما اتبعتتش */
+  offlineNote = signal<string | null>(null);
+  /** عدد تسجيلات القطيع المختار اللي لسه ما اتبعتتش للسيرفر (بتتبعت من هنا أو من صفحة القطيع — نفس الطابور) */
+  pendingCountSelected = signal(0);
+  syncNotice = signal<string | null>(null);
+  syncing = () => this.pendingSvc.syncing();
+
+  @HostListener('window:offline') onWentOffline() { this.isOffline.set(true); }
+  @HostListener('window:online') onBackOnline() {
+    this.isOffline.set(false);
+    this.offlineNote.set(null);
+    void this.syncNow(true); // نبعت اللي اتسجل أوفلاين الأول، وبعدها نحدّث التقرير من السيرفر
+  }
+
+  /**
+   * 🔄 يبعت السجلات اللي اتسجلت أوفلاين للسيرفر (نفس طابور صفحة القطيع، والمنطق في PendingRecordsService)
+   * وبعدها يحدّث التقرير عشان يشملها. reloadAlways=true: نحدّث حتى لو مفيش حاجة اتبعتت (رجوع النت).
+   */
+  async syncNow(reloadAlways = false): Promise<void> {
+    const { sent, failed } = await this.pendingSvc.sync();
+    if (sent || failed) {
+      this.syncNotice.set(sent
+        ? `✅ اتبعت ${sent} سجل للسيرفر والتقرير اتحدّث${failed ? ` — و${failed} سجل السيرفر رفضه (شوفهم في صفحة القطيع)` : ''}`
+        : `⚠️ ${failed} سجل السيرفر رفضه — شوفهم في صفحة القطيع`);
+      setTimeout(() => this.syncNotice.set(null), 7000);
+    }
+    if ((sent || failed || reloadAlways) && this.selectedFlockId) this.onFlockChange();
+    else void this.refreshPendingCount();
+  }
 
   // تقارير اليوم / الشهر / نهاية الدورة
   flocks = signal<any[]>([]);
@@ -573,14 +680,23 @@ export class ReportsComponent implements OnInit {
         this.txForm = { type: 'expense', category: 'feed', amount: null, description: '' };
         this.loadDaily(); // يحدّث الأداء المالي فورًا عشان يبان الرقم الفعلي الجديد
       },
-      error: () => alert('حصل خطأ أثناء حفظ المعاملة'),
+      error: (err: any) => this.loadError.set(err?.status === 0 ? 'حفظ المعاملة بيحتاج اتصال بالنت — جرّبها لما النت يرجع' : 'حصل خطأ أثناء حفظ المعاملة — جرّب تاني'),
     });
   }
 
-  dailyDate = new Date().toISOString().slice(0, 10);
+  /** تاريخ بتوقيت الجهاز (مش UTC) — toISOString كان بيرجّع "أمس" بعد منتصف الليل بتوقيت مصر */
+  private localDateStr(d: Date = new Date()): string {
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  dailyDate = this.localDateStr();
   dailyReport = signal<any>(null);
 
-  weeklyStart = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  weeklyStart = this.localDateStr(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+  weeklyCharts = signal<any>(null);
+  monthlyCharts = signal<any>(null);
   weeklyReport = signal<any>(null);
 
   yearlyYear = new Date().getFullYear();
@@ -602,17 +718,230 @@ export class ReportsComponent implements OnInit {
 
   ngOnInit() {
     this.loadFcr();
-    this.loadMortality();
-    this.loadFarmSummary();
-    this.flockSvc.getFlocks().subscribe(list => {
-      this.flocks.set(list || []);
-      if (list?.length && !this.selectedFlockId) {
-        this.selectedFlockId = list[0].id;
-      }
+    this.flockSvc.getFlocks().subscribe({
+      next: list => {
+        this.flocks.set(list || []);
+        void this.cacheSet('reports:flocks', list || []);
+        this.afterFlocksReady();
+      },
+      error: async (err: any) => {
+        // 📴 مفيش نت: قايمة القطعان المحفوظة آخر مرة
+        const cached = this.looksOffline(err) ? await this.cacheGet<any[]>('reports:flocks') : null;
+        if (cached?.length) { this.flocks.set(cached); this.isOffline.set(true); this.afterFlocksReady(); }
+        else this.loadError.set(this.looksOffline(err) ? this.noOfflineDataMsg() : this.errorMessage(err));
+      },
     });
   }
 
+  private afterFlocksReady() {
+    const list = this.flocks();
+    if (list.length && !this.selectedFlockId) this.selectedFlockId = list[0].id;
+    this.loadMortality();
+    if (this.isOffline()) this.loadFcr(); // نحسب الـ FCR من السجلات المحفوظة بعد ما قايمة القطعان تجهز
+    if (this.selectedFlockId) this.onFlockChange(); // كان التاب الافتراضي بيفضل فاضي لحد ما المستخدم يلمس حاجة
+    if (!this.isOffline()) void this.syncNow(false); // سجلات متخزّنة من وقت ما النت كان فاصل (بتتبعت وبيتحدّث التقرير لو فيه)
+  }
+
+  // ═══ تحميل موحّد: حالة تحميل + رسالة خطأ مفهومة + إعادة محاولة ═══
+  private errorMessage(err: any): string {
+    switch (err?.status) {
+      case 0: return 'مفيش اتصال بالنت — تأكد من الشبكة وجرّب تاني';
+      case 401: return 'انتهت الجلسة — سجّل دخول تاني';
+      case 404: return 'التقرير ده مش متاح لهذا القطيع';
+      case 429: return 'طلبات كتير في وقت قصير — استنى شوية وجرّب تاني';
+      default: return 'حصل خطأ أثناء تحميل التقرير — جرّب تاني';
+    }
+  }
+
+  // ═══ 📴 التخزين المحلي (نفس UserOfflineCacheService المستخدم في صفحة القطيع: مفتاح لكل مستخدم) ═══
+  private async uid(): Promise<string | null> {
+    try { return await this.auth.currentUserId(); } catch { return null; }
+  }
+
+  private async cacheSet(key: string, value: any): Promise<void> {
+    if (!this.store.enabled) return;
+    const u = await this.uid();
+    if (u) { try { await this.store.set(u, key, value); } catch { /* التخزين best-effort */ } }
+  }
+
+  private async cacheGet<T = any>(key: string): Promise<T | null> {
+    if (!this.store.enabled) return null;
+    const u = await this.uid();
+    if (!u) return null;
+    try { return ((await this.store.get(u, key)) as T) ?? null; } catch { return null; }
+  }
+
+  private static readonly REPORT_CACHE_MAX = 60;
+
+  /** بنخزّن آخر نسخة من كل تقرير (بحد أقصى 60 تقرير، الأقدم بيتمسح) */
+  private async cacheReport(key: string, data: any): Promise<void> {
+    if (!this.store.enabled || data?.has_data === false) return;
+    await this.cacheSet(`report:${key}`, { savedAt: new Date().toISOString(), data });
+    const index = (await this.cacheGet<string[]>('reports:index')) ?? [];
+    const next = [...index.filter(k => k !== key), key];
+    while (next.length > ReportsComponent.REPORT_CACHE_MAX) {
+      const old = next.shift() as string;
+      await this.cacheSet(`report:${old}`, null);
+    }
+    await this.cacheSet('reports:index', next);
+  }
+
+  private looksOffline(err: any): boolean {
+    return err?.status === 0 || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  }
+
+  private noOfflineDataMsg(): string {
+    return this.offlineSupported
+      ? 'مفيش نت ومفيش بيانات محفوظة للتقرير ده — افتحه مرة وإنت متصل عشان يتخزن على جهازك'
+      : 'مفيش اتصال بالنت — التقارير على الويب بتحتاج نت';
+  }
+
+  /** عدد التسجيلات اللي لسه في طابور الإرسال للقطيع المختار (بتتكتب من صفحة القطيع) */
+  private pendingCount(flockId: string): Promise<number> {
+    return this.pendingSvc.countFor(flockId);
+  }
+
+  /** سياق الحساب المحلي: القطيع + سجلاته المخزّنة + طابور الإرسال + برنامج الدورة */
+  private async localCtx(flockId: string): Promise<{ flock: Offline.EngineFlock; recs: Offline.Rec[]; full: any } | null> {
+    if (!flockId || !this.store.enabled) return null;
+    const [records, pending, full] = await Promise.all([
+      this.cacheGet<any[]>(`records_cache:${flockId}`),
+      this.cacheGet<any[]>('pending_records'),
+      this.cacheGet<any>(`cycle_full:${flockId}`),
+    ]);
+    const f = this.flocks().find(x => x.id === flockId) ?? (await this.cacheGet<any>(`flock_cache:${flockId}`));
+    const hasPending = Array.isArray(pending) && pending.some(p => p?.flockId === flockId);
+    if (!f || (!Array.isArray(records) && !hasPending)) return null;
+    const flock: Offline.EngineFlock = {
+      id: f.id, name: f.name, type: f.type,
+      initialCount: f.initialCount ?? f.initial_count ?? 0, currentCount: f.currentCount ?? f.current_count ?? 0,
+      startDate: f.startDate ?? f.start_date ?? null, status: f.status ?? 'active',
+      openingFeedKg: f.openingFeedKg ?? f.opening_feed_kg ?? null,
+    };
+    return { flock, recs: Offline.mergeRecords(records ?? [], pending ?? [], flockId), full };
+  }
+
+  private localNote(pending: number): string {
+    return '📴 مفيش نت — التقرير محسوب على جهازك من سجلاتك المحفوظة' +
+      (pending > 0 ? ` (شامل ${pending} تسجيل لسه ما اتبعتش)` : '') + '. من غير الماليات والتحصينات والعلاجات والتحليل النصي.';
+  }
+
+  private cachedNote(savedAt: string, pending: number): string {
+    const when = new Date(savedAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+    return `📴 مفيش نت — بنعرض نسخة محفوظة من ${when}.` +
+      (pending > 0 ? ` عندك ${pending} تسجيل لسه ما اتبعتش وهو مش ظاهر فيها.` : ' أي تسجيلات بعدها مش ظاهرة فيها.');
+  }
+
+  /** مفيش نت: نسخة محسوبة محليًا لو فيه تسجيلات معلّقة أو مفيش نسخة محفوظة، وإلا آخر نسخة محفوظة */
+  private async offlineFallback(opts?: LoadOpts): Promise<{ data: any; note: string } | null> {
+    const cached = opts?.key ? await this.cacheGet<{ savedAt: string; data: any }>(`report:${opts.key}`) : null;
+    const pending = await this.pendingCount(this.selectedFlockId);
+    const tryLocal = async () => {
+      const l = opts?.local ? await opts.local() : null;
+      return l ? { data: l, note: this.localNote(pending) } : null;
+    };
+    if (opts?.local && (pending > 0 || !cached?.data)) {
+      const l = await tryLocal();
+      if (l) return l;
+    }
+    if (cached?.data) return { data: cached.data, note: this.cachedNote(cached.savedAt, pending) };
+    return opts?.local ? tryLocal() : null;
+  }
+
+  private load(url: string, target: { set(v: any): void }, after?: (res: any) => void, opts?: LoadOpts) {
+    this.loading.set(true);
+    this.loadError.set(null);
+    this.http.get(url).subscribe({
+      next: (res: any) => {
+        this.isOffline.set(false);
+        this.offlineNote.set(null);
+        target.set(res); after?.(res); this.loading.set(false);
+        if (opts?.key) void this.cacheReport(opts.key, res);
+        void this.refreshPendingCount();
+      },
+      error: async (err: any) => {
+        if (this.looksOffline(err)) {
+          this.isOffline.set(true);
+          const hit = await this.offlineFallback(opts);
+          if (hit) {
+            target.set(hit.data); after?.(hit.data); this.offlineNote.set(hit.note); this.loading.set(false);
+            return;
+          }
+          target.set(null); this.loading.set(false); this.loadError.set(this.noOfflineDataMsg());
+          return;
+        }
+        target.set(null); this.loading.set(false); this.loadError.set(this.errorMessage(err));
+      },
+    });
+  }
+
+  /** أونلاين: كام تسجيل لسه ما اتبعتش (التقرير بيتحسب من اللي على السيرفر بس، فبننبّه + نوفّر زر الإرسال) */
+  private async refreshPendingCount() {
+    this.pendingCountSelected.set(this.selectedFlockId ? await this.pendingSvc.countFor(this.selectedFlockId) : 0);
+  }
+
+  /** أونلاين: نحدّث نسخة سجلات القطيع وبرنامجه على الجهاز عشان الحساب المحلي يبقى جاهز لما النت يقطع */
+  private prefetchLocal(flockId: string) {
+    if (!this.store.enabled || !flockId || this.isOffline()) return;
+    this.flockSvc.getRecords(flockId).subscribe({ next: (r: any) => void this.cacheSet(`records_cache:${flockId}`, r), error: () => {} });
+    this.http.get(`${environment.apiUrl}/flocks/${flockId}/cycle-program/full`)
+      .subscribe({ next: (full: any) => void this.cacheSet(`cycle_full:${flockId}`, full), error: () => {} });
+  }
+
+  private chartsFor(b: any[] | null | undefined) {
+    if (!b || b.length < 1) return null;
+    const num = (v: any): number | null => (v === null || v === undefined ? null : Number(v));
+    const has = (a: (number | null)[]) => a.some(v => v !== null);
+    const feed = b.map(d => (d.feed_kg > 0 ? Number(d.feed_kg) : null)); // 0 = مش مسجل → فجوة مش صفر
+    const weight = b.map(d => num(d.weight_kg));
+    const temp = b.map(d => num(d.temperature));
+    const tW = b.map(d => num(d.target_weight_kg));
+    const tT = b.map(d => num(d.target_temperature));
+    return {
+      labels: b.map(d => d.date as string),
+      mortality: [{ name: 'النفوق', color: '#ef4444', values: b.map(d => Number(d.mortality ?? 0)) }] as ChartSeries[],
+      feed: [{ name: 'العلف', color: '#3b82f6', values: feed }] as ChartSeries[],
+      weight: [{ name: 'الوزن', color: '#16a34a', values: weight },
+        ...(has(tW) ? [{ name: 'المستهدف', color: '#9ca3af', dashed: true, values: tW }] : [])] as ChartSeries[],
+      temp: [{ name: 'الحرارة', color: '#f59e0b', values: temp },
+        ...(has(tT) ? [{ name: 'المستهدف', color: '#9ca3af', dashed: true, values: tT }] : [])] as ChartSeries[],
+      hasFeed: has(feed), hasWeight: has(weight), hasTemp: has(temp),
+    };
+  }
+
+  // ═══ اختيار القطيع ═══
+  selectedFlockName(): string {
+    return this.flocks().find(f => f.id === this.selectedFlockId)?.name ?? '';
+  }
+
+  onFlockSelected() {
+    this.loadMortality();
+    this.onFlockChange();
+  }
+
+  openFlock(id: string) {
+    this.selectedFlockId = id;
+    this.loadMortality();
+    this.selectTab('daily');
+  }
+
+  typeLabel(t: string): string {
+    const map: Record<string, string> = {
+      broiler: 'تسمين', layer: 'بياض', turkey: 'رومي', duck: 'بط', quail: 'سمان',
+      rabbit: 'أرانب', rabbit_breeding: 'أرانب تربية',
+    };
+    return map[t] ?? '';
+  }
+
+  /** ألوان الـ FCR بتتطبق على التسمين بس (1.8/2.0) — أنواع تانية بمعايير مختلفة فمنلوّنش بمعيار غلط */
+  fcrClass(f: any): string {
+    if (f.fcr === null || f.fcr === undefined) return 'text-gray-400';
+    if (f.flock_type !== 'broiler') return 'text-gray-700';
+    return f.fcr <= 1.8 ? 'text-green-600' : f.fcr <= 2.0 ? 'text-amber-600' : 'text-red-600';
+  }
+
   onFlockChange() {
+    this.prefetchLocal(this.selectedFlockId);
     if (this.activeTab() === 'farm') this.loadFarmSummary();
     else if (this.activeTab() === 'daily') this.loadDaily();
     else if (this.activeTab() === 'weekly') this.loadWeekly();
@@ -628,11 +957,6 @@ export class ReportsComponent implements OnInit {
     this.onFlockChange();
   }
 
-  loadFarmSummary() {
-    this.http.get(`${environment.apiUrl}/reports/farm-summary?period=${this.farmPeriod}`
-    ).subscribe({ next: (res: any) => this.farmSummary.set(res), error: () => this.farmSummary.set(null) });
-  }
-
   comparisonItems(comparison: any): any[] {
     if (!comparison) return [];
     return ['mortality', 'feed_kg', 'weight_gain_kg', 'eggs', 'net_financial']
@@ -640,47 +964,20 @@ export class ReportsComponent implements OnInit {
       .filter(v => v && v.current !== null && v.current !== undefined);
   }
 
-  sparklinePoints(breakdown: any[], field: string, width = 280, height = 60): string {
-    if (!breakdown || breakdown.length < 2) return '';
-    const values = breakdown.map((d: any) => d[field] ?? 0);
-    const max = Math.max(...values, 0.0001);
-    const min = Math.min(...values, 0);
-    const range = (max - min) || 1;
-    const stepX = width / (values.length - 1);
-    return values.map((v: number, i: number) =>
-      `${(i * stepX).toFixed(1)},${(height - ((v - min) / range) * height).toFixed(1)}`
-    ).join(' ');
-  }
-
-  downloadWeeklyPdf() {
+  private downloadPdf(path: string, filename: string) {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/weekly/pdf?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`,
-      { responseType: 'blob' }
-    ).subscribe({
-      next: (blob) => this.triggerDownload(blob, 'تقرير_أسبوعي.pdf'),
-      error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
+    this.loadError.set(null);
+    if (this.isOffline()) { this.loadError.set('تحميل الـ PDF بيحتاج اتصال بالنت — جرّبه لما النت يرجع'); return; }
+    this.http.get(`${environment.apiUrl}/reports/${path}`, { responseType: 'blob' }).subscribe({
+      next: (blob) => this.triggerDownload(blob, filename),
+      error: (err: any) => this.loadError.set(err?.status === 404 ? 'مفيش بيانات كافية لعمل الـ PDF لهذه الفترة' : this.errorMessage(err)),
     });
   }
 
-  downloadMonthlyPdf() {
-    if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/monthly/pdf?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`,
-      { responseType: 'blob' }
-    ).subscribe({
-      next: (blob) => this.triggerDownload(blob, 'تقرير_شهري.pdf'),
-      error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
-    });
-  }
-
-  downloadYearlyPdf() {
-    if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/yearly/pdf?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`,
-      { responseType: 'blob' }
-    ).subscribe({
-      next: (blob) => this.triggerDownload(blob, 'تقرير_سنوي.pdf'),
-      error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
-    });
-  }
+  downloadWeeklyPdf() { this.downloadPdf(`weekly/pdf?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`, 'تقرير_أسبوعي.pdf'); }
+  downloadMonthlyPdf() { this.downloadPdf(`monthly/pdf?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`, 'تقرير_شهري.pdf'); }
+  downloadYearlyPdf() { this.downloadPdf(`yearly/pdf?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`, 'تقرير_سنوي.pdf'); }
+  downloadCyclePdf() { this.downloadPdf(`end-of-cycle/pdf?flock_id=${this.selectedFlockId}`, 'تقرير_نهاية_الدورة.pdf'); }
 
   private triggerDownload(blob: Blob, filename: string) {
     const url = window.URL.createObjectURL(blob);
@@ -694,84 +991,140 @@ export class ReportsComponent implements OnInit {
   loadComparison() {
     const flock = this.flocks().find(f => f.id === this.selectedFlockId);
     const flockType = flock?.type ? `?flock_type=${flock.type}` : '';
-    this.http.get(`${environment.apiUrl}/reports/cycle-comparison${flockType}`
-    ).subscribe({ next: (res: any) => this.comparisonReport.set(res), error: () => this.comparisonReport.set(null) });
+    this.load(`${environment.apiUrl}/reports/cycle-comparison${flockType}`, this.comparisonReport, undefined,
+      { key: `comparison:${flock?.type ?? 'all'}` });
   }
 
   loadBenchmark() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/benchmark?flock_id=${this.selectedFlockId}`
-    ).subscribe({ next: (res: any) => this.benchmarkReport.set(res), error: () => this.benchmarkReport.set(null) });
-  }
-
-  downloadCyclePdf() {
-    if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${this.selectedFlockId}`, { responseType: 'blob' }).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'تقرير_نهاية_الدورة.pdf';
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: () => alert('حصل خطأ أثناء تحميل الـ PDF'),
-    });
+    this.load(`${environment.apiUrl}/reports/benchmark?flock_id=${this.selectedFlockId}`, this.benchmarkReport, undefined,
+      { key: `benchmark:${this.selectedFlockId}` });
   }
 
   loadDaily() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/daily?flock_id=${this.selectedFlockId}&report_date=${this.dailyDate}`
-    ).subscribe({ next: (res: any) => this.dailyReport.set(res), error: () => this.dailyReport.set(null) });
+    const id = this.selectedFlockId, date = this.dailyDate;
+    this.load(`${environment.apiUrl}/reports/daily?flock_id=${id}&report_date=${date}`, this.dailyReport, undefined, {
+      key: `daily:${id}:${date}`,
+      local: async () => {
+        const c = await this.localCtx(id); if (!c) return null;
+        return Offline.assembleDailyReport(c.flock, c.recs, date, Offline.localToday(),
+          Offline.targetsFromProgram(c.full, c.flock.startDate, Offline.addDays(date, -8), date));
+      },
+    });
   }
 
   loadMonthly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/monthly?flock_id=${this.selectedFlockId}&year=${this.monthlyYear}&month=${this.monthlyMonth}`
-    ).subscribe({ next: (res: any) => this.monthlyReport.set(res), error: () => this.monthlyReport.set(null) });
+    const id = this.selectedFlockId, y = this.monthlyYear, m = this.monthlyMonth;
+    this.load(`${environment.apiUrl}/reports/monthly?flock_id=${id}&year=${y}&month=${m}`,
+      this.monthlyReport, res => this.monthlyCharts.set(this.chartsFor(res?.daily_breakdown)), {
+        key: `monthly:${id}:${y}-${m}`,
+        local: async () => {
+          const c = await this.localCtx(id); if (!c) return null;
+          const [ps, pe] = Offline.monthRange(y, m);
+          return Offline.assemblePeriodReport('monthly', c.flock, c.recs, ps, pe, Offline.localToday(),
+            Offline.targetsFromProgram(c.full, c.flock.startDate, Offline.addDays(ps, -8), pe));
+        },
+      });
   }
 
   loadWeekly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/weekly?flock_id=${this.selectedFlockId}&week_start=${this.weeklyStart}`
-    ).subscribe({ next: (res: any) => this.weeklyReport.set(res), error: () => this.weeklyReport.set(null) });
+    const id = this.selectedFlockId, ps = this.weeklyStart;
+    this.load(`${environment.apiUrl}/reports/weekly?flock_id=${id}&week_start=${ps}`,
+      this.weeklyReport, res => this.weeklyCharts.set(this.chartsFor(res?.daily_breakdown)), {
+        key: `weekly:${id}:${ps}`,
+        local: async () => {
+          const c = await this.localCtx(id); if (!c) return null;
+          const pe = Offline.addDays(ps, 6);
+          return Offline.assemblePeriodReport('weekly', c.flock, c.recs, ps, pe, Offline.localToday(),
+            Offline.targetsFromProgram(c.full, c.flock.startDate, Offline.addDays(ps, -8), pe));
+        },
+      });
   }
 
   loadYearly() {
     if (!this.selectedFlockId) return;
-    this.http.get(`${environment.apiUrl}/reports/yearly?flock_id=${this.selectedFlockId}&year=${this.yearlyYear}`
-    ).subscribe({ next: (res: any) => this.yearlyReport.set(res), error: () => this.yearlyReport.set(null) });
+    const id = this.selectedFlockId, y = this.yearlyYear;
+    this.load(`${environment.apiUrl}/reports/yearly?flock_id=${id}&year=${y}`, this.yearlyReport, undefined, {
+      key: `yearly:${id}:${y}`,
+      local: async () => {
+        const c = await this.localCtx(id); if (!c) return null;
+        const ps = `${y}-01-01`, pe = `${y}-12-31`;
+        return Offline.assemblePeriodReport('yearly', c.flock, c.recs, ps, pe, Offline.localToday(),
+          Offline.targetsFromProgram(c.full, c.flock.startDate, Offline.addDays(ps, -8), pe));
+      },
+    });
   }
 
   loadCycle() {
     if (!this.selectedFlockId) return;
+    const id = this.selectedFlockId;
     this.cycleReport.set(null);
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${this.selectedFlockId}`
-    ).subscribe({
-      next: (res: any) => this.cycleReport.set(res),
-      error: () => this.cycleReport.set(null),
+    this.load(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${id}`, this.cycleReport, undefined, {
+      key: `cycle:${id}`,
+      local: async () => {
+        const c = await this.localCtx(id); if (!c) return null;
+        const today = Offline.localToday();
+        const start = c.flock.startDate ? c.flock.startDate.slice(0, 10) : today;
+        return Offline.assembleCycleReport(c.flock, c.recs, today, Offline.targetsFromProgram(c.full, c.flock.startDate, start, today));
+      },
+    });
+  }
+
+  loadFarmSummary() {
+    const period = this.farmPeriod;
+    this.load(`${environment.apiUrl}/reports/farm-summary?period=${period}`, this.farmSummary, undefined, {
+      key: `farm:${period}`,
+      local: async () => {
+        const today = Offline.localToday(), ps = Offline.farmPeriodStart(period, today);
+        const entries = [];
+        for (const f of this.flocks().filter(x => (x.status ?? 'active') === 'active')) {
+          const c = await this.localCtx(f.id);
+          if (!c) continue;
+          entries.push(Offline.assembleFarmEntry(c.flock, c.recs, ps, today,
+            Offline.targetsFromProgram(c.full, c.flock.startDate, Offline.addDays(ps, -8), today)));
+        }
+        return entries.length ? Offline.assembleFarmSummary(entries, period, ps, today) : null;
+      },
     });
   }
 
   loadFcr() {
     this.http.get(`${environment.apiUrl}/reports/fcr-comparison`).subscribe({
-      next: (res: any) => this.fcrData.set(res.flocks),
-      error: () => {}
-    });
-  }
-
-  loadMortality() {
-    this.http.get(`${environment.apiUrl}/reports/mortality-trend`).subscribe({
-      next: (res: any) => {
-        this.mortalityData.set(res.data);
-        const max = Math.max(...res.data.map((d: any) => d.mortality), 1);
-        this.maxMortality.set(max);
+      next: (res: any) => { this.fcrData.set(res.flocks ?? []); void this.cacheSet('report:fcr', res.flocks ?? []); },
+      error: async () => {
+        const cached = await this.cacheGet<any[]>('report:fcr');
+        if (cached) { this.fcrData.set(cached); return; }
+        // مفيش نسخة: نحسبها من سجلات القطعان المخزّنة
+        const rows: any[] = [];
+        for (const f of this.flocks()) {
+          const c = await this.localCtx(f.id);
+          if (!c) continue;
+          const k = Offline.computeCycleKpis(c.flock, c.recs, Offline.localToday());
+          rows.push({ flock_id: f.id, flock_name: f.name, flock_type: f.type, status: f.status, fcr: k.fcr,
+                      total_feed_kg: k.total_feed_kg, current_count: c.flock.currentCount });
+        }
+        this.fcrData.set(rows);
       },
-      error: () => {}
     });
   }
 
-  barWidth(value: number): number {
-    return Math.min(100, (value / this.maxMortality()) * 100);
+  /** النفوق لقطيع واحد (آخر 60 يوم) — الدمج بين قطعان مختلفة كان بيدّي رقم مضلل */
+  loadMortality() {
+    const id = this.selectedFlockId;
+    const q = id ? `?flock_id=${id}&days=60` : '?days=60';
+    const apply = (rows: { date: string; mortality: number }[]) => {
+      this.mortalityLabels.set(rows.map(d => d.date));
+      this.mortalitySeries.set([{ name: 'النفوق', color: '#ef4444', values: rows.map(d => d.mortality) }]);
+    };
+    this.http.get(`${environment.apiUrl}/reports/mortality-trend${q}`).subscribe({
+      next: (res: any) => apply(res?.data ?? []),
+      error: async () => {
+        const c = id ? await this.localCtx(id) : null;
+        apply(c ? Offline.mortalityTrend(c.recs, Offline.localToday(), 60) : []);
+      },
+    });
   }
 }

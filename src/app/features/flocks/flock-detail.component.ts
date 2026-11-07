@@ -4,10 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { FlockService } from '../../core/services/flock.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserOfflineCacheService } from '../../core/services/user-offline-cache.service';
+import { PendingRecordsService } from '../../core/services/pending-records.service';
 import { AdsService } from '../../core/services/ads.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
@@ -418,6 +418,11 @@ const TURKEY_VACC = [
           <div>
             <label class="form-label">الرطوبة % (اختياري)</label>
             <input class="form-input text-black bg-gray-100 border p-2 rounded w-full" type="number" min="0" max="100" inputmode="decimal" [(ngModel)]="userInputs.humidityPercent" placeholder="لو عندك جهاز قياس" />
+          </div>
+
+          <div>
+            <label class="form-label">المياه المستهلكة - لتر (اختياري)</label>
+            <input class="form-input text-black bg-gray-100 border p-2 rounded w-full" type="number" min="0" inputmode="decimal" [(ngModel)]="userInputs.waterValue" placeholder="لو بتقيسها" />
           </div>
 
           <div class="col-span-2 sm:col-span-1">
@@ -1237,77 +1242,23 @@ export class FlockDetailComponent implements OnInit {
     return this.auth.currentUserId().then(uid => this.store.get(uid, key));
   }
 
-  // 📴 سجلات اتسجلت من غير نت — بتستنى على الجهاز لحد ما النت يرجع وبعدين بتتبعت
-  private readonly PENDING_KEY = 'pending_records';
-  private readonly FAILED_KEY = 'failed_records';
+  // 📴 سجلات اتسجلت من غير نت — الطابور والإرسال في PendingRecordsService (مشترك مع شاشة التقارير)
+  private pending = inject(PendingRecordsService);
   private activeFlockId: string | null = null;
   isOffline = signal(typeof navigator !== 'undefined' && !navigator.onLine);
-  pendingRecords = signal<any[]>([]);              // سجلات القطيع المفتوح بس (للمستخدم الحالي بس)
-  failedRecords = signal<any[]>([]);               // سجلات السيرفر رفضها — بتتعرض عشان المستخدم يشوفها (مش بتتمسح بصمت)
-  syncingPending = signal(false);
+  pendingRecords = this.pending.pendingForActive;   // سجلات القطيع المفتوح بس (للمستخدم الحالي بس)
+  failedRecords = this.pending.failedForActive;     // سجلات السيرفر رفضها — بتتعرض عشان المستخدم يشوفها (مش بتتمسح بصمت)
+  syncingPending = this.pending.syncing;
   syncMessage = signal<string | null>(null);
   offlineSavedNotice = signal<string | null>(null);
   pendingDatesLabel = () => this.pendingRecords().map(p => p.date).join('، ');
 
-  // قفل بسيط: قراءة-تعديل-كتابة الطابور بتحصل واحدة ورا التانية (تسجيل جديد + مزامنة في نفس الوقت)
-  private qLock: Promise<unknown> = Promise.resolve();
-  private withQueueLock<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.qLock.then(fn, fn);
-    this.qLock = run.catch(() => undefined);
-    return run;
-  }
-
-  private async readQueue(): Promise<any[]> {
-    const q = await this.cacheGet(this.PENDING_KEY);
-    return Array.isArray(q) ? q : [];
-  }
-  private async writeQueue(q: any[]): Promise<boolean> {
-    const ok = await this.cacheSet(this.PENDING_KEY, q);
-    await this.refreshPendingSignal();
-    return ok;
-  }
-  private async refreshPendingSignal() {
-    const q = await this.readQueue();
-    this.pendingRecords.set(q.filter(x => x.flockId === this.activeFlockId));
-    const f = await this.cacheGet(this.FAILED_KEY);
-    this.failedRecords.set((Array.isArray(f) ? f : []).filter((x: any) => x.flockId === this.activeFlockId));
-  }
   /** بترجّع false لو التخزين فشل (مساحة ممتلية / مفيش مستخدم معروف) — ساعتها ماننفعش نقول للمستخدم "اتحفظ" */
   private queueRecord(item: { kind: 'create' | 'patch'; flockId: string; recordId?: string | null; date: string; payload: any }): Promise<boolean> {
-    return this.withQueueLock(async () => {
-      const uid = await this.auth.currentUserId();
-      if (!uid) return false;
-      // نفس القطيع + نفس اليوم + نفس النوع → آخر نسخة بتحل محل القديمة
-      const q = (await this.readQueue()).filter(x => !(x.flockId === item.flockId && x.date === item.date
-        && x.kind === item.kind && (x.recordId ?? null) === (item.recordId ?? null)));
-      q.push({ ...item, userId: uid, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, queuedAt: new Date().toISOString() });
-      return this.writeQueue(q);
-    });
+    return this.pending.queue(item);
   }
-  private removeFromQueue(id: string): Promise<boolean> {
-    return this.withQueueLock(async () => this.writeQueue((await this.readQueue()).filter(x => x.id !== id)));
-  }
-  /** بتقارن القيم المهمة بين السجل المخزّن وسجل السيرفر (null / '' / 0 بتتعامل كـ "فاضي" — السيرفر بيحوّل الفاضي لـ 0 أو null) */
-  private sameRecordValues(payload: any, server: any): boolean {
-    const norm = (v: any) => (v === null || v === undefined || v === '' || Number(v) === 0)
-      ? 0 : (isNaN(Number(v)) ? String(v).trim() : Number(v));
-    return ['mortality', 'feed_consumed_kg', 'temperature_celsius', 'avg_weight_kg', 'water_consumed_l', 'egg_count', 'broken_egg_count', 'notes']
-      .every(k => norm(payload?.[k]) === norm(server?.[k]));
-  }
-  private markFailed(item: any, reason: string): Promise<boolean> {
-    return this.withQueueLock(async () => {
-      const f = await this.cacheGet(this.FAILED_KEY);
-      const list = Array.isArray(f) ? f : [];
-      list.push({ ...item, reason, failedAt: new Date().toISOString() });
-      return this.cacheSet(this.FAILED_KEY, list);
-    });
-  }
-  async dismissFailed() {
-    await this.withQueueLock(async () => {
-      const f = await this.cacheGet(this.FAILED_KEY);
-      await this.cacheSet(this.FAILED_KEY, (Array.isArray(f) ? f : []).filter((x: any) => x.flockId !== this.activeFlockId));
-    });
-    await this.refreshPendingSignal();
+  dismissFailed(): Promise<void> {
+    return this.pending.dismissFailed(this.activeFlockId);
   }
 
   @HostListener('window:offline')
@@ -1320,66 +1271,9 @@ export class FlockDetailComponent implements OnInit {
     this.syncPending();
   }
 
-  // 🔄 يبعت سجلات المستخدم الحالي المحفوظة للسيرفر بالترتيب، وبعدها يحدّث التحليلات والنصايح
+  // 🔄 يبعت سجلات المستخدم الحالي المحفوظة للسيرفر بالترتيب (المنطق في PendingRecordsService)، وبعدها يحدّث التحليلات والنصايح
   async syncPending() {
-    if (this.syncingPending() || !navigator.onLine || !this.store.enabled) return;
-    const uid = await this.auth.currentUserId();
-    if (!uid) return;
-    // دفاع إضافي: التخزين أصلاً مفصول لكل مستخدم، وده يضمن إننا مانبعتش سجل اتخزّن باسم مستخدم تاني
-    const queue = (await this.readQueue()).filter(x => !x.userId || x.userId === uid);
-    if (!queue.length) return;
-    this.syncingPending.set(true);
-
-    let sent = 0, failed = 0;
-    const existingByFlock: Record<string, Record<string, any>> = {}; // تاريخ → صف السجل كما رجع من السيرفر
-    for (const item of queue) {
-      try {
-        if (item.kind === 'create') {
-          if (!existingByFlock[item.flockId]) {
-            const rows = await firstValueFrom(this.http.get<any[]>(`${environment.apiUrl}/flocks/${item.flockId}/records`));
-            const m: Record<string, any> = {};
-            (rows || []).forEach(r => { const d = this.recordDateStr(r); if (d) m[d] = r; });
-            existingByFlock[item.flockId] = m;
-          }
-          const existing = existingByFlock[item.flockId][item.date];
-          if (existing) {
-            // 🛡️ فيه سجل لنفس اليوم على السيرفر — مانكتبش فوقه (ممكن يكون لعضو تاني، وتعديل النفوق بيغيّر عدد الطيور)
-            if (this.sameRecordValues(item.payload, existing)) {
-              // نفس القيم بالظبط (غالبًا الإرسال الأول وصل والرد ضاع) — مفيش حاجة نبعتها
-              await this.removeFromQueue(item.id);
-              sent++;
-              continue;
-            }
-            const who = existing.created_by_name ? ` (سجّله ${existing.created_by_name})` : '';
-            const saved = await this.markFailed(item, `فيه سجل مختلف لنفس اليوم على السيرفر${who} — مااتكتبش فوقه`);
-            if (!saved) break;
-            await this.removeFromQueue(item.id);
-            failed++;
-            continue;
-          }
-          await firstValueFrom(this.svc.addRecord(item.payload));
-        } else {
-          // تعديل مقصود من المستخدم لسجل معروف
-          const fields = { ...item.payload };
-          delete fields.flock_id; delete fields.record_date; delete fields.water_consumed_l;
-          await firstValueFrom(this.http.patch<any>(`${environment.apiUrl}/flocks/${item.flockId}/records/${item.recordId}`, fields));
-        }
-        await this.removeFromQueue(item.id);
-        sent++;
-      } catch (err: any) {
-        const st = err?.status;
-        if (!st || st === 401 || st >= 500) break; // مش وقته (نت/سيرفر/جلسة منتهية) — نسيبه ونحاول تاني
-        // رفض نهائي (400/403/404/409/422...): نحفظه في قايمة "المرفوضة" الأول، وبعدها بس نشيله من الطابور — مفيش بيانات بتضيع بصمت
-        const detail = err?.error?.detail;
-        const saved = await this.markFailed(item, typeof detail === 'string' ? detail : `خطأ ${st}`);
-        if (!saved) break;
-        await this.removeFromQueue(item.id);
-        failed++;
-      }
-    }
-
-    this.syncingPending.set(false);
-    await this.refreshPendingSignal();
+    const { sent, failed } = await this.pending.sync();
     if (sent || failed) {
       this.syncMessage.set(sent
         ? `✅ اتبعت ${sent} سجل للسيرفر وجاري تحديث التحليلات${failed ? ` — و${failed} سجل السيرفر رفضه (شوفهم تحت)` : ''}`
@@ -1444,6 +1338,7 @@ export class FlockDetailComponent implements OnInit {
     feedUnit: 'kg',
     temperatureCelsius: null as number | null,
     humidityPercent: null as number | null,
+    waterValue: null as number | null,
     weightValue: null as number | null,
     weightUnit: 'kg',
     eggCount: null as number | null,
@@ -1530,7 +1425,7 @@ export class FlockDetailComponent implements OnInit {
     this.selectedPhotoFile.set(null);
     this.selectedPhotoPreview.set(null);
     this.userInputs = {
-      mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null,
+      mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null, waterValue: null,
       weightValue: null, weightUnit: 'kg', eggCount: null, brokenEggCount: null, notes: '',
     };
   }
@@ -1871,6 +1766,7 @@ export class FlockDetailComponent implements OnInit {
       feedUnit: 'kg',
       temperatureCelsius: r.temperatureCelsius ?? r.temperature_celsius ?? null,
       humidityPercent: r.humidityPercent ?? r.humidity_percent ?? null,
+      waterValue: r.waterConsumedL ?? r.water_consumed_l ?? null,
       weightValue: this.recordWeight(r),
       weightUnit: 'kg',
       eggCount: r.eggCount ?? r.egg_count ?? null,
@@ -2144,7 +2040,7 @@ vaccSchedule = () => {
 
   loadData(id: string) {
     this.activeFlockId = id;
-    this.refreshPendingSignal();
+    void this.pending.setActiveFlock(id);
     // 🔁 إعادة ضبط حالة الفورم/التخطي لأي قطيع جديد (الكومبوننت بيتعاد استخدامه)
     this.newRecordDate.set('');
     this.showFormManually.set(false);
@@ -2378,6 +2274,9 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       // 💧 الرطوبة اختيارية: بتتبعت بس لو المستخدم كتبها
       ...(this.userInputs.humidityPercent !== null && this.userInputs.humidityPercent !== undefined && (this.userInputs.humidityPercent as any) !== ''
         ? { humidity_percent: Number(this.userInputs.humidityPercent) } : {}),
+      // 💧 المياه اختيارية: بتتبعت بس لو المستخدم كتبها (بيستخدمها محرك التقارير لاكتشاف انخفاض الشرب)
+      ...(this.userInputs.waterValue !== null && this.userInputs.waterValue !== undefined && (this.userInputs.waterValue as any) !== ''
+        ? { water_consumed_l: Number(this.userInputs.waterValue) } : {}),
       avg_weight_kg: finalWeightKg !== null ? Number(finalWeightKg) : null,
       egg_count: (this.userInputs.eggCount !== null && this.userInputs.eggCount !== undefined) ? Number(this.userInputs.eggCount) : null,
       broken_egg_count: (this.userInputs.brokenEggCount !== null && this.userInputs.brokenEggCount !== undefined) ? Number(this.userInputs.brokenEggCount) : null,
@@ -2386,7 +2285,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
 
     const resetForm = () => {
       this.userInputs = {
-        mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null,
+        mortality: 0, feedValue: null, feedUnit: 'kg', temperatureCelsius: null, humidityPercent: null, waterValue: null,
         weightValue: null, weightUnit: 'kg', eggCount: null, brokenEggCount: null, notes: '',
       };
       this.editingRecordId.set(null);
