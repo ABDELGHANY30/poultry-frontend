@@ -156,7 +156,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
   const inCat = (cat: string) => [...latest.values()].filter(r => r._cat === cat);
 
   const accept = (
-    key: string, row: MarketRow, role: 'cost' | 'revenue', kind: 'kg' | 'piece',
+    row: MarketRow, role: 'cost' | 'revenue', kind: 'kg' | 'piece',
     range: readonly [number, number], label: string,
   ): number | null => {
     const raw = pickPrice(row, role);
@@ -175,7 +175,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
     for (const [stage, w] of Object.entries(BROILER_FEED_SPLIT)) {
       const row = inCat('feed').find(r => r._name.startsWith(normalizeAr(stage)));
       if (!row) continue;
-      const p = accept('feed_broiler_kg', row, 'cost', 'kg', PLAUSIBLE.feed_kg, `علف ${row.item_name_ar}`);
+      const p = accept(row, 'cost', 'kg', PLAUSIBLE.feed_kg, `علف ${row.item_name_ar}`);
       if (p === null) continue;
       sum += p * w; wsum += w; used.push(row);
     }
@@ -191,7 +191,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
   {
     const prices: number[] = []; const used: MarketRow[] = [];
     for (const row of inCat('feed').filter(r => r._name.startsWith('بياض'))) {
-      const p = accept('feed_layer_kg', row, 'cost', 'kg', PLAUSIBLE.feed_kg, `علف ${row.item_name_ar}`);
+      const p = accept(row, 'cost', 'kg', PLAUSIBLE.feed_kg, `علف ${row.item_name_ar}`);
       if (p !== null) { prices.push(p); used.push(row); }
     }
     if (prices.length) {
@@ -207,7 +207,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
     const chicks = inCat('chicks');
     const row = chicks.find(r => r._name === 'ابيض شركات') ?? chicks.find(r => r._name === 'ابيض قطعان');
     if (row) {
-      const p = accept('chick_price_broiler', row, 'cost', 'piece', PLAUSIBLE.chick, `كتكوت ${row.item_name_ar}`);
+      const p = accept(row, 'cost', 'piece', PLAUSIBLE.chick, `كتكوت ${row.item_name_ar}`);
       if (p !== null) items['chick_price_broiler'] = { price: p, updated_at: row.created_at ?? now.toISOString(), source: `كتكوت ${row.item_name_ar}` };
     }
   }
@@ -215,7 +215,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
   // ── سعر بيع الكيلو الحي ──
   const sell = (key: string, row: (MarketRow & { _name: string }) | undefined, label: string) => {
     if (!row) return;
-    const p = accept(key, row, 'revenue', 'kg', PLAUSIBLE.sell_kg, label);
+    const p = accept(row, 'revenue', 'kg', PLAUSIBLE.sell_kg, label);
     if (p !== null) items[key] = { price: p, updated_at: row.created_at ?? now.toISOString(), source: label };
   };
   sell('sell_broiler', inCat('broiler').find(r => r._name === 'ابيض'), 'فراخ بيضاء (بورصة)');
@@ -223,7 +223,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
   for (const [cat, key, label] of [['turkey', 'sell_turkey', 'رومي'], ['rabbit', 'sell_rabbit', 'أرانب']] as const) {
     const rows = inCat(cat);
     const ps: number[] = [];
-    for (const r of rows) { const p = accept(key, r, 'revenue', 'kg', PLAUSIBLE.sell_kg, `${label} ${r.item_name_ar}`); if (p !== null) ps.push(p); }
+    for (const r of rows) { const p = accept(r, 'revenue', 'kg', PLAUSIBLE.sell_kg, `${label} ${r.item_name_ar}`); if (p !== null) ps.push(p); }
     if (ps.length) items[key] = { price: round2(ps.reduce((a, b) => a + b, 0) / ps.length), updated_at: newest(rows), source: `متوسط ${label} (بورصة)` };
   }
   {
@@ -232,7 +232,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
     if (pekin) sell('sell_duck', pekin, pekin.item_name_ar);
     else {
       const ps: number[] = [];
-      for (const r of rows) { const p = accept('sell_duck', r, 'revenue', 'kg', PLAUSIBLE.sell_kg, r.item_name_ar); if (p !== null) ps.push(p); }
+      for (const r of rows) { const p = accept(r, 'revenue', 'kg', PLAUSIBLE.sell_kg, r.item_name_ar); if (p !== null) ps.push(p); }
       if (ps.length) items['sell_duck'] = { price: round2(ps.reduce((a, b) => a + b, 0) / ps.length), updated_at: newest(rows), source: 'متوسط البط (بورصة)' };
     }
   }
@@ -241,7 +241,7 @@ export function buildMarketSnapshot(rows: MarketRow[], now: Date = new Date()): 
   for (const [key, needle, label] of [['egg_white', 'ابيض', 'بيض أبيض'], ['egg_red', 'احمر', 'بيض أحمر']] as const) {
     const row = inCat('eggs').find(r => r._name.includes(needle));
     if (!row) continue;
-    const p = accept(key, row, 'revenue', 'piece', PLAUSIBLE.egg, label);
+    const p = accept(row, 'revenue', 'piece', PLAUSIBLE.egg, label);
     if (p !== null) items[key] = { price: p, updated_at: row.created_at ?? now.toISOString(), source: label };
   }
 

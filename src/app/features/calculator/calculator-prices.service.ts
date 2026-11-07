@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Preferences } from '@capacitor/preferences';
-import type { MarketEntry, MarketSnapshot } from './calculator-live-data';
-import { MARKET_COST_KEYS, MARKET_SELL_KEYS, isMarketStale, isMarketUsable } from './calculator-live-data';
+import {
+  MarketEntry, MarketSnapshot, MARKET_COST_KEYS, MARKET_SELL_KEYS, isMarketStale, isMarketUsable,
+} from './calculator-live-data';
 
 /**
  * تخزين أسعار المستخدم محلياً على الجهاز (بديل price_store.py).

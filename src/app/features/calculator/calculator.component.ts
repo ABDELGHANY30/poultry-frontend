@@ -3,8 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CalculatorPricesService } from './calculator-prices.service';
 import { CalculatorLiveDataService } from './calculator-live-data.service';
-import { GOVERNORATES, findGovernorate, suggestSeason, weatherForCalc } from './calculator-live-data';
-import type { WeatherSummary } from './calculator-live-data';
+import { GOVERNORATES, WeatherSummary, findGovernorate, suggestSeason, weatherForCalc } from './calculator-live-data';
 import {
   calculateFarm, calculateCosts, calculateProfitability, getHousingOptions,
   POULTRY_LABELS, HOUSING_LABELS, PoultryType, HousingSystem,
