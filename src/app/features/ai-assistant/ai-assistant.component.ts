@@ -64,6 +64,13 @@ interface Message {
   confidence?: 'high' | 'medium' | 'low';
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  flock_id: string | null;
+  updated_at?: string;
+}
+
 const SUGGESTIONS_AR = [
   'ما هو برنامج تطعيم الفروج؟',
   'أعراض نيوكاسل وكيف أعالجه؟',
@@ -139,19 +146,54 @@ const SUGGESTIONS_AR = [
     :host-context(.theme-dark) .ai-plan-sub,
     :host-context([data-theme='dark']) .ai-plan-sub,
     :host-context([data-bs-theme='dark']) .ai-plan-sub { color: #9ca3af; }
+
+    .ai-drawer { background: #ffffff; color: #111827; }
+    .ai-drawer-border { border-color: #e5e7eb; }
+    .ai-conv:hover, .ai-conv-active { background: #f3f4f6; }
+    .ai-rename-input { background: transparent; border: 1px solid #d1d5db; color: inherit; }
+    :host-context(.dark) .ai-drawer,
+    :host-context(.dark-mode) .ai-drawer,
+    :host-context(.theme-dark) .ai-drawer,
+    :host-context([data-theme='dark']) .ai-drawer,
+    :host-context([data-bs-theme='dark']) .ai-drawer { background: #1f2937; color: #f9fafb; }
+    :host-context(.dark) .ai-drawer-border,
+    :host-context(.dark-mode) .ai-drawer-border,
+    :host-context(.theme-dark) .ai-drawer-border,
+    :host-context([data-theme='dark']) .ai-drawer-border,
+    :host-context([data-bs-theme='dark']) .ai-drawer-border { border-color: #374151; }
+    :host-context(.dark) .ai-conv:hover,
+    :host-context(.dark-mode) .ai-conv:hover,
+    :host-context(.theme-dark) .ai-conv:hover,
+    :host-context([data-theme='dark']) .ai-conv:hover,
+    :host-context([data-bs-theme='dark']) .ai-conv:hover { background: #374151; }
+    :host-context(.dark) .ai-conv-active,
+    :host-context(.dark-mode) .ai-conv-active,
+    :host-context(.theme-dark) .ai-conv-active,
+    :host-context([data-theme='dark']) .ai-conv-active,
+    :host-context([data-bs-theme='dark']) .ai-conv-active { background: #374151; }
+    :host-context(.dark) .ai-rename-input,
+    :host-context(.dark-mode) .ai-rename-input,
+    :host-context(.theme-dark) .ai-rename-input,
+    :host-context([data-theme='dark']) .ai-rename-input,
+    :host-context([data-bs-theme='dark']) .ai-rename-input { border-color: #4b5563; }
   `],
   template: `
   <div class="flex flex-col h-full min-h-0">
 
     <!-- Header -->
     <div class="border-b border-gray-200 px-4 py-3 mb-3 flex items-center gap-3">
+      <button *ngIf="isAuthed()" type="button" (click)="showConversations.set(true)" title="المحادثات"
+              class="w-9 h-9 rounded-full flex items-center justify-center text-lg text-gray-600 hover:bg-gray-100 flex-shrink-0">☰</button>
       <div class="flex-1 min-w-0">
         <h1 class="text-base font-semibold text-gray-900">مساعد الدواجن</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
           <p class="text-gray-400 text-xs flex-shrink-0">متصل</p>
+          <span *ngIf="activeFlockName()" class="text-gray-400 text-xs truncate">· 🐔 {{ activeFlockName() }}</span>
         </div>
       </div>
+      <button *ngIf="isAuthed()" type="button" (click)="newChat()" [disabled]="loading()" title="محادثة جديدة"
+              class="w-9 h-9 rounded-full flex items-center justify-center text-base text-gray-600 hover:bg-gray-100 flex-shrink-0 disabled:opacity-40">✏️</button>
       <div *ngIf="isPro()" class="text-amber-700 bg-amber-50 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0">Pro</div>
       <button *ngIf="!isPro()" type="button" (click)="showUpgradeModal.set(true)"
               class="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0 bg-green-600 text-white">
@@ -165,6 +207,7 @@ const SUGGESTIONS_AR = [
       <select
         class="w-full text-sm font-bold rounded-xl px-3 py-2 bg-white border-2 border-gray-200 text-gray-700"
         [ngModel]="activeFlockId()"
+        [disabled]="loading()"
         (ngModelChange)="onFlockSelected($event)">
         <option [ngValue]="null">💬 سؤال عام (من غير قطيع محدد)</option>
         <option *ngFor="let f of allFlocks()" [ngValue]="f.id">🐔 {{ f.name }}</option>
@@ -194,7 +237,7 @@ const SUGGESTIONS_AR = [
 
       <!-- Empty state — شاشة "شات جديد" متمركزة، بتختفي بمجرد أول رسالة حقيقية -->
       <div *ngIf="messages().length <= 1" class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 text-center">
-        <h2 class="text-lg font-semibold text-gray-800 mb-1">مساعد الدواجن</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-1">{{ activeFlockName() ? 'محادثة جديدة — ' + activeFlockName() : 'مساعد الدواجن' }}</h2>
         <p class="text-sm text-gray-400 mb-6 max-w-xs">
           اسأل عن الأمراض والعلاج، التغذية، التحصينات، أو إدارة المزرعة بشكل عام
         </p>
@@ -255,6 +298,9 @@ const SUGGESTIONS_AR = [
               <p class="text-xs mt-1.5 text-gray-400 text-end">
                 {{ msg.timestamp | date:'HH:mm' }}
               </p>
+              <button *ngIf="msg.role === 'user' && msg.queryId && !loading()" type="button"
+                      (click)="deleteQuestion(msg)"
+                      class="text-[11px] text-gray-400 hover:text-red-500 mt-0.5">🗑️ حذف السؤال</button>
             </div>
 
             <!-- Confidence badge (لو المعلومة المرجعية ضعيفة أو متوسطة) -->
@@ -317,6 +363,8 @@ const SUGGESTIONS_AR = [
                       [title]="isPro() ? 'استماع للرد' : 'الرد الصوتي متاح لـ Pro فقط'">
                 {{ speakingMessageId() === msg.id ? '⏹️ إيقاف' : '🔊 استماع' }}
               </button>
+              <button *ngIf="msg.queryId" (click)="deleteQuestion(msg)" title="حذف السؤال والرد"
+                      class="text-xs w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition">🗑️</button>
             </div>
 
             <!-- Smart follow-up suggestions -->
@@ -401,6 +449,43 @@ const SUGGESTIONS_AR = [
     </div>
   </div>
 
+  <!-- Conversations Drawer — محادثات النطاق الحالي (القطيع المختار أو العامة) -->
+  <div *ngIf="showConversations()" class="fixed inset-0 bg-black/50 z-50" (click)="showConversations.set(false)">
+    <div class="ai-drawer absolute top-0 bottom-0 start-0 w-72 max-w-[85%] shadow-2xl flex flex-col"
+         (click)="$event.stopPropagation()">
+      <div class="ai-drawer-border px-4 pt-4 pb-3 border-b">
+        <p class="text-sm font-bold">المحادثات</p>
+        <p class="ai-plan-sub text-xs mt-0.5">{{ activeFlockName() ? '🐔 ' + activeFlockName() : '💬 محادثات عامة' }}</p>
+      </div>
+      <div class="p-3">
+        <button type="button" (click)="newChat()" [disabled]="loading()"
+                class="w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                style="background:#2A2A28">＋ محادثة جديدة</button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
+        <p *ngIf="!conversations().length" class="ai-plan-sub text-xs text-center py-6">مفيش محادثات لسه</p>
+        <div *ngFor="let c of conversations()"
+             class="ai-conv rounded-xl px-3 py-2.5 flex items-center gap-1 cursor-pointer"
+             [class.ai-conv-active]="c.id === activeConversationId()"
+             (click)="openConversation(c)">
+          <ng-container *ngIf="renamingId() !== c.id; else renameBox">
+            <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
+            <button type="button" class="text-xs opacity-60 px-1" (click)="startRename(c, $event)">✏️</button>
+            <button type="button" class="text-xs opacity-60 px-1" (click)="deleteConversation(c, $event)">🗑️</button>
+          </ng-container>
+          <ng-template #renameBox>
+            <input id="ai-rename-input" dir="rtl" maxlength="120"
+                   class="ai-rename-input flex-1 min-w-0 rounded-lg px-2 py-1 text-sm focus:outline-none"
+                   [(ngModel)]="renameText"
+                   (click)="$event.stopPropagation()"
+                   (keydown.enter)="confirmRename(c)"
+                   (blur)="confirmRename(c)"/>
+          </ng-template>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Subscription Plans Modal -->
   <div *ngIf="showUpgradeModal()"
        class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
@@ -455,6 +540,11 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   selectedImagePreview = signal<string | null>(null);
   activeFlockId = signal<string | null>(null);
   activeFlockName = signal<string | null>(null);
+  conversations = signal<Conversation[]>([]);
+  activeConversationId = signal<string | null>(null);
+  showConversations = signal(false);
+  renamingId = signal<string | null>(null);
+  renameText = '';
   isRecording = signal(false);
   speakingMessageId = signal<string | null>(null);
   alerts = signal<{ id: string; type: string; priority: string; title: string; message: string; due_date?: string }[]>([]);
@@ -500,7 +590,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     }
     this.checkPro();
     this.loadActiveFlock();
-    this.loadHistory();
+    this.loadConversations(true);
     this.loadAlerts();
     this.loadArabicVoice();
   }
@@ -546,9 +636,95 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
 
   /** بيتنادى لما المستخدم يختار قطيع من القايمة، أو "سؤال عام" (null) */
   onFlockSelected(flockId: string | null) {
+    if (this.loading()) return;
+    this.stopSpeaking();
     this.activeFlockId.set(flockId);
     const flock = this.allFlocks().find(f => f.id === flockId);
     this.activeFlockName.set(flock?.name ?? null);
+    // كل قطيع ليه محادثاته الخاصة — نفتح آخر محادثة للقطيع ده (أو شات جديد لو مفيش)
+    this.conversations.set([]);
+    this.loadConversations(true);
+  }
+
+  isAuthed() { return this.auth.isAuthenticated(); }
+
+  /** محادثات النطاق الحالي: القطيع المختار، أو المحادثات العامة لو مفيش قطيع */
+  loadConversations(openLatest = false) {
+    const flockId = this.activeFlockId();
+    const qs = flockId ? `flock_id=${encodeURIComponent(flockId)}` : 'general=true';
+    this.http.get<Conversation[]>(`${environment.apiUrl}/ai/conversations?${qs}`).subscribe({
+      next: (list) => {
+        if (this.activeFlockId() !== flockId) return; // المستخدم غيّر القطيع قبل ما الرد يوصل
+        this.conversations.set(list || []);
+        if (openLatest) {
+          if (list?.length) this.openConversation(list[0], false);
+          else this.startEmptyChat();
+        }
+      },
+      error: () => { if (openLatest) this.startEmptyChat(); }
+    });
+  }
+
+  /** شات جديد في النطاق الحالي — بيتسجل في السيرفر مع أول رسالة (زي ChatGPT/Claude) */
+  newChat() {
+    if (this.loading()) return;
+    this.stopSpeaking();
+    this.showConversations.set(false);
+    this.startEmptyChat();
+  }
+
+  private startEmptyChat() {
+    this.activeConversationId.set(null);
+    this.conversationHistory = [];
+    this.input = '';
+    this.removeImage();
+    this.showWelcomeMessage();
+  }
+
+  openConversation(c: Conversation, closeDrawer = true) {
+    if (this.loading() || this.renamingId()) return;
+    this.stopSpeaking();
+    this.activeConversationId.set(c.id);
+    if (closeDrawer) this.showConversations.set(false);
+    this.conversationHistory = [];
+    this.http.get<any[]>(`${environment.apiUrl}/ai/history?conversation_id=${encodeURIComponent(c.id)}&limit=50`).subscribe({
+      next: (logs) => {
+        if (this.activeConversationId() !== c.id) return; // اتفتحت محادثة تانية في الأثناء
+        this.restoreMessages(logs);
+      },
+      error: () => this.showWelcomeMessage()
+    });
+  }
+
+  startRename(c: Conversation, e: Event) {
+    e.stopPropagation();
+    this.renameText = c.title;
+    this.renamingId.set(c.id);
+    setTimeout(() => (document.getElementById('ai-rename-input') as HTMLInputElement | null)?.focus(), 0);
+  }
+
+  confirmRename(c: Conversation) {
+    if (this.renamingId() !== c.id) return; // Enter + blur بيستدعوها مرتين
+    this.renamingId.set(null);
+    const title = this.renameText.trim();
+    if (!title || title === c.title) return;
+    this.conversations.update(l => l.map(x => x.id === c.id ? { ...x, title } : x));
+    this.http.patch(`${environment.apiUrl}/ai/conversations/${c.id}`, { title }).subscribe({
+      error: () => this.loadConversations() // رجّع العنوان الحقيقي لو فشل
+    });
+  }
+
+  deleteConversation(c: Conversation, e: Event) {
+    e.stopPropagation();
+    if (this.loading()) return;
+    if (!confirm('تحذف المحادثة دي؟ مش هتقدر ترجعها.')) return;
+    this.http.delete(`${environment.apiUrl}/ai/conversations/${c.id}`).subscribe({
+      next: () => {
+        this.conversations.update(l => l.filter(x => x.id !== c.id));
+        if (this.activeConversationId() === c.id) this.startEmptyChat();
+      },
+      error: () => { /* سيبها ظاهرة لو الحذف فشل */ }
+    });
   }
 
   /** كل قطعان المستخدم — بيظهروا في selector يختار منه المستخدم صراحة، مفيش اختيار تلقائي */
@@ -565,42 +741,36 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     });
   }
 
-  /** يجيب آخر محادثة سابقة للمستخدم ويعرضها زي ما هي، بدل ما يبدأ من الصفر كل مرة */
-  loadHistory() {
-    this.http.get<any[]>(`${environment.apiUrl}/ai/history`).subscribe({
-      next: (logs) => {
-        if (logs && logs.length) {
-          const restored: Message[] = [];
-          for (const log of logs) {
-            const createdAt = log.created_at ? new Date(log.created_at) : new Date();
-            restored.push({
-              id: uid(), role: 'user', timestamp: createdAt,
-              content: log.question,
-            });
-            if (log.answer) {
-              restored.push({
-                id: uid(), role: 'assistant', timestamp: createdAt,
-                content: log.answer, sources: log.sources || [],
-              });
-              this.conversationHistory.push({ role: 'user', content: log.question });
-              this.conversationHistory.push({ role: 'assistant', content: log.answer });
-            }
-          }
-          this.messages.set(restored);
-          this.conversationHistory = this.conversationHistory.slice(-10);
-          this.needsScroll = true;
-        } else {
-          this.showWelcomeMessage();
-        }
-      },
-      error: () => this.showWelcomeMessage()
-    });
+  /** يعرض رسائل محادثة واحدة (اللي جت من /ai/history?conversation_id=...) */
+  private restoreMessages(logs: any[]) {
+    if (!logs || !logs.length) { this.showWelcomeMessage(); return; }
+    const restored: Message[] = [];
+    this.conversationHistory = [];
+    for (const log of logs) {
+      const createdAt = log.created_at ? new Date(log.created_at) : new Date();
+      restored.push({ id: uid(), role: 'user', timestamp: createdAt, content: log.question, queryId: log.id });
+      if (log.answer) {
+        restored.push({
+          id: uid(), role: 'assistant', timestamp: createdAt,
+          content: log.answer, sources: log.sources || [],
+          queryId: log.id,
+          feedback: log.feedback === 1 ? 'up' : log.feedback === -1 ? 'down' : undefined,
+        });
+        this.conversationHistory.push({ role: 'user', content: log.question });
+        this.conversationHistory.push({ role: 'assistant', content: log.answer });
+      }
+    }
+    this.messages.set(restored);
+    this.conversationHistory = this.conversationHistory.slice(-10);
+    this.needsScroll = true;
   }
 
   private showWelcomeMessage() {
     this.messages.set([{
       id: uid(), role: 'assistant', timestamp: new Date(),
-      content: 'أهلاً، أنا مساعدك في تربية الدواجن.\n\nممكن أساعدك في الأمراض والعلاج، التغذية، التحصينات والجرعات، وإدارة المزرعة بشكل عام. اسأل عن أي حاجة.',
+      content: this.activeFlockName()
+        ? `أهلاً، دي محادثة جديدة مخصوصة لقطيع "${this.activeFlockName()}". هبني إجاباتي على بياناته. اسأل عن أي حاجة.`
+        : 'أهلاً، أنا مساعدك في تربية الدواجن.\n\nممكن أساعدك في الأمراض والعلاج، التغذية، التحصينات والجرعات، وإدارة المزرعة بشكل عام. اسأل عن أي حاجة.',
     }]);
   }
 
@@ -922,6 +1092,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           question: q,
           language: 'ar',
           flock_id: this.activeFlockId(),
+          conversation_id: this.activeConversationId(),
           conversation_history: this.conversationHistory.slice(-6),
           image_base64: imageToSend || null
         })
@@ -964,6 +1135,15 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
                 : x));
             }
 
+            else if (data.type === 'conversation') {
+              // أول event: السيرفر عرّفنا بالمحادثة (جديدة أو مكمّلة) — نحدّث القايمة ونرفعها فوق
+              this.activeConversationId.set(data.id);
+              this.conversations.update(list => [
+                { id: data.id, title: data.title, flock_id: data.flock_id ?? null, updated_at: new Date().toISOString() },
+                ...list.filter(c => c.id !== data.id),
+              ]);
+            }
+
             else if (data.type === 'token') {
               // إضافة الـ token
               fullAnswer += data.content;
@@ -977,7 +1157,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
               sources = data.sources || [];
               this.messages.update(m => m.map(x => x.id === assistantId
                 ? { ...x, content: fullAnswer, loading: false, streaming: false, sources, queryId: data.query_id }
-                : x));
+                : x.id === userMsg.id ? { ...x, queryId: data.query_id } : x));
               this.conversationHistory.push({ role: 'assistant', content: fullAnswer });
               // لو الباك إند حدد قطيع (مثلاً أول رسالة قبل ما نجيب القطعان)، حدّث الهيدر بيه
               if (data.flock?.id && data.flock.id !== this.activeFlockId()) {
@@ -1031,6 +1211,35 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
       this.loading.set(false);
       this.needsScroll = true;
     }
+  }
+
+  /** يمسح سؤال واحد مع رده من المحادثة (من السيرفر ومن الشاشة) */
+  deleteQuestion(msg: Message) {
+    if (!msg.queryId || this.loading()) return;
+    if (!confirm('تحذف السؤال ده مع رده؟')) return;
+    const qid = msg.queryId;
+    this.http.delete<{ conversation_deleted: boolean }>(`${environment.apiUrl}/ai/history/${qid}`).subscribe({
+      next: (res) => {
+        if (res?.conversation_deleted) {
+          // كان آخر سؤال — المحادثة اتمسحت كلها
+          const cid = this.activeConversationId();
+          this.conversations.update(l => l.filter(c => c.id !== cid));
+          this.startEmptyChat();
+          return;
+        }
+        this.messages.update(m => m.filter(x => x.queryId !== qid));
+        this.rebuildHistory();
+      },
+      error: () => { /* السؤال يفضل ظاهر لو الحذف فشل */ }
+    });
+  }
+
+  /** يبني سياق الـ AI من الرسائل الباقية بعد الحذف، عشان الأسئلة المحذوفة ماتفضلش في ذاكرة المحادثة */
+  private rebuildHistory() {
+    this.conversationHistory = this.messages()
+      .filter(x => x.queryId && x.content && !x.loading)
+      .map(x => ({ role: x.role, content: x.content }))
+      .slice(-10);
   }
 
   sendFeedback(msg: Message, helpful: boolean) {
