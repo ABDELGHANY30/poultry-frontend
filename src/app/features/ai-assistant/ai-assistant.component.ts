@@ -261,7 +261,7 @@ const SUGGESTIONS_AR = [
 
           /* <!-- Bubble --> */
           <div [class]="msg.role === 'user' ? 'max-w-[80%]' : 'max-w-[85%]'">
-            <div [class]="msg.role === 'user'
+            <div (click)="onMessageTap(msg)" [class]="msg.role === 'user'
                     ? 'rounded-2xl rounded-br-md px-4 py-3 bg-gray-100 text-gray-900'
                     : 'px-1 py-1'">
 
@@ -298,9 +298,6 @@ const SUGGESTIONS_AR = [
               <p class="text-xs mt-1.5 text-gray-400 text-end">
                 {{ msg.timestamp | date:'HH:mm' }}
               </p>
-              <button *ngIf="msg.role === 'user' && msg.queryId && !loading()" type="button"
-                      (click)="deleteQuestion(msg)"
-                      class="text-[11px] text-gray-400 hover:text-red-500 mt-0.5">🗑️ حذف السؤال</button>
             </div>
 
             <!-- Confidence badge (لو المعلومة المرجعية ضعيفة أو متوسطة) -->
@@ -363,8 +360,6 @@ const SUGGESTIONS_AR = [
                       [title]="isPro() ? 'استماع للرد' : 'الرد الصوتي متاح لـ Pro فقط'">
                 {{ speakingMessageId() === msg.id ? '⏹️ إيقاف' : '🔊 استماع' }}
               </button>
-              <button *ngIf="msg.queryId" (click)="deleteQuestion(msg)" title="حذف السؤال والرد"
-                      class="text-xs w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition">🗑️</button>
             </div>
 
             <!-- Smart follow-up suggestions -->
@@ -464,14 +459,17 @@ const SUGGESTIONS_AR = [
       </div>
       <div class="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
         <p *ngIf="!conversations().length" class="ai-plan-sub text-xs text-center py-6">مفيش محادثات لسه</p>
+        <p *ngIf="conversations().length" class="ai-plan-sub text-[11px] text-center pb-2">اضغط مطولًا على أي محادثة لحذفها</p>
         <div *ngFor="let c of conversations()"
              class="ai-conv rounded-xl px-3 py-2.5 flex items-center gap-1 cursor-pointer"
              [class.ai-conv-active]="c.id === activeConversationId()"
-             (click)="openConversation(c)">
+             (click)="onConvTap(c)"
+             (pointerdown)="pressStart(c)" (pointerup)="pressEnd()" (pointerleave)="pressEnd()"
+             (pointercancel)="pressEnd()" (contextmenu)="$event.preventDefault()"
+             style="-webkit-touch-callout:none;user-select:none">
           <ng-container *ngIf="renamingId() !== c.id; else renameBox">
             <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
             <button type="button" class="text-xs opacity-60 px-1" (click)="startRename(c, $event)">✏️</button>
-            <button type="button" class="text-xs opacity-60 px-1" (click)="deleteConversation(c, $event)">🗑️</button>
           </ng-container>
           <ng-template #renameBox>
             <input id="ai-rename-input" dir="rtl" maxlength="120"
@@ -714,8 +712,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     });
   }
 
-  deleteConversation(c: Conversation, e: Event) {
-    e.stopPropagation();
+  deleteConversation(c: Conversation, e?: Event) {
+    e?.stopPropagation();
     if (this.loading()) return;
     if (!confirm('تحذف المحادثة دي؟ مش هتقدر ترجعها.')) return;
     this.http.delete(`${environment.apiUrl}/ai/conversations/${c.id}`).subscribe({
@@ -1211,6 +1209,34 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
       this.loading.set(false);
       this.needsScroll = true;
     }
+  }
+
+  /** ضغطة على رسالة المستخدم → مسحها هي وردها (بعد تأكيد، عشان ضغطة بالغلط وإنت بتسكرول) */
+  onMessageTap(msg: Message) {
+    if (msg.role !== 'user' || !msg.queryId) return;
+    if (window.getSelection()?.toString()) return; // المستخدم بيحدد نص مش بيمسح
+    this.deleteQuestion(msg);
+  }
+
+  private pressTimer: any = null;
+  private longPressed = false;
+
+  /** ضغطة مطولة على محادثة في القايمة → حذفها */
+  pressStart(c: Conversation) {
+    this.longPressed = false;
+    clearTimeout(this.pressTimer);
+    this.pressTimer = setTimeout(() => {
+      this.longPressed = true;
+      try { navigator.vibrate?.(30); } catch {}
+      this.deleteConversation(c);
+    }, 600);
+  }
+
+  pressEnd() { clearTimeout(this.pressTimer); }
+
+  onConvTap(c: Conversation) {
+    if (this.longPressed) { this.longPressed = false; return; } // الضغطة المطولة خلصت، مش فتح
+    this.openConversation(c);
   }
 
   /** يمسح سؤال واحد مع رده من المحادثة (من السيرفر ومن الشاشة) */
