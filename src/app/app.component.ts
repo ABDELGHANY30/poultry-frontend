@@ -19,6 +19,7 @@ import { App } from '@capacitor/app';
 import { BehaviorSubject, combineLatest } from 'rxjs';
 import { debounceTime, filter, take } from 'rxjs/operators';
 import { HttpActivityService } from './core/interceptors/http-activity';
+import { PushService } from './core/services/push.service';
 
 @Component({
   selector: 'app-root',
@@ -37,6 +38,7 @@ export class AppComponent implements OnInit {
   private ngZone = inject(NgZone);
 
   private activity = inject(HttpActivityService);
+  private push = inject(PushService);
 
   splashDone = false;
 
@@ -62,7 +64,12 @@ export class AppComponent implements OnInit {
     this.router.events.subscribe(e => {
       if (e instanceof NavigationCancel && e.code === NavigationCancellationCode.Redirect) {
         return;
-      } else if (
+      }
+      // ✅ بعد أي تنقل (ومنه الدخول للداشبورد) نحاول نحفظ توكن الإشعارات على السيرفر لو لسه ما اتحفظش
+      if (e instanceof NavigationEnd && !e.urlAfterRedirects.includes('login') && !e.urlAfterRedirects.includes('register')) {
+        this.push.sync();
+      }
+      if (
         e instanceof NavigationEnd ||
         e instanceof NavigationCancel ||
         e instanceof NavigationError
@@ -78,6 +85,9 @@ export class AppComponent implements OnInit {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     this.auth.initAuth();
+
+    // ✅ تسجيل الجهاز في FCM (بيشتغل على الموبايل بس)
+    this.push.init();
 
     App.addListener('backButton', () => {
       this.ngZone.run(() => {

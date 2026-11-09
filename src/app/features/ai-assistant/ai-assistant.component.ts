@@ -668,7 +668,16 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     if (this.loading()) return;
     this.stopSpeaking();
     this.showConversations.set(false);
-    this.startEmptyChat();
+    // لو فيه محادثة فاضية مفتوحة بالفعل، كمّل فيها بدل ما نكدّس محادثات فاضية
+    if (this.activeConversationId() && this.messages().length <= 1) return;
+    this.http.post<Conversation>(`${environment.apiUrl}/ai/conversations`, { flock_id: this.activeFlockId() }).subscribe({
+      next: (c) => {
+        this.conversations.update(l => [c, ...l.filter(x => x.id !== c.id)]);
+        this.startEmptyChat();
+        this.activeConversationId.set(c.id);
+      },
+      error: () => this.startEmptyChat() // السيرفر هيفتحها مع أول رسالة
+    });
   }
 
   private startEmptyChat() {

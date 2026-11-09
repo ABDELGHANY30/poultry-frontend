@@ -10,7 +10,11 @@ const TOKEN_KEY = 'fcm_token';
 
 /**
  * إشعارات الموبايل (FCM) — بتشتغل على Android/iOS فقط (Capacitor native).
- * على المتصفح العادي init() مش بتعمل حاجة.
+ *
+ * الاستخدام:
+ *   1) في AppComponent.ngOnInit:        this.push.init();
+ *   2) في AppComponent عند كل NavigationEnd: this.push.sync();   // بيحاول لحد ما يتحفظ (بعد الدخول)
+ *   3) عند تسجيل الخروج:                await this.push.unregister();
  */
 @Injectable({ providedIn: 'root' })
 export class PushService {
@@ -18,18 +22,29 @@ export class PushService {
   private router = inject(Router);
 
   private initialized = false;
+  private synced = false;   // اتحفظ على السيرفر؟
+  private token: string | null = localStorage.getItem(TOKEN_KEY);
 
   /** بيطلع حدث لما يوصل إشعار والتطبيق مفتوح — عشان الجرس/التنبيهات يتحدثوا فورًا */
   readonly received$ = new Subject<void>();
 
   async init(): Promise<void> {
-    if (!Capacitor.isNativePlatform() || this.initialized) return;
+    console.log('[push] init called, native =', Capacitor.isNativePlatform(), ', initialized =', this.initialized);
+    if (!Capacitor.isNativePlatform()) return;
+
+    // لو اتنادت تاني (مثلاً بعد تسجيل الدخول) نبعت التوكن للسيرفر بس
+    if (this.initialized) {
+      this.sync();
+      return;
+    }
     this.initialized = true;
 
     try {
       let perm = await PushNotifications.checkPermissions();
+      console.log('[push] permission =', perm.receive);
       if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
         perm = await PushNotifications.requestPermissions();
+        console.log('[push] after request =', perm.receive);
       }
       if (perm.receive !== 'granted') {
         this.initialized = false; // لو المستخدم وافق بعدين من الإعدادات نحاول تاني
@@ -49,16 +64,15 @@ export class PushService {
         });
       }
 
-      await PushNotifications.addListener('registration', token => {
-        localStorage.setItem(TOKEN_KEY, token.value);
-        this.http.post(`${environment.apiUrl}/push/register`, {
-          token: token.value,
-          platform: Capacitor.getPlatform(),
-        }).subscribe({ error: () => {} });
+      await PushNotifications.addListener('registration', t => {
+        console.log('[push] token received', t.value.slice(0, 20));
+        this.token = t.value;
+        localStorage.setItem(TOKEN_KEY, t.value);
+        this.sync();
       });
 
       await PushNotifications.addListener('registrationError', err =>
-        console.error('[push] registration error', err)
+        console.error('[push] registration error', JSON.stringify(err))
       );
 
       // التطبيق مفتوح: النظام مش بيعرض الإشعار لوحده → نحدّث الواجهة
@@ -76,19 +90,33 @@ export class PushService {
       });
 
       await PushNotifications.register();
+      console.log('[push] register() called');
     } catch (e) {
       console.error('[push] init failed', e);
       this.initialized = false;
     }
   }
 
+  /** يبعت التوكن المحفوظ للسيرفر (لو المستخدم لسه ما سجلش دخول هيفشل بهدوء وهنحاول بعد الدخول) */
+  sync(): void {
+    if (!this.token || this.synced) return;
+    this.synced = true; // نمنع طلبين في نفس الوقت — لو فشل بنرجعها false
+    this.http.post(`${environment.apiUrl}/push/register`, {
+      token: this.token,
+      platform: Capacitor.getPlatform(),
+    }).subscribe({
+      next: () => console.log('[push] token saved on server'),
+      error: e => { this.synced = false; console.warn('[push] save token failed', e?.status); },
+    });
+  }
+
   /** نادِها عند تسجيل الخروج، عشان الجهاز ميستقبلش إشعارات الحساب ده */
   async unregister(): Promise<void> {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = this.token || localStorage.getItem(TOKEN_KEY);
     if (!token) return;
     try {
       await this.http.post(`${environment.apiUrl}/push/unregister`, { token }).toPromise();
     } catch { /* مش مهم لو فشل */ }
-    localStorage.removeItem(TOKEN_KEY);
+    this.synced = false;
   }
 }
