@@ -444,42 +444,52 @@ const SUGGESTIONS_AR = [
     </div>
   </div>
 
-  <!-- Conversations Drawer — محادثات النطاق الحالي (القطيع المختار أو العامة) -->
+  <!-- Conversations Drawer — مجمّعة حسب القطيع -->
   <div *ngIf="showConversations()" class="fixed inset-0 bg-black/50 z-50" (click)="showConversations.set(false)">
     <div class="ai-drawer absolute top-0 bottom-0 start-0 w-72 max-w-[85%] shadow-2xl flex flex-col"
          (click)="$event.stopPropagation()">
       <div class="ai-drawer-border px-4 pt-4 pb-3 border-b">
         <p class="text-sm font-bold">المحادثات</p>
-        <p class="ai-plan-sub text-xs mt-0.5">{{ activeFlockName() ? '🐔 ' + activeFlockName() : '💬 محادثات عامة' }}</p>
+        <p class="ai-plan-sub text-xs mt-0.5">كل قطيع وله محادثاته</p>
       </div>
-      <div class="p-3">
-        <button type="button" (click)="newChat()" [disabled]="loading()"
-                class="w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-                style="background:#2A2A28">＋ محادثة جديدة</button>
-      </div>
-      <div class="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
-        <p *ngIf="!conversations().length" class="ai-plan-sub text-xs text-center py-6">مفيش محادثات لسه</p>
-        <p *ngIf="conversations().length" class="ai-plan-sub text-[11px] text-center pb-2">اضغط مطولًا على أي محادثة لحذفها</p>
-        <div *ngFor="let c of conversations()"
-             class="ai-conv rounded-xl px-3 py-2.5 flex items-center gap-1 cursor-pointer"
-             [class.ai-conv-active]="c.id === activeConversationId()"
-             (click)="onConvTap(c)"
-             (pointerdown)="pressStart(c)" (pointerup)="pressEnd()" (pointerleave)="pressEnd()"
-             (pointercancel)="pressEnd()" (contextmenu)="$event.preventDefault()"
-             style="-webkit-touch-callout:none;user-select:none">
-          <ng-container *ngIf="renamingId() !== c.id; else renameBox">
-            <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
-            <button type="button" class="text-xs opacity-60 px-1" (click)="startRename(c, $event)">✏️</button>
-          </ng-container>
-          <ng-template #renameBox>
-            <input id="ai-rename-input" dir="rtl" maxlength="120"
-                   class="ai-rename-input flex-1 min-w-0 rounded-lg px-2 py-1 text-sm focus:outline-none"
-                   [(ngModel)]="renameText"
-                   (click)="$event.stopPropagation()"
-                   (keydown.enter)="confirmRename(c)"
-                   (blur)="confirmRename(c)"/>
-          </ng-template>
+      <div class="flex-1 overflow-y-auto px-2 py-2">
+        <div *ngFor="let g of groups()" class="mb-1">
+          <!-- عنوان القطيع -->
+          <div class="ai-conv rounded-xl px-3 py-2.5 flex items-center gap-2 cursor-pointer" (click)="toggleGroup(g.key)">
+            <span class="text-xs opacity-60 w-3">{{ isExpanded(g.key) ? '▾' : '▸' }}</span>
+            <span class="flex-1 min-w-0 truncate text-sm font-semibold">{{ g.label }}</span>
+            <span class="ai-plan-sub text-xs">{{ g.conversations.length }}</span>
+            <button type="button" (click)="newChatIn(g.flockId, $event)" [disabled]="loading()" title="محادثة جديدة"
+                    class="w-7 h-7 rounded-lg text-white text-base leading-none disabled:opacity-40"
+                    style="background:#2A2A28">＋</button>
+          </div>
+          <!-- محادثات القطيع -->
+          <div *ngIf="isExpanded(g.key)" class="ps-3 space-y-0.5 mt-0.5">
+            <div *ngIf="isDraft(g.flockId)" class="ai-conv ai-conv-active rounded-xl px-3 py-2 text-sm opacity-80">✨ محادثة جديدة</div>
+            <div *ngFor="let c of g.conversations"
+                 class="ai-conv rounded-xl px-3 py-2.5 flex items-center gap-1 cursor-pointer"
+                 [class.ai-conv-active]="c.id === activeConversationId()"
+                 (click)="onConvTap(c)"
+                 (pointerdown)="pressStart(c)" (pointerup)="pressEnd()" (pointerleave)="pressEnd()"
+                 (pointercancel)="pressEnd()" (contextmenu)="$event.preventDefault()"
+                 style="-webkit-touch-callout:none;user-select:none">
+              <ng-container *ngIf="renamingId() !== c.id; else renameBox">
+                <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
+                <button type="button" class="text-xs opacity-60 px-1" (click)="startRename(c, $event)">✏️</button>
+              </ng-container>
+              <ng-template #renameBox>
+                <input id="ai-rename-input" dir="rtl" maxlength="120"
+                       class="ai-rename-input flex-1 min-w-0 rounded-lg px-2 py-1 text-sm focus:outline-none"
+                       [(ngModel)]="renameText"
+                       (click)="$event.stopPropagation()"
+                       (keydown.enter)="confirmRename(c)"
+                       (blur)="confirmRename(c)"/>
+              </ng-template>
+            </div>
+            <p *ngIf="!g.conversations.length && !isDraft(g.flockId)" class="ai-plan-sub text-xs px-3 py-2">مفيش محادثات — دوس ＋</p>
+          </div>
         </div>
+        <p class="ai-plan-sub text-[11px] text-center pt-3">اضغط مطولًا على أي محادثة لحذفها</p>
       </div>
     </div>
   </div>
@@ -539,6 +549,18 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   activeFlockId = signal<string | null>(null);
   activeFlockName = signal<string | null>(null);
   conversations = signal<Conversation[]>([]);
+  /** المحادثات مجمّعة: أسئلة عامة + كل قطيع باسمه */
+  groups = computed(() => {
+    const all = this.conversations();
+    const of = (id: string | null) => all.filter(c => (c.flock_id ?? null) === id);
+    return [
+      { key: 'general', flockId: null as string | null, label: '💬 أسئلة عامة', conversations: of(null) },
+      ...this.allFlocks().map(f => ({
+        key: f.id, flockId: f.id as string | null, label: '🐔 ' + f.name, conversations: of(f.id),
+      })),
+    ];
+  });
+  expanded = signal<Record<string, boolean>>({});
   activeConversationId = signal<string | null>(null);
   showConversations = signal(false);
   renamingId = signal<string | null>(null);
@@ -640,8 +662,38 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     const flock = this.allFlocks().find(f => f.id === flockId);
     this.activeFlockName.set(flock?.name ?? null);
     // كل قطيع ليه محادثاته الخاصة — نفتح آخر محادثة للقطيع ده (أو شات جديد لو مفيش)
-    this.conversations.set([]);
-    this.loadConversations(true);
+    this.openLatestFor(flockId);
+  }
+
+  private openLatestFor(flockId: string | null) {
+    const c = this.conversations().find(x => (x.flock_id ?? null) === (flockId ?? null));
+    if (c) this.openConversation(c, false);
+    else this.startEmptyChat();
+  }
+
+  private syncFlock(flockId: string | null) {
+    this.activeFlockId.set(flockId);
+    this.activeFlockName.set(this.allFlocks().find(f => f.id === flockId)?.name ?? null);
+  }
+
+  isExpanded(key: string) { return this.expanded()[key] ?? (key === (this.activeFlockId() ?? 'general')); }
+  toggleGroup(key: string) { this.expanded.update(e => ({ ...e, [key]: !this.isExpanded(key) })); }
+
+  /** صف "محادثة جديدة" المؤقت: الشات الفاضي المفتوح حاليًا لسه ما اتحفظش */
+  isDraft(flockId: string | null) {
+    return this.activeConversationId() === null
+      && (this.activeFlockId() ?? null) === (flockId ?? null)
+      && this.messages().length <= 1;
+  }
+
+  /** ＋ جنب اسم القطيع: يفتح شات جديد فاضي للقطيع ده */
+  newChatIn(flockId: string | null, e: Event) {
+    e.stopPropagation();
+    if (this.loading()) return;
+    this.stopSpeaking();
+    this.syncFlock(flockId);
+    this.showConversations.set(false);
+    this.startEmptyChat();
   }
 
   isAuthed() { return this.auth.isAuthenticated(); }
@@ -649,15 +701,10 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   /** محادثات النطاق الحالي: القطيع المختار، أو المحادثات العامة لو مفيش قطيع */
   loadConversations(openLatest = false) {
     const flockId = this.activeFlockId();
-    const qs = flockId ? `flock_id=${encodeURIComponent(flockId)}` : 'general=true';
-    this.http.get<Conversation[]>(`${environment.apiUrl}/ai/conversations?${qs}`).subscribe({
+    this.http.get<Conversation[]>(`${environment.apiUrl}/ai/conversations?limit=300`).subscribe({
       next: (list) => {
-        if (this.activeFlockId() !== flockId) return; // المستخدم غيّر القطيع قبل ما الرد يوصل
         this.conversations.set(list || []);
-        if (openLatest) {
-          if (list?.length) this.openConversation(list[0], false);
-          else this.startEmptyChat();
-        }
+        if (openLatest && this.activeFlockId() === flockId) this.openLatestFor(flockId);
       },
       error: () => { if (openLatest) this.startEmptyChat(); }
     });
@@ -668,16 +715,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     if (this.loading()) return;
     this.stopSpeaking();
     this.showConversations.set(false);
-    // لو فيه محادثة فاضية مفتوحة بالفعل، كمّل فيها بدل ما نكدّس محادثات فاضية
-    if (this.activeConversationId() && this.messages().length <= 1) return;
-    this.http.post<Conversation>(`${environment.apiUrl}/ai/conversations`, { flock_id: this.activeFlockId() }).subscribe({
-      next: (c) => {
-        this.conversations.update(l => [c, ...l.filter(x => x.id !== c.id)]);
-        this.startEmptyChat();
-        this.activeConversationId.set(c.id);
-      },
-      error: () => this.startEmptyChat() // السيرفر هيفتحها مع أول رسالة
-    });
+    if (this.activeConversationId() === null && this.messages().length <= 1) return; // الشات الفاضي مفتوح أصلًا
+    this.startEmptyChat();
   }
 
   private startEmptyChat() {
@@ -1245,6 +1284,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
 
   onConvTap(c: Conversation) {
     if (this.longPressed) { this.longPressed = false; return; } // الضغطة المطولة خلصت، مش فتح
+    if (this.loading()) return;
+    this.syncFlock(c.flock_id ?? null);
     this.openConversation(c);
   }
 
