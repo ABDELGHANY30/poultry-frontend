@@ -12,6 +12,9 @@ import { UserOfflineCacheService } from './user-offline-cache.service';
 // التوكن في cookie HttpOnly بيحطها السيرفر، والـ user بييجي من /auth/me.
 const TOKEN_KEY = 'spa_token';
 const USER_KEY  = 'spa_user';
+// ويب: نسخة مصغّرة من المستخدم (بدون أي توكن) عشان التطبيق يفتح "مسجّل دخول" وإنت أوفلاين.
+// مفتاح مختلف عن USER_KEY لأن purgeLegacyLocalStorage بتمسح USER_KEY.
+const WEB_USER_KEY = 'spa_user_web';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -66,16 +69,71 @@ export class AuthService {
     }
 
     // ويب: مفيش طريقة نعرف إحنا مسجلين ولا لأ من غير ما نسأل السيرفر (الكوكي HttpOnly مش مقروءة).
+    this.listenForReconnectWeb();
+
+    // 📴 أوفلاين من الأول: ما نستناش timeout — نفتح بالنسخة المصغّرة المحفوظة (لو فيه).
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._user.set(this.readWebUser());
+      return;
+    }
+
     // timeout عشان بدء التطبيق ميتعطلش لو السيرفر بطيء.
     try {
       const u = await firstValueFrom(
         this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).pipe(timeout(8000))
       );
       this._user.set(u);
+      this.persistWebUser(u);
     } catch (e) {
-      // 401/403/شبكة/timeout → نكمل كزائر (الموقع مفتوح للتصفح)
-      this._user.set(null);
+      if (e instanceof HttpErrorResponse && (e.status === 401 || e.status === 403)) {
+        // السيرفر رفض الجلسة → زائر + نمسح النسخة المحفوظة
+        this.clearWebUser();
+        this._user.set(null);
+      } else {
+        // شبكة/timeout/سيرفر نايم → نفضل مسجّلين بالنسخة المحفوظة (أو زائر لو مفيش)
+        this._user.set(this.readWebUser());
+      }
     }
+  }
+
+  // ── ويب: نسخة المستخدم المصغّرة للأوفلاين ──────────────────
+  // ⚠️ للعرض في الواجهة فقط — مفيش توكن بيتخزن، والحماية الحقيقية في الباك.
+  private readWebUser(): User | null {
+    try {
+      const raw = localStorage.getItem(WEB_USER_KEY);
+      const cached = raw ? JSON.parse(raw) : null;
+      return cached?.id != null ? (cached as User) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private persistWebUser(user: User): void {
+    if (this.isNative) return;
+    try {
+      const u = user as any;
+      localStorage.setItem(WEB_USER_KEY, JSON.stringify({ id: u.id, name: u.name, language: u.language, role: u.role }));
+    } catch { /* storage مقفول — مش مشكلة */ }
+  }
+
+  private clearWebUser(): void {
+    try { localStorage.removeItem(WEB_USER_KEY); } catch { /* مش مشكلة */ }
+  }
+
+  /** لما النت يرجع: نتأكد إن الجلسة لسه شغالة. 401/403 → نخرّج محلياً. أي خطأ تاني → نسيبه. */
+  private _reconnectBound = false;
+  private listenForReconnectWeb(): void {
+    if (this._reconnectBound || typeof window === 'undefined') return;
+    this._reconnectBound = true;
+    window.addEventListener('online', () => {
+      if (!this._user()) return;
+      this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).subscribe({
+        next: u => { this._user.set(u); this.persistWebUser(u); },
+        error: (err: HttpErrorResponse) => {
+          if (err.status === 401 || err.status === 403) void this.clearAuth();
+        },
+      });
+    });
   }
 
   private async runInitNative(): Promise<void> {
@@ -116,7 +174,8 @@ export class AuthService {
       this.nativeSet(TOKEN_KEY, token).catch(() => {});
       this.persistMinimalUserNative(user);
     }
-    // ويب: الكوكي اتحطت من السيرفر في رد الـ login — مفيش حاجة نخزنها هنا.
+    // ويب: الكوكي اتحطت من السيرفر في رد الـ login. بنخزن بس نسخة المستخدم المصغّرة للأوفلاين.
+    this.persistWebUser(user);
   }
 
   /**
@@ -127,7 +186,10 @@ export class AuthService {
   async currentUserId(): Promise<string | null> {
     const u = this._user() as any;
     if (u?.id != null) return String(u.id);
-    if (!this.isNative) return null;
+    if (!this.isNative) {
+      const w = this.readWebUser() as any;
+      return w?.id != null ? String(w.id) : null;
+    }
     try {
       const raw = await this.nativeGet(USER_KEY);
       const id = raw ? JSON.parse(raw)?.id : null;
@@ -140,6 +202,7 @@ export class AuthService {
   private async clearAuth(): Promise<void> {
     this._token.set(null);
     this._user.set(null);
+    this.clearWebUser();
     if (this.isNative) {
       await Promise.all([this.nativeRemove(TOKEN_KEY), this.nativeRemove(USER_KEY)]).catch(() => {});
     }
