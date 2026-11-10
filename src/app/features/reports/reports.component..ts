@@ -1,6 +1,7 @@
 import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
 import { CommonModule, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
@@ -577,6 +578,7 @@ export class ReportsComponent implements OnInit {
   private auth = inject(AuthService);
   private store = inject(UserOfflineCacheService);
   private pendingSvc = inject(PendingRecordsService);
+  private route = inject(ActivatedRoute);
   lang = localStorage.getItem('lang') ?? 'ar';
 
   fcrData = signal<any[]>([]);
@@ -735,7 +737,10 @@ export class ReportsComponent implements OnInit {
 
   private afterFlocksReady() {
     const list = this.flocks();
-    if (list.length && !this.selectedFlockId) this.selectedFlockId = list[0].id;
+    // جاي من كارت لوحة التحكم ("التقرير الكامل"): /reports?flock=<id> بيفتح نفس القطيع
+    const wanted = this.route.snapshot?.queryParamMap?.get('flock');
+    if (wanted && list.some(f => f.id === wanted)) this.selectedFlockId = wanted;
+    else if (list.length && !this.selectedFlockId) this.selectedFlockId = list[0].id;
     this.loadMortality();
     if (this.isOffline()) this.loadFcr(); // نحسب الـ FCR من السجلات المحفوظة بعد ما قايمة القطعان تجهز
     if (this.selectedFlockId) this.onFlockChange(); // كان التاب الافتراضي بيفضل فاضي لحد ما المستخدم يلمس حاجة

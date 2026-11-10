@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, computed, signal, effect, untracked, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
 import { FlockService } from '../../core/services/flock.service';
@@ -12,6 +12,7 @@ import { HealthScoreWidgetComponent } from '../../features/Healthscorewidget/Hea
 import { DecisionSimulatorComponent } from '../../features/desicion/desicion.component';
 import { ReferralCardComponent } from '../../features/referral_card.component.ts/referral-card.component'; // ⚠️ عدّل المسار حسب مكانه الفعلي
 import { StreakService } from '../../core/services/streak.service'; // ⚠️ عدّل المسار حسب مكانه الفعلي
+import { FlockReportCardComponent } from '../reports/flock-report-card.component'; // ⚠️ عدّل المسار حسب مكان ملفات التقارير
 
 const CATEGORIES = [
   { value: 'broiler',   label: 'بورصة الفراخ',     icon: '🐔', color: '#e8f5e9', headerColor: '#2d9e5f', unit: 'كجم' },
@@ -27,7 +28,7 @@ const CATEGORIES = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, TranslateModule, HealthScoreWidgetComponent, DecisionSimulatorComponent, ReferralCardComponent],
+  imports: [CommonModule, RouterLink, TranslateModule, HealthScoreWidgetComponent, DecisionSimulatorComponent, ReferralCardComponent,FlockReportCardComponent],
   template: `
   <div class="page-wrapper" dir="rtl">
 
@@ -263,6 +264,10 @@ const CATEGORIES = [
         (flockSelected)="selectedFlockId.set($event)">
       </app-health-score-widget>
 
+      <!-- 📊 تقرير القطيع المختار (آخر 7 أيام): بيتغيّر لما تختار قطيع تاني من كارت الصحة اللي فوق -->
+      <app-flock-report-card *ngIf="currentFlock() as f" [flock]="f" [showClose]="false"
+                             (openFull)="openFullReport($event)"></app-flock-report-card>
+
       <!-- 📈 صاحب القطيع: الأسعار المختصرة تحت صحة القطيع مباشرة -->
       <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
 
@@ -393,6 +398,7 @@ export class DashboardComponent implements OnInit {
   private auth = inject(AuthService);
   private http = inject(HttpClient);
   private streakSvc = inject(StreakService);
+  private router = inject(Router);
 
   bannerStreakText = computed(() => {
     const s: any = this.streakSvc.streak() ?? this.cachedStreak();
@@ -643,6 +649,11 @@ export class DashboardComponent implements OnInit {
         // أي خطأ تاني (أوفلاين مثلاً): بنسيب آخر تقرير محفوظ معروض
       },
     });
+  }
+
+  /** "التقرير الكامل" من كارت التقرير: يفتح صفحة التقارير على نفس القطيع */
+  openFullReport(flockId: string) {
+    void this.router.navigate(['/reports'], { queryParams: { flock: flockId } });
   }
 
   downloadCyclePdf() {

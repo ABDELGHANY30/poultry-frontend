@@ -29,10 +29,10 @@ const SHORT_LABELS: Record<string, string> = {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-  <div>
+  <div class="pb-6">
 
     <!-- Header -->
-    <div class="rounded-3xl text-white px-6 py-4 mb-4"
+    <div class="rounded-3xl text-white px-4 py-3 sm:px-6 sm:py-4 mb-3"
          style="background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 100%)">
       <h1 class="text-lg font-bold">🧬 تركيب العلف</h1>
       <p class="text-white/70 text-xs mt-0.5">اختار الطائر والمرحلة وهتظهر لك الخلطة على طول</p>
@@ -43,14 +43,14 @@ const SHORT_LABELS: Record<string, string> = {
 
       <div>
         <p class="text-sm font-bold text-gray-700 mb-2">1️⃣ اختار الطائر</p>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
           <button *ngFor="let g of groups" (click)="pickGroup(g.id)" [disabled]="isDisabledGroup(g.id)"
-                  class="relative rounded-2xl py-2.5 px-1 text-center border-2 transition-all"
+                  class="relative rounded-2xl py-3 px-1 min-h-[76px] text-center border-2 transition-all"
                   [class.border-indigo-500]="groupId === g.id" [class.bg-indigo-50]="groupId === g.id"
                   [class.border-gray-100]="groupId !== g.id" [class.bg-white]="groupId !== g.id"
                   [class.opacity-50]="isDisabledGroup(g.id)">
             <div class="text-2xl leading-none">{{ g.icon }}</div>
-            <div class="text-[11px] font-semibold leading-tight mt-1 text-gray-700">{{ g.label }}</div>
+            <div class="text-xs font-semibold leading-tight mt-1 text-gray-700">{{ g.label }}</div>
             <span *ngIf="isDisabledGroup(g.id)"
                   class="absolute -top-1.5 -left-1.5 bg-gray-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md -rotate-12 shadow">
               غير متاح
@@ -61,7 +61,7 @@ const SHORT_LABELS: Record<string, string> = {
 
       <div>
         <p class="text-sm font-bold text-gray-700 mb-2">2️⃣ المرحلة</p>
-        <select [ngModel]="profileKey" (ngModelChange)="profileKey = $event; onProfileChange()" class="form-input">
+        <select [ngModel]="profileKey" (ngModelChange)="profileKey = $event; onProfileChange()" class="form-input nrc-num">
           <option *ngFor="let p of stages()" [value]="p.key">{{ stageLabel(p) }}</option>
         </select>
       </div>
@@ -69,10 +69,10 @@ const SHORT_LABELS: Record<string, string> = {
       <div>
         <p class="text-sm font-bold text-gray-700 mb-2">3️⃣ كمية العلف</p>
         <div class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-3">
-          <button (click)="setQtyMode('kg')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+          <button (click)="setQtyMode('kg')" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all"
                   [class.bg-white]="qtyMode === 'kg'" [class.shadow]="qtyMode === 'kg'"
                   [class.text-indigo-700]="qtyMode === 'kg'" [class.text-gray-500]="qtyMode !== 'kg'">⚖️ بالكيلو</button>
-          <button (click)="setQtyMode('birds')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+          <button (click)="setQtyMode('birds')" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all"
                   [class.bg-white]="qtyMode === 'birds'" [class.shadow]="qtyMode === 'birds'"
                   [class.text-indigo-700]="qtyMode === 'birds'" [class.text-gray-500]="qtyMode !== 'birds'">🐔 من عدد الطيور</button>
         </div>
@@ -80,32 +80,32 @@ const SHORT_LABELS: Record<string, string> = {
         <div *ngIf="qtyMode === 'kg'" class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-xs text-gray-500 block mb-1">الكمية (كجم)</label>
-            <input type="number" min="1" [ngModel]="batchKg" (ngModelChange)="batchKg = $event; calculate()"
-                   class="form-input" placeholder="100"/>
+            <input type="number" inputmode="decimal" min="1" [ngModel]="batchKg" (ngModelChange)="batchKg = $event; calculate()"
+                   class="form-input nrc-num" placeholder="100"/>
           </div>
           <div *ngIf="profile().isPerDay">
             <label class="text-xs text-gray-500 block mb-1">علف الدجاجة/يوم (جم)</label>
-            <input type="number" min="50" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
-                   class="form-input" placeholder="150"/>
+            <input type="number" inputmode="decimal" min="50" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
+                   class="form-input nrc-num" placeholder="150"/>
           </div>
         </div>
 
         <div *ngIf="qtyMode === 'birds'">
-          <div class="grid grid-cols-3 gap-2">
-            <div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="order-1">
               <label class="text-xs text-gray-500 block mb-1">عدد الطيور</label>
-              <input type="number" min="1" [ngModel]="animals" (ngModelChange)="animals = $event; calculate()"
-                     class="form-input" placeholder="1000"/>
+              <input type="number" inputmode="decimal" min="1" [ngModel]="animals" (ngModelChange)="animals = $event; calculate()"
+                     class="form-input nrc-num" placeholder="1000"/>
             </div>
-            <div>
+            <div class="order-3 col-span-2">
               <label class="text-xs text-gray-500 block mb-1">علف الطائر/يوم (جم)</label>
-              <input type="number" min="1" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
-                     class="form-input" [placeholder]="profile().isPerDay ? '150' : 'جم'"/>
+              <input type="number" inputmode="decimal" min="1" [ngModel]="intakeG" (ngModelChange)="intakeG = $event; calculate()"
+                     class="form-input nrc-num" [placeholder]="profile().isPerDay ? '150' : 'جم'"/>
             </div>
-            <div>
+            <div class="order-2">
               <label class="text-xs text-gray-500 block mb-1">لمدة (أيام)</label>
-              <input type="number" min="1" [ngModel]="days" (ngModelChange)="days = $event; calculate()"
-                     class="form-input" placeholder="7"/>
+              <input type="number" inputmode="decimal" min="1" [ngModel]="days" (ngModelChange)="days = $event; calculate()"
+                     class="form-input nrc-num" placeholder="7"/>
             </div>
           </div>
           <div *ngIf="computedBatch() !== null" class="mt-2 bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-800">
@@ -115,7 +115,7 @@ const SHORT_LABELS: Record<string, string> = {
           <p *ngIf="computedBatch() === null" class="mt-2 text-xs text-amber-700">
             اكتب عدد الطيور وكام جرام بياكل الطائر في اليوم عشان تظهر الكمية.
           </p>
-          <p class="mt-1 text-[11px] text-gray-400">استهلاك الطائر بيختلف بالعمر والسلالة — راجع جدول سلالتك أو سجلاتك.</p>
+          <p class="mt-1 text-xs text-gray-400">استهلاك الطائر بيختلف بالعمر والسلالة — راجع جدول سلالتك أو سجلاتك.</p>
         </div>
       </div>
     </div>
@@ -132,21 +132,23 @@ const SHORT_LABELS: Record<string, string> = {
         <p class="text-base font-bold text-gray-800">🌾 الخلطة لـ {{ lastBatch | number:'1.0-2' }} كجم</p>
         <p class="text-xs text-gray-400 mb-3">{{ stageLabel(profile()) }}</p>
 
-        <div *ngFor="let row of formulaRows(r); trackBy: trackByKey" class="py-2.5 border-b border-gray-100">
-          <div class="flex items-center gap-2">
+        <div *ngFor="let row of formulaRows(r); trackBy: trackByKey" class="py-3 border-b border-gray-100">
+          <div class="flex items-start gap-2">
             <div class="flex-1 min-w-0">
-              <p class="text-sm text-gray-800">{{ row.name }}</p>
-              <p *ngIf="row.note" class="text-[11px] text-gray-400">{{ row.note }}</p>
+              <p class="text-sm font-semibold text-gray-800 leading-snug">{{ row.name }}</p>
+              <p *ngIf="row.note" class="text-xs text-gray-400 leading-snug">{{ row.note }}</p>
             </div>
-            <span class="text-base font-black text-gray-900">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></span>
-            <span class="text-[11px] text-gray-400 w-12 text-left" dir="ltr">{{ row.pct | number:'1.0-1' }}%</span>
-            <button (click)="toggleIngredient(row.key)" class="text-gray-300 text-lg leading-none px-1" title="مش عندي الخامة دي">✕</button>
+            <div class="text-left flex-shrink-0">
+              <div class="text-base font-black text-gray-900 whitespace-nowrap">{{ row.kg | number:'1.0-1' }} <span class="text-xs font-normal text-gray-400">كجم</span></div>
+              <div class="text-xs text-gray-400" dir="ltr">{{ row.pct | number:'1.0-1' }}%</div>
+            </div>
+            <button (click)="toggleIngredient(row.key)" class="nrc-tap text-gray-400 text-lg leading-none" aria-label="مش عندي الخامة دي" title="مش عندي الخامة دي">✕</button>
           </div>
-          <div class="flex items-center gap-2 mt-1.5">
-            <span class="text-[11px] text-gray-400">سعر الكجم</span>
-            <input type="number" step="any" min="0" class="form-input text-xs py-1 px-2 w-20" placeholder="جنيه"
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            <span class="text-xs text-gray-500">سعر الكجم</span>
+            <input type="number" inputmode="decimal" step="any" min="0" class="form-input nrc-num w-24" placeholder="جنيه"
                    [value]="priceValue(row.key) ?? ''" (change)="onPriceChange(row.key, $event)"/>
-            <span *ngIf="rowCost(row) !== null" class="text-xs text-indigo-700 font-semibold">= {{ rowCost(row) | number:'1.0-0' }} جنيه</span>
+            <span *ngIf="rowCost(row) !== null" class="text-sm text-indigo-700 font-semibold whitespace-nowrap">= {{ rowCost(row) | number:'1.0-0' }} جنيه</span>
           </div>
         </div>
 
@@ -154,13 +156,13 @@ const SHORT_LABELS: Record<string, string> = {
           <div class="flex items-center gap-2">
             <span class="flex-1 text-sm">💊 بريمكس (فيتامينات ومعادن)</span>
             <span class="text-base font-black">{{ r.premix_kg | number:'1.0-2' }} <span class="text-xs font-normal">كجم</span></span>
-            <span class="w-12"></span><span class="w-6"></span>
+            
           </div>
-          <div class="flex items-center gap-2 mt-1.5">
-            <span class="text-[11px] text-gray-400">سعر الكجم</span>
-            <input type="number" step="any" min="0" class="form-input text-xs py-1 px-2 w-20" placeholder="جنيه"
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            <span class="text-xs text-gray-500">سعر الكجم</span>
+            <input type="number" inputmode="decimal" step="any" min="0" class="form-input nrc-num w-24" placeholder="جنيه"
                    [value]="premixPrice ?? ''" (change)="onPremixChange($event)"/>
-            <span *ngIf="premixCost(r) !== null" class="text-xs font-semibold">= {{ premixCost(r) | number:'1.0-0' }} جنيه</span>
+            <span *ngIf="premixCost(r) !== null" class="text-sm font-semibold whitespace-nowrap">= {{ premixCost(r) | number:'1.0-0' }} جنيه</span>
           </div>
         </div>
 
@@ -182,7 +184,7 @@ const SHORT_LABELS: Record<string, string> = {
           </div>
         </div>
 
-        <p class="text-[11px] text-gray-400 mt-1">لو في خامة مش عندك اضغط ✕ جنبها وهتتغير الخلطة.</p>
+        <p class="text-xs text-gray-400 mt-1">لو في خامة مش عندك اضغط ✕ جنبها وهتتغير الخلطة.</p>
 
         <div *ngIf="r.ok" class="mt-3 bg-green-50 rounded-xl px-3 py-2 text-sm text-green-700 font-semibold">
           ✅ الخلطة مطابقة لاحتياج الطائر
@@ -191,17 +193,19 @@ const SHORT_LABELS: Record<string, string> = {
           ⚠️ الخلطة مش مطابقة تماماً (فيه {{ failedChecks(r).length }} قيد). جرّب تفعّل خامات أكتر من الخيارات المتقدمة.
         </div>
 
-        <button (click)="showDetails.set(!showDetails())" class="mt-3 text-xs text-indigo-700 font-semibold">
+        <button (click)="showDetails.set(!showDetails())" class="mt-3 py-2 text-sm text-indigo-700 font-semibold">
           {{ showDetails() ? '▲ إخفاء' : '▼ عرض' }} التحليل الغذائي
         </button>
         <div *ngIf="showDetails()" class="mt-2">
-          <div *ngFor="let ch of r.checks" class="flex items-center gap-2 py-1.5 border-b border-gray-50 text-sm">
+          <div *ngFor="let ch of r.checks" class="flex items-start gap-2 py-2 border-b border-gray-50 text-sm">
             <span class="w-5 flex-shrink-0">{{ ch.ok ? '✅' : '❌' }}</span>
-            <span class="flex-1 min-w-0">{{ ch.label }}</span>
-            <span class="font-semibold" [class.text-red-600]="!ch.ok">{{ ch.value }}</span>
-            <span class="text-[11px] text-gray-400 w-20 text-left flex-shrink-0" dir="ltr">{{ reqText(ch) }}</span>
+            <span class="flex-1 min-w-0 leading-snug">{{ ch.label }}</span>
+            <div class="flex-shrink-0 text-left">
+              <div class="font-semibold whitespace-nowrap" [class.text-red-600]="!ch.ok">{{ ch.value }}</div>
+              <div class="text-xs text-gray-400" dir="ltr">{{ reqText(ch) }}</div>
+            </div>
           </div>
-          <p class="text-[11px] text-gray-400 mt-2">📚 المصدر: {{ r.src }}</p>
+          <p class="text-xs text-gray-400 mt-2">📚 المصدر: {{ r.src }}</p>
         </div>
       </div>
     </div>
@@ -209,7 +213,7 @@ const SHORT_LABELS: Record<string, string> = {
     <!-- خيارات متقدمة (مخفية) -->
     <div class="card mt-4">
       <button (click)="showAdvanced.set(!showAdvanced())"
-              class="w-full flex items-center justify-between text-sm font-bold text-gray-600">
+              class="w-full flex items-center justify-between py-1 text-sm font-bold text-gray-600">
         <span>⚙️ خيارات متقدمة <span class="text-xs font-normal text-gray-400">(الخامات، الأسعار، التحليل المعملي)</span></span>
         <span>{{ showAdvanced() ? '▲' : '▼' }}</span>
       </button>
@@ -223,7 +227,7 @@ const SHORT_LABELS: Record<string, string> = {
 
         <div class="flex gap-2 flex-wrap">
           <button *ngFor="let s of setIds" (click)="applySet(s)"
-                  class="text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50">
+                  class="text-sm px-4 py-2 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50">
             {{ setLabel(s) }}
           </button>
         </div>
@@ -231,65 +235,71 @@ const SHORT_LABELS: Record<string, string> = {
         <div *ngFor="let sec of ingSections" class="space-y-2">
           <div class="pt-2">
             <p class="text-xs font-bold text-gray-700">{{ sec.group.icon }} {{ sec.group.label }}</p>
-            <p class="text-[11px] text-gray-400">{{ sec.group.hint }}</p>
+            <p class="text-xs text-gray-400">{{ sec.group.hint }}</p>
           </div>
 
-          <div *ngFor="let i of sec.items" class="border border-gray-100 rounded-xl p-2"
+          <div *ngFor="let i of sec.items" class="border border-gray-100 rounded-xl p-3"
                [class.opacity-50]="!isAvailable(i.key)">
-            <div class="flex items-center gap-2">
+            <div class="flex items-start gap-3">
               <input type="checkbox" [checked]="isAvailable(i.key)" (change)="toggleIngredient(i.key)"
-                     class="w-5 h-5 flex-shrink-0"/>
+                     class="w-6 h-6 flex-shrink-0 mt-0.5"/>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-gray-800">{{ i.ar }}</p>
-                <p *ngIf="i.note" class="text-[11px] text-gray-500">{{ i.note }}</p>
+                <p *ngIf="i.note" class="text-xs text-gray-500 leading-snug">{{ i.note }}</p>
                 <div class="flex flex-wrap gap-1 mt-1">
-                  <span *ngFor="let st of i.stats" class="text-[10px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{{ st }}</span>
+                  <span *ngFor="let st of i.stats" class="text-[11px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{{ st }}</span>
                 </div>
               </div>
-              <div class="flex-shrink-0 text-center">
-                <input type="number" step="any" min="0" class="form-input text-sm py-1 px-2 w-20"
-                       [placeholder]="'' + i.price" [ngModel]="priceValue(i.key)"
-                       (ngModelChange)="setPrice(i.key, $event)"/>
-                <span class="text-[10px] text-gray-400">جنيه/كجم</span>
-              </div>
-              <button (click)="toggleLab(i.key)" class="text-base flex-shrink-0"
-                      [class.opacity-40]="labCount(i.key) === 0" title="تحليل معملي">🔬</button>
+              <button (click)="toggleLab(i.key)" class="nrc-tap text-lg flex-shrink-0"
+                      [class.opacity-40]="labCount(i.key) === 0" aria-label="تحليل معملي" title="تحليل معملي">🔬</button>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-xs text-gray-500">سعر الكجم (جنيه)</span>
+              <input type="number" inputmode="decimal" step="any" min="0" class="form-input nrc-num w-28"
+                     [placeholder]="'' + i.price" [ngModel]="priceValue(i.key)"
+                     (ngModelChange)="setPrice(i.key, $event)"/>
             </div>
 
             <div *ngIf="openLab() === i.key" class="mt-2 pt-2 border-t border-gray-100">
-              <p class="text-[11px] text-gray-500 mb-2">
+              <p class="text-xs text-gray-500 mb-2">
                 لو عندك تحليل معملي للخامة اكتب القيم (% على أساس العلف الطازج). الفاضي بياخد القيمة النموذجية.
               </p>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-2 gap-3">
                 <div *ngFor="let a of editableAttrs()">
-                  <label class="text-[10px] text-gray-500 block">{{ shortLabel(a) }}</label>
-                  <input type="number" step="any" class="form-input text-xs py-1 px-2"
+                  <label class="text-xs text-gray-500 block mb-0.5">{{ shortLabel(a) }}</label>
+                  <input type="number" step="any" class="form-input nrc-num"
                          [placeholder]="'' + i.values[a]" [ngModel]="labValue(i.key, a)"
                          (ngModelChange)="setLab(i.key, a, $event)"/>
                 </div>
               </div>
               <button *ngIf="labCount(i.key) > 0" (click)="resetLab(i.key)"
-                      class="text-xs text-red-500 mt-2">↺ رجّع القيم النموذجية</button>
+                      class="text-sm text-red-500 mt-3 py-1">↺ رجّع القيم النموذجية</button>
             </div>
           </div>
         </div>
 
         <div class="border border-gray-100 rounded-xl p-2 flex items-center gap-2">
           <span class="text-sm flex-1">💊 سعر البريمكس (جنيه/كجم)</span>
-          <input type="number" step="any" min="0" class="form-input text-sm py-1 px-2 w-24"
+          <input type="number" step="any" min="0" class="form-input nrc-num w-28" inputmode="decimal"
                  placeholder="12" [ngModel]="premixPrice" (ngModelChange)="premixPrice = $event; calculate()"/>
         </div>
       </div>
     </div>
 
     <!-- تنبيه -->
-    <p class="text-[11px] text-gray-400 leading-relaxed mt-4 px-1">
+    <p class="text-xs text-gray-400 leading-relaxed mt-4 px-1">
       <span *ngIf="groupNote()">📌 {{ groupNote() }} </span>
       البريمكس بنسبة {{ premixPct }}% — اشتريه حسب نوع الطائر. أرقام NRC 1994 قديمة نسبياً، والنتيجة لا تغني عن مختص تغذية؛ جرّب على دفعة صغيرة.
     </p>
 
   </div>
-  `
+  `,
+  styles: [`
+    :host { display: block; }
+    /* 16px يمنع زووم iOS عند الضغط على الخانة، وارتفاع مريح للمس */
+    .nrc-num { font-size: 16px !important; min-height: 42px; }
+    .nrc-tap { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  `]
 })
 export class NrcFormulatorComponent implements OnInit {
   groups: ProfileGroup[] = getProfileGroups();

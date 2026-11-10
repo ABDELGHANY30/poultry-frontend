@@ -592,8 +592,8 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
               <input [(ngModel)]="profitForm.eggs_per_bird_cycle" type="number" class="form-input" placeholder="حسب مدة الدورة (افتراضي)"/>
             </div>
             <div>
-              <label class="form-label">🐔 سعر كيلو الدجاج المستبعد (اختياري)</label>
-              <input [(ngModel)]="profitForm.cull_hen_price_per_kg" type="number" step="0.5" class="form-input" placeholder="بيع الدجاج في آخر الدورة"/>
+              <label class="form-label">🐔 سعر كيلو الدجاج المستبعد (مهم - بدونه الإيراد ناقص)</label>
+              <input [(ngModel)]="profitForm.cull_hen_price_per_kg" type="number" step="0.5" class="form-input" placeholder="مثلاً 60 - بيع الدجاج في آخر الدورة"/>
             </div>
           </ng-container>
 

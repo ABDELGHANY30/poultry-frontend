@@ -1134,14 +1134,27 @@ export function calculateProfitability(d: ProfitabilityInput): any {
       }
     }
     if (eggPrice == null) warnings.push('⚠️ سعر البيضة مش متحدد - الإيراد المتوقع هيطلع صفر لحد ما تدخله');
+    if (d.cull_hen_price_per_kg == null) {
+      warnings.push(
+        '⚠️ سعر كيلو الدجاج المستبعد مش متحدد - إيراد بيع الدجاج في آخر الدورة محسوب صفر، ' +
+        'والربح الفعلي غالباً أعلى (الدجاج المستبعد ممكن يمثل ~10% من الإيراد). دخّل السعر عشان النتيجة تبقى دقيقة'
+      );
+    }
   } else if (sellPrice == null) {
     warnings.push('⚠️ سعر بيع الكيلو مش متحدد - الإيراد المتوقع هيطلع صفر لحد ما تدخله');
   }
 
   const surviving = pyRound(d.bird_count * (1 - mortality / 100));
 
+  // 🥚 في البياض النفوق موزع على فترة الإنتاج، فالعلف والبيض بيتحسبوا على متوسط الطيور الحية
+  // N × (1 − m/2) بدل ما العلف يتحسب على كل الطيور والبيض على الباقي في آخر الدورة
+  // (كان بيظلم الربح من الناحيتين). الدجاج المستبعد بيتباع على الباقي في آخر الدورة.
+  const avgAliveFactor = isEgg ? (1 - mortality / 200) : 1;
+  const avgAlive = d.bird_count * avgAliveFactor;
+  const feedKgUsed = d.total_feed_kg * avgAliveFactor;
+
   const chicksCost = d.bird_count * d.chick_price;
-  const feedCost = d.total_feed_kg * d.feed_price_per_kg;
+  const feedCost = feedKgUsed * d.feed_price_per_kg;
 
   const hasItemized = [d.medicine_cost_per_bird, d.labor_cost_per_bird, d.utilities_cost_per_bird]
     .some(v => v != null);
@@ -1159,13 +1172,18 @@ export function calculateProfitability(d: ProfitabilityInput): any {
     };
   } else {
     otherCosts = feedCost * (otherPct / 100);
+    warnings.push(
+      `ℹ️ الأدوية والعمالة والكهرباء محسوبة تقديرياً ${fmt(otherPct, 0)}% من تكلفة العلف. ` +
+      'دخّل أرقامك الفعلية (أدوية/عمالة/كهرباء للطائر) لنتيجة أدق'
+    );
   }
+  warnings.push('ℹ️ الربح قبل إهلاك المعدات والأقفاص والمباني (تكلفة المعدات مش داخلة في الجدوى)');
   const totalCosts = chicksCost + feedCost + otherCosts;
 
   let revenue: number;
   let revenueBreakdown: any;
   if (isEgg) {
-    const totalEggs = surviving * (eggsPerBird || 0) * (1 - brokenPct / 100);
+    const totalEggs = avgAlive * (eggsPerBird || 0) * (1 - brokenPct / 100);
     const eggsRevenue = totalEggs * (eggPrice || 0);
     // الدجاج المستبعد بيتباع في آخر الدورة (كان مش محسوب خالص)
     const cullRevenue = surviving * avgWeight * (d.cull_hen_price_per_kg || 0);
@@ -1174,6 +1192,7 @@ export function calculateProfitability(d: ProfitabilityInput): any {
       eggs_revenue: pyRound(eggsRevenue, 2),
       cull_hens_revenue: pyRound(cullRevenue, 2),
       total_eggs_expected: pyRound(totalEggs),
+      avg_live_hens: pyRound(avgAlive),
       eggs_per_bird_used: eggsPerBird,
       egg_price: eggPrice || 0,
     };
@@ -1192,6 +1211,7 @@ export function calculateProfitability(d: ProfitabilityInput): any {
     costs: {
       chicks_cost: pyRound(chicksCost, 2),
       feed_cost: pyRound(feedCost, 2),
+      feed_kg_used: pyRound(feedKgUsed, 1),
       other_costs: pyRound(otherCosts, 2),
       other_costs_breakdown: otherBreakdown,
       total_costs: pyRound(totalCosts, 2),
