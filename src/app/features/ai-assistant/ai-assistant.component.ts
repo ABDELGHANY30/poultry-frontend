@@ -192,8 +192,22 @@ const SUGGESTIONS_AR = [
           <span *ngIf="activeFlockName()" class="text-gray-400 text-xs truncate">· 🐔 {{ activeFlockName() }}</span>
         </div>
       </div>
-      <button *ngIf="isAuthed()" type="button" (click)="newChat()" [disabled]="loading()" title="محادثة جديدة"
-              class="w-9 h-9 rounded-full flex items-center justify-center text-base text-gray-600 hover:bg-gray-100 flex-shrink-0 disabled:opacity-40">✏️</button>
+      <div *ngIf="isAuthed()" class="relative flex-shrink-0">
+        <button type="button" (click)="showMenu.set(!showMenu())" title="المزيد"
+                class="w-9 h-9 rounded-full flex items-center justify-center text-xl leading-none text-gray-600 hover:bg-gray-100">⋮</button>
+        <ng-container *ngIf="showMenu()">
+          <div class="fixed inset-0 z-40" (click)="showMenu.set(false)"></div>
+          <div class="ai-drawer ai-drawer-border absolute end-0 top-10 z-50 w-52 rounded-xl border shadow-2xl py-1 overflow-hidden">
+            <button type="button" class="ai-conv w-full text-start px-4 py-2.5 text-sm" (click)="menuNewChat()">＋ محادثة جديدة</button>
+            <button type="button" class="ai-conv w-full text-start px-4 py-2.5 text-sm disabled:opacity-40"
+                    [disabled]="!hasChatContent()" (click)="menuShare()">↗ مشاركة المحادثة</button>
+            <ng-container *ngIf="activeConversationId()">
+              <button type="button" class="ai-conv w-full text-start px-4 py-2.5 text-sm" (click)="menuRename()">✏️ إعادة تسمية</button>
+              <button type="button" class="ai-conv w-full text-start px-4 py-2.5 text-sm text-red-500" (click)="menuDelete()">🗑️ حذف المحادثة</button>
+            </ng-container>
+          </div>
+        </ng-container>
+      </div>
       <div *ngIf="isPro()" class="text-amber-700 bg-amber-50 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0">Pro</div>
       <button *ngIf="!isPro()" type="button" (click)="showUpgradeModal.set(true)"
               class="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0 bg-green-600 text-white">
@@ -444,6 +458,10 @@ const SUGGESTIONS_AR = [
     </div>
   </div>
 
+  <div *ngIf="toast()" class="fixed bottom-24 inset-x-0 flex justify-center z-50 pointer-events-none">
+    <span class="px-4 py-2 rounded-full text-sm text-white shadow-lg" style="background:#2A2A28">{{ toast() }}</span>
+  </div>
+
   <!-- Conversations Drawer — مجمّعة حسب القطيع -->
   <div *ngIf="showConversations()" class="fixed inset-0 bg-black/50 z-50" (click)="showConversations.set(false)">
     <div class="ai-drawer absolute top-0 bottom-0 start-0 w-72 max-w-[85%] shadow-2xl flex flex-col"
@@ -473,18 +491,7 @@ const SUGGESTIONS_AR = [
                  (pointerdown)="pressStart(c)" (pointerup)="pressEnd()" (pointerleave)="pressEnd()"
                  (pointercancel)="pressEnd()" (contextmenu)="$event.preventDefault()"
                  style="-webkit-touch-callout:none;user-select:none">
-              <ng-container *ngIf="renamingId() !== c.id; else renameBox">
-                <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
-                <button type="button" class="text-xs opacity-60 px-1" (click)="startRename(c, $event)">✏️</button>
-              </ng-container>
-              <ng-template #renameBox>
-                <input id="ai-rename-input" dir="rtl" maxlength="120"
-                       class="ai-rename-input flex-1 min-w-0 rounded-lg px-2 py-1 text-sm focus:outline-none"
-                       [(ngModel)]="renameText"
-                       (click)="$event.stopPropagation()"
-                       (keydown.enter)="confirmRename(c)"
-                       (blur)="confirmRename(c)"/>
-              </ng-template>
+              <span class="flex-1 min-w-0 truncate text-sm">{{ c.title }}</span>
             </div>
             <p *ngIf="!g.conversations.length && !isDraft(g.flockId)" class="ai-plan-sub text-xs px-3 py-2">مفيش محادثات — دوس ＋</p>
           </div>
@@ -563,8 +570,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   expanded = signal<Record<string, boolean>>({});
   activeConversationId = signal<string | null>(null);
   showConversations = signal(false);
-  renamingId = signal<string | null>(null);
-  renameText = '';
+  showMenu = signal(false);
+  toast = signal<string | null>(null);
   isRecording = signal(false);
   speakingMessageId = signal<string | null>(null);
   alerts = signal<{ id: string; type: string; priority: string; title: string; message: string; due_date?: string }[]>([]);
@@ -698,6 +705,17 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
 
   isAuthed() { return this.auth.isAuthenticated(); }
 
+  /** محافظة المربي لجلب الطقس — لازم تتطابق مع المكان اللي صفحة الطقس بتخزنها فيه */
+  private getGovernorate(): string | null {
+    try {
+      for (const k of ['governorate', 'selectedGovernorate', 'weather_governorate', 'user_governorate']) {
+        const v = localStorage.getItem(k);
+        if (v) return v;
+      }
+    } catch { /* ignore */ }
+    return null;
+  }
+
   /** محادثات النطاق الحالي: القطيع المختار، أو المحادثات العامة لو مفيش قطيع */
   loadConversations(openLatest = false) {
     const flockId = this.activeFlockId();
@@ -728,7 +746,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   openConversation(c: Conversation, closeDrawer = true) {
-    if (this.loading() || this.renamingId()) return;
+    if (this.loading()) return;
     this.stopSpeaking();
     this.activeConversationId.set(c.id);
     if (closeDrawer) this.showConversations.set(false);
@@ -742,22 +760,58 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     });
   }
 
-  startRename(c: Conversation, e: Event) {
-    e.stopPropagation();
-    this.renameText = c.title;
-    this.renamingId.set(c.id);
-    setTimeout(() => (document.getElementById('ai-rename-input') as HTMLInputElement | null)?.focus(), 0);
+  private showToast(m: string) {
+    this.toast.set(m);
+    setTimeout(() => this.toast.set(null), 2200);
   }
 
-  confirmRename(c: Conversation) {
-    if (this.renamingId() !== c.id) return; // Enter + blur بيستدعوها مرتين
-    this.renamingId.set(null);
-    const title = this.renameText.trim();
+  currentConversation(): Conversation | null {
+    return this.conversations().find(c => c.id === this.activeConversationId()) ?? null;
+  }
+
+  hasChatContent() { return this.messages().some(m => m.role === 'user'); }
+
+  menuNewChat() { this.showMenu.set(false); this.newChat(); }
+
+  /** مشاركة المحادثة كنص (شير الموبايل، أو نسخ للـ clipboard لو مش متاح) */
+  async menuShare() {
+    this.showMenu.set(false);
+    const title = this.currentConversation()?.title ?? 'محادثة مع مساعد الدواجن';
+    const body = this.messages()
+      .filter(m => m.content && !m.loading && (m.role === 'user' || m.queryId))
+      .map(m => `${m.role === 'user' ? 'أنا' : 'المساعد'}: ${m.content}`)
+      .join('\n\n');
+    if (!body) return;
+    const text = `${title}\n\n${body}`;
+    try {
+      if (navigator.share) { await navigator.share({ title, text }); return; }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return; // المستخدم قفل نافذة الشير
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      this.showToast('اتنسخت المحادثة ✅');
+    } catch {
+      this.showToast('تعذّرت المشاركة');
+    }
+  }
+
+  menuRename() {
+    this.showMenu.set(false);
+    const c = this.currentConversation();
+    if (!c) return;
+    const title = (prompt('اسم المحادثة', c.title) ?? '').trim().slice(0, 120);
     if (!title || title === c.title) return;
     this.conversations.update(l => l.map(x => x.id === c.id ? { ...x, title } : x));
     this.http.patch(`${environment.apiUrl}/ai/conversations/${c.id}`, { title }).subscribe({
       error: () => this.loadConversations() // رجّع العنوان الحقيقي لو فشل
     });
+  }
+
+  menuDelete() {
+    this.showMenu.set(false);
+    const c = this.currentConversation();
+    if (c) this.deleteConversation(c);
   }
 
   deleteConversation(c: Conversation, e?: Event) {
@@ -1139,6 +1193,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           language: 'ar',
           flock_id: this.activeFlockId(),
           conversation_id: this.activeConversationId(),
+          governorate: this.getGovernorate(),
           conversation_history: this.conversationHistory.slice(-6),
           image_base64: imageToSend || null
         })
@@ -1236,7 +1291,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
 
             else if (data.type === 'suggestions') {
               this.messages.update(m => m.map(x => x.id === assistantId
-                ? { ...x, suggestions: data.content }
+                ? { ...x, suggestions: Array.from(new Set<string>(data.content ?? [])).slice(0, 3) }
                 : x));
             }
 

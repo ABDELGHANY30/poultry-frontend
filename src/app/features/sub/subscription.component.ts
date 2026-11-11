@@ -41,7 +41,9 @@ import { environment } from '../../../environments/environment';
         <p class="text-2xl font-bold text-stone-800 tabular-nums">
           {{ status()?.remaining }}<span class="text-stone-300">/{{ status()?.daily_limit === 999999 ? '∞' : status()?.daily_limit }}</span>
         </p>
-        <p class="text-xs text-stone-400">{{ lang === 'ar' ? 'نقطة متبقية اليوم' : 'points left today' }}</p>
+        <p class="text-xs text-stone-400">{{ status()?.is_pro
+          ? (lang === 'ar' ? 'نقطة متبقية اليوم' : 'points left today')
+          : (lang === 'ar' ? 'نقطة متبقية من التجربة' : 'trial points left') }}</p>
       </div>
     </div>
 
@@ -69,14 +71,14 @@ import { environment } from '../../../environments/environment';
            [class.bg-stone-50]="!status()?.is_pro">
         <div>
           <p class="font-semibold text-stone-700">{{ lang === 'ar' ? 'مجانية' : 'Free' }}</p>
-          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '10 نقاط كل يوم' : '10 points per day' }}</p>
+          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '30 نقطة تجربة مجانية (مرة واحدة)' : '30 free trial points (one-time)' }}</p>
         </div>
         <span *ngIf="!status()?.is_pro" class="text-xs font-semibold text-stone-500 bg-stone-200 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}
         </span>
       </div>
 
-      <!-- Pro tiers: p150 / p200 / p350 -->
+      <!-- Pro tiers: p150 / p250 / p350 -->
       <div *ngFor="let p of tiers" class="relative border-2 rounded-xl px-5 py-4 flex items-center justify-between"
            [class.border-emerald-600]="!isCurrentPlan(p.id)"
            [class.border-emerald-700]="isCurrentPlan(p.id)"
@@ -89,17 +91,45 @@ import { environment } from '../../../environments/environment';
           <p class="text-sm text-stone-500">
             {{ lang === 'ar' ? p.points + ' نقطة يومياً — أسئلة نصية 1 نقطة، اتخاذ قرار 2، تحليل صورة 4' : p.points + ' points/day — text Q&A 1pt, decisions 2pt, image analysis 4pt' }}
           </p>
+
+          <!-- الباقة الحالية: تاريخ الانتهاء + الأيام المتبقية (وتنبيه لو قرّب ينتهي) -->
+          <p *ngIf="isCurrentPlan(p.id) && status()?.plan_expires_at" class="text-xs mt-1.5 font-medium"
+             [class.text-amber-700]="expiringSoon()" [class.text-stone-600]="!expiringSoon()">
+            {{ lang === 'ar'
+                ? 'ينتهي ' + (status()?.plan_expires_at | date:'d MMM') + ' — متبقي ' + daysLeft() + ' يوم'
+                : 'Ends ' + (status()?.plan_expires_at | date:'d MMM') + ' — ' + daysLeft() + ' days left' }}
+            <span *ngIf="expiringSoon()">
+              {{ lang === 'ar' ? ' — جدّد عشان متفقدش نقاطك' : ' — renew to keep your points' }}
+            </span>
+          </p>
+          <p *ngIf="isCurrentPlan(p.id) && !isNative" class="text-[11px] text-stone-400 mt-0.5">
+            {{ lang === 'ar' ? 'التجديد بيتضاف 30 يوم على الأيام المتبقية' : 'Renewing adds 30 days on top of the remaining days' }}
+          </p>
+
+          <!-- ترقية: بتشتغل فوراً وبتتضاف على المتبقي -->
+          <p *ngIf="isUpgrade(p.id) && !isNative" class="text-[11px] text-emerald-700 mt-1">
+            {{ lang === 'ar' ? 'تشتغل فوراً وتتضاف 30 يوم على المتبقي' : 'Starts now and adds 30 days to what remains' }}
+          </p>
         </div>
-        <button
-          *ngIf="!isCurrentPlan(p.id) && !isNative"
-          (click)="subscribe(p.id)"
-          [disabled]="loadingPlan() === p.id"
-          class="shrink-0 bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
-          {{ loadingPlan() === p.id ? '…' : (lang === 'ar' ? 'اشترك' : 'Subscribe') }}
-        </button>
-        <span *ngIf="isCurrentPlan(p.id)" class="shrink-0 text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
-          {{ lang === 'ar' ? 'الحالية' : 'Current' }}
-        </span>
+
+        <div class="shrink-0 flex flex-col items-end gap-1.5">
+          <span *ngIf="isCurrentPlan(p.id)" class="text-xs font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
+            {{ lang === 'ar' ? 'الحالية' : 'Current' }}
+          </span>
+
+          <button
+            *ngIf="!isNative && !isLowerPlan(p.id)"
+            (click)="subscribe(p.id)"
+            [disabled]="loadingPlan() === p.id"
+            class="bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-800 transition disabled:opacity-50">
+            {{ loadingPlan() === p.id ? '…' : actionLabel(p.id) }}
+          </button>
+
+          <!-- باقة أقل من الحالية: مقفولة لحد ما الاشتراك ينتهي (عشان ميخسرش الأعلى اللي دافعه) -->
+          <span *ngIf="!isNative && isLowerPlan(p.id)" class="text-[11px] text-stone-400 text-end max-w-[120px] leading-snug">
+            {{ lang === 'ar' ? 'متاحة بعد انتهاء اشتراكك الحالي' : 'Available after your current plan ends' }}
+          </span>
+        </div>
       </div>
 
     </div>
@@ -119,9 +149,9 @@ export class SubscriptionComponent implements OnInit {
   // الأسعار والنقاط اليومية لكل باقة — لو غيّرت رقم هنا، لازم يتغيّر
   // نفس الرقم في credites.py (DAILY_CREDITS) وpay.py (PLANS) في الباك اند
   tiers: { id: string; price: number; points: number; label: Record<string, string> }[] = [
-    { id: 'p150', price: 150, points: 30, label: { ar: 'باقة 150', en: 'Package 150' } },
-    { id: 'p200', price: 200, points: 45, label: { ar: 'باقة 200', en: 'Package 200' } },
-    { id: 'p350', price: 350, points: 80, label: { ar: 'باقة 350', en: 'Package 350' } },
+    { id: 'p150', price: 150, points: 15, label: { ar: 'باقة 150', en: 'Package 150' } },
+    { id: 'p250', price: 250, points: 30, label: { ar: 'باقة 250', en: 'Package 250' } },
+    { id: 'p350', price: 350, points: 50, label: { ar: 'باقة 350', en: 'Package 350' } },
   ];
 
   // بس بيفتح الموقع من برا — التطبيق مش بيبدأ ولا بيدير أي عملية دفع؛
@@ -171,17 +201,58 @@ export class SubscriptionComponent implements OnInit {
     });
   }
 
-  // بيتأكد إن الباقة دي هي الفعلية بالظبط (p150/p200/p350)، مش بس
-  // "المستخدم Pro" — عشان لو مشترك في باقة معينة، الباقات التانية تفضل
-  // توري زرار "اشترك" بدل ما تتعامل معاه كأنه مشترك فيها هو كمان
+  // المشتركين القدام في الباقة الوسطى (كانت 200 وبقت 250) لسه billing_period عندهم 'p200'
+  private normalizeTier(id?: string | null): string | null | undefined {
+    return id === 'p200' ? 'p250' : id;
+  }
+
+  // بيتأكد إن الباقة دي هي الفعلية بالظبط (p150/p250/p350)، مش بس "المستخدم Pro"
   isCurrentPlan(tierId: string): boolean {
-    return !!this.status()?.is_pro && this.status()?.billing_period === tierId;
+    return !!this.status()?.is_pro && this.normalizeTier(this.status()?.billing_period) === tierId;
+  }
+
+  // ترتيب الباقة الحالية في tiers (الأرخص أولاً). -1 = مشترك Pro بباقة مش معروفة (مثلاً Google Play) أو مجاني
+  private currentTierIndex(): number {
+    if (!this.status()?.is_pro) return -1;
+    const cur = this.normalizeTier(this.status()?.billing_period);
+    return this.tiers.findIndex(t => t.id === cur);
+  }
+
+  // باقة أعلى من الحالية → "رقّي"
+  isUpgrade(tierId: string): boolean {
+    const cur = this.currentTierIndex();
+    return cur > -1 && this.tiers.findIndex(t => t.id === tierId) > cur;
+  }
+
+  // باقة أقل من الحالية → مقفولة لحد ما الاشتراك ينتهي (الباك اند كمان بيرفضها)
+  isLowerPlan(tierId: string): boolean {
+    const cur = this.currentTierIndex();
+    return cur > -1 && this.tiers.findIndex(t => t.id === tierId) < cur;
+  }
+
+  actionLabel(tierId: string): string {
+    if (this.isCurrentPlan(tierId)) return this.lang === 'ar' ? 'جدّد' : 'Renew';
+    if (this.isUpgrade(tierId)) return this.lang === 'ar' ? 'رقّي' : 'Upgrade';
+    return this.lang === 'ar' ? 'اشترك' : 'Subscribe';
+  }
+
+  // الأيام المتبقية على انتهاء الاشتراك (null لو مفيش تاريخ)
+  daysLeft(): number | null {
+    const e = this.status()?.plan_expires_at;
+    if (!e) return null;
+    return Math.max(0, Math.ceil((new Date(e).getTime() - Date.now()) / 86400000));
+  }
+
+  // 3 أيام أو أقل → تنبيه بلون مختلف
+  expiringSoon(): boolean {
+    const d = this.daysLeft();
+    return d !== null && d <= 3;
   }
 
   planLabel(): string {
     const s = this.status();
     if (!s?.is_pro) return this.lang === 'ar' ? 'مجانية' : 'Free';
-    const tier = this.tiers.find(t => t.id === s.billing_period);
+    const tier = this.tiers.find(t => t.id === this.normalizeTier(s.billing_period));
     return tier ? tier.label[this.lang] : (this.lang === 'ar' ? 'Pro' : 'Pro');
   }
 
@@ -217,6 +288,12 @@ export class SubscriptionComponent implements OnInit {
       },
       error: (err) => {
         this.loadingPlan.set(null);
+        const d = err?.error?.detail;
+        if (d?.code === 'downgrade_blocked') {
+          this.errorMessage.set(d.message);
+          this.loadStatus(); // نحدّث الحالة عشان الباقات الأقل تتقفل
+          return;
+        }
         this.errorMessage.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, please try again');
       }
     });

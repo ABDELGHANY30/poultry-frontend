@@ -16,7 +16,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
   standalone: true,
   imports: [CommonModule, FormsModule, NrcFormulatorComponent],
   template: `
-  <div class="page-wrapper">
+  <div class="page-wrapper" (keydown.enter)="onEnter($event)">
 
     <!-- زرار التبديل: الحسابات المالية ⇄ NRC -->
     <div class="flex gap-1 p-1 bg-gray-100 rounded-2xl mb-4">
@@ -45,7 +45,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
     </div>
 
     <!-- Form -->
-    <div class="card space-y-4 mb-4">
+    <div id="farm-form" class="card space-y-4 mb-4">
 
       <!-- نوع الطير -->
       <div>
@@ -251,6 +251,14 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           <p class="text-xs text-gray-400 mt-1">سيبها فاضية وهنستخدم القيمة المعتادة لنوع الطير تلقائياً</p>
         </div>
       </div>
+
+      <label *ngIf="form.poultry_type === 'layer'" class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3 cursor-pointer">
+        <input type="checkbox" [(ngModel)]="form.ready_to_lay" class="w-6 h-6 flex-shrink-0 mt-0.5"/>
+        <span class="text-sm text-gray-700 leading-snug">
+          <b>🐔 جاي دجاج جاهز للإنتاج</b><br/>
+          <span class="text-xs text-gray-500">فعّلها لو اشتريت دجاج بعد التربية (حوالي 18 أسبوع): الدورة كلها إنتاج بعلف 110 جم/يوم من غير مرحلة تربية. وسعر "الدجاجة" في الجدوى يبقى سعر الدجاجة الجاهزة.</span>
+        </span>
+      </label>
 
       <button (click)="calculate()"
               [disabled]="loading() || !form.bird_count"
@@ -553,7 +561,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
       </div>
 
       <!-- 💰 الجدوى الاقتصادية / الربح المتوقع -->
-      <div class="card border-2 border-green-100">
+      <div id="profit-form" class="card border-2 border-green-100">
         <h3 class="font-bold text-gray-800 mb-3">💰 الجدوى الاقتصادية المتوقعة</h3>
         <p class="text-xs text-gray-400 mb-4">دخّل الأسعار الفعلية عندك عشان تحصل على تقدير للربح المتوقع للدورة</p>
 
@@ -563,7 +571,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
             <input [(ngModel)]="profitForm.feed_price_per_kg" type="number" step="0.1" class="form-input" placeholder="15"/>
           </div>
           <div>
-            <label class="form-label">🐣 سعر الكتكوت/الصوص</label>
+            <label class="form-label">{{ form.poultry_type === 'layer' && form.ready_to_lay ? '🐔 سعر الدجاجة الجاهزة للبيض' : '🐣 سعر الكتكوت/الصوص' }}</label>
             <input [(ngModel)]="profitForm.chick_price" type="number" step="0.1" class="form-input" placeholder="8"/>
           </div>
 
@@ -634,7 +642,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
         <p *ngIf="profitError()" class="text-xs text-red-500 text-center mt-2">{{ profitError() }}</p>
 
         <!-- نتيجة الجدوى الاقتصادية -->
-        <div *ngIf="profitResult()" class="mt-4 space-y-3">
+        <div *ngIf="profitResult()" id="profit-result" class="mt-4 space-y-3 scroll-mt-4">
 
           <div *ngFor="let w of profitResult().warnings" class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
             {{ w }}
@@ -854,6 +862,7 @@ export class CalculatorComponent implements OnInit {
     outdoor_rh_percent: null as number | null,
     avg_weight_kg: 2.0,  // فروج: 2.2 / رومي: 8-10 / أرانب: 2.5-4
     target_age_days: null as number | null,
+    ready_to_lay: false,
   };
 
   // ══════════════════════════════════════════════════════════
@@ -1001,10 +1010,14 @@ export class CalculatorComponent implements OnInit {
 
   calculateProfitability(): void {
     const r = this.result();
-    if (!r || !this.profitForm.feed_price_per_kg || !this.profitForm.chick_price) return;
+    if (!r) return;
+    if (!this.profitForm.feed_price_per_kg || !this.profitForm.chick_price) {
+      this.profitError.set('❌ دخّل سعر العلف وسعر ' + (this.form.poultry_type === 'layer' && this.form.ready_to_lay ? 'الدجاجة' : 'الكتكوت') + ' الأول');
+      return;
+    }
 
     this.profitLoading.set(true);
-    this.profitResult.set(null);
+    // مبنمسحش النتيجة القديمة: مسحها بيقصّر الصفحة فالمتصفح بيطلّعك لفوق وتضطر تنزل بإيدك
     this.profitError.set('');
 
     const body: any = {
@@ -1017,6 +1030,7 @@ export class CalculatorComponent implements OnInit {
       total_feed_kg: r.feed?.total_cycle_kg,
       cycle_days: r.input?.target_age_days_used,
       avg_weight_kg: this.form.avg_weight_kg,
+      ready_to_lay: this.form.poultry_type === 'layer' && this.form.ready_to_lay,
     };
 
     if (this.profitForm.mortality_percent !== null) body.mortality_percent = this.profitForm.mortality_percent;
@@ -1035,11 +1049,31 @@ export class CalculatorComponent implements OnInit {
 
     try {
       this.profitResult.set(calculateProfitability(body));
+      setTimeout(() => {
+        document.getElementById('profit-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     } catch (e) {
       console.error('فشل حساب الجدوى:', e);
+      this.profitResult.set(null);
       this.profitError.set('❌ ' + ((e as any)?.message || 'حصل خطأ في حساب الجدوى'));
     }
     this.profitLoading.set(false);
+  }
+
+  /** Enter جوه خانات الحاسبة = ضغطة على زرار الحساب (الجدوى لو جوه قسمها، وإلا حساب المتطلبات) */
+  onEnter(ev: Event): void {
+    const t = ev.target as HTMLElement | null;
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'SELECT')) return;
+    if (t.tagName === 'INPUT' && ['checkbox', 'radio', 'button', 'submit'].includes((t as HTMLInputElement).type)) return;
+    if (t.closest('#profit-form')) {
+      ev.preventDefault();
+      t.blur(); // بيقفل الكيبورد على الموبايل
+      this.calculateProfitability();
+    } else if (t.closest('#farm-form')) {
+      ev.preventDefault();
+      t.blur();
+      this.calculate();
+    }
   }
 
   async ngOnInit(): Promise<void> {
@@ -1171,7 +1205,7 @@ export class CalculatorComponent implements OnInit {
     this.loading.set(true);
     this.calcError.set('');
     if (userInitiated) {
-      this.result.set(null);
+      // مبنمسحش result عشان الصفحة متقصرش وتطلع لفوق؛ النتيجة بتتحدّث مكانها
       this.profitResult.set(null);
     }
 

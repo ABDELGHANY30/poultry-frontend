@@ -174,6 +174,8 @@ export interface FarmInput {
   // اختياري: حرارة ورطوبة الجو الخارجي وقت الذروة (بدل ما نخمّن حسب المنطقة)
   outdoor_temp_c?: number | null;
   outdoor_rh_percent?: number | null;
+  /** بياض فقط: الدجاج جاهز للإنتاج من أول يوم (من غير مرحلة تربية) */
+  ready_to_lay?: boolean;
 }
 
 class PoultryFarmCalculator {
@@ -660,16 +662,20 @@ class PoultryFarmCalculator {
         break;
       case 'layer': {
         // مرحلة تربية (لحد بداية الانتاج) بعلف أقل + مرحلة بيض بـ 120 جم/يوم
-        const rearingDays = Math.min(days, LAYER_POINT_OF_LAY_DAYS);
-        const layingDays = Math.max(0, days - LAYER_POINT_OF_LAY_DAYS);
+        // لو الدجاج جاهز للبيض (مشتري بعد التربية): كل الأيام إنتاج من غير علف تربية
+        const rearingDays = f.ready_to_lay ? 0 : Math.min(days, LAYER_POINT_OF_LAY_DAYS);
+        const layingDays = f.ready_to_lay ? days : Math.max(0, days - LAYER_POINT_OF_LAY_DAYS);
         totalPerBird = rearingDays * LAYER_REARING_FEED_KG_PER_DAY + layingDays * LAYER_LAYING_FEED_KG_PER_DAY;
         dailyAvg = totalPerBird / days;
         birdsPerTube = 15;
         feederType = 'معالف جرابيل او اوتوماتيك';
         this.tips.push(
-          `علف البياض: افترضنا ${LAYER_POINT_OF_LAY_DAYS} يوم تربية ` +
-          `(${fmt(LAYER_REARING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم) ثم انتاج ` +
-          `(${fmt(LAYER_LAYING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم)`
+          f.ready_to_lay
+            ? `علف البياض: دجاج جاهز للإنتاج - كل أيام الدورة (${days} يوم) إنتاج بعلف ` +
+              `${fmt(LAYER_LAYING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم`
+            : `علف البياض: افترضنا ${LAYER_POINT_OF_LAY_DAYS} يوم تربية ` +
+              `(${fmt(LAYER_REARING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم) ثم انتاج ` +
+              `(${fmt(LAYER_LAYING_FEED_KG_PER_DAY * 1000, 0)} جم/يوم)`
         );
         break;
       }
@@ -928,6 +934,7 @@ class PoultryFarmCalculator {
 
 export interface CalculatorInput {
   bird_count: number;
+  ready_to_lay?: boolean | null; // بياض: دجاج جاهز للإنتاج (من غير تربية)
   poultry_type: string;
   housing_system: string;
   season?: string;
@@ -963,6 +970,7 @@ export function calculateFarm(d: CalculatorInput): any {
     egypt_location: d.egypt_location ?? 'delta',
     outdoor_temp_c: d.outdoor_temp_c ?? null,
     outdoor_rh_percent: d.outdoor_rh_percent ?? null,
+    ready_to_lay: poultry === 'layer' && !!d.ready_to_lay,
   };
   return new PoultryFarmCalculator(farm).calculate();
 }
@@ -1054,8 +1062,17 @@ const EGG_LAYING_START_DAY: Partial<Record<PoultryType, number>> = { layer: 126,
 // Hy-Line: متوسط hen-day من أسبوع 18 = 0.81 (أبيض) - 0.89 (بني)؛ سمان ~285-295 بيضة/سنة = 0.80
 const EGG_LAYING_RATE: Partial<Record<PoultryType, number>> = { layer: 0.85, quail: 0.80 };
 
-export function defaultEggsPerBird(type: PoultryType, cycleDays: number): number {
-  const start = EGG_LAYING_START_DAY[type] ?? 140;
+// دجاج بياض جاهز للإنتاج: أول 300 يوم إنتاج = 285 بيضة (0.95 - من خبرة المربي)، وبعدها بمعدل المتوسط العام
+const READY_LAYER_FIRST_DAYS = 300;
+const READY_LAYER_FIRST_RATE = 0.95;
+
+export function defaultEggsPerBird(type: PoultryType, cycleDays: number, readyToLay = false): number {
+  if (readyToLay && type === 'layer') {
+    const first = Math.min(cycleDays, READY_LAYER_FIRST_DAYS) * READY_LAYER_FIRST_RATE;
+    const rest = Math.max(0, cycleDays - READY_LAYER_FIRST_DAYS) * (EGG_LAYING_RATE.layer ?? 0.85);
+    return pyRound(Math.max(0, first + rest));
+  }
+  const start = readyToLay && type === 'layer' ? 0 : (EGG_LAYING_START_DAY[type] ?? 140);
   const rate = EGG_LAYING_RATE[type] ?? 0.8;
   return pyRound(Math.max(0, cycleDays - start) * rate);
 }
@@ -1083,6 +1100,8 @@ export interface ProfitabilityInput {
   cull_hen_price_per_kg?: number | null; // بيع الدجاج المستبعد في آخر الدورة (بياض)
   egg_price?: number | null;
   broken_eggs_percent?: number;
+  /** بياض: الدجاج مشتري جاهز للإنتاج (سعر الشراء للدجاجة الجاهزة، والإنتاج من أول يوم) */
+  ready_to_lay?: boolean;
 }
 
 function validateProfitability(d: ProfitabilityInput): void {
@@ -1124,7 +1143,7 @@ export function calculateProfitability(d: ProfitabilityInput): any {
 
   if (isEgg) {
     if (eggsPerBird == null) {
-      eggsPerBird = defaultEggsPerBird(type, cycleDays);
+      eggsPerBird = defaultEggsPerBird(type, cycleDays, !!d.ready_to_lay);
       if (eggsPerBird === 0) {
         const start = EGG_LAYING_START_DAY[type] ?? 140;
         warnings.push(
@@ -1132,6 +1151,12 @@ export function calculateProfitability(d: ProfitabilityInput): any {
           `مفيش بيض متوقع. حدد مدة دورة أطول أو دخّل عدد البيض بنفسك`
         );
       }
+    }
+    if (type === 'layer' && !d.ready_to_lay && d.chick_price > 100) {
+      warnings.push(
+        '⚠️ سعر الكتكوت عالي (' + fmt(d.chick_price, 0) + ' جنيه). لو ده سعر دجاجة جاهزة للبيض، فعّل خيار ' +
+        '"جاي دجاج جاهز للإنتاج" وإلا هيتحسب عليك علف تربية 126 يوم ومفيش بيض في أول 126 يوم'
+      );
     }
     if (eggPrice == null) warnings.push('⚠️ سعر البيضة مش متحدد - الإيراد المتوقع هيطلع صفر لحد ما تدخله');
     if (d.cull_hen_price_per_kg == null) {

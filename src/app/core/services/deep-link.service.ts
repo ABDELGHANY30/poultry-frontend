@@ -8,7 +8,7 @@ import { Browser } from '@capacitor/browser';
  * ملف جديد: src/app/core/services/deep-link.service.ts
  *
  * بيرجّع المستخدم للتطبيق بعد ما يخلّص الدفع على الموقع:
- *   الموقع (payment-result)  →  farmapp://payment-result?ref=...  →  التطبيق يفتح صفحة /payment-result
+ *   الموقع (payment-result)  →  farmapp://payment-result?ref=...  →  التطبيق يفتح صفحة /marketplace-payment-result
  *
  * ✅ خطوات التفعيل (مرة واحدة):
  * 1) npm i @capacitor/app && npx cap sync
@@ -71,7 +71,7 @@ export class DeepLinkService {
     if (u.protocol !== `${APP_SCHEME}:` || u.host !== 'payment-result') return;
 
     // نقبل ref أو order بس، وبقيمة آمنة — أي حاجة تانية في الرابط بتتتجاهل
-    const SAFE = /^[A-Za-z0-9_-]{1,100}$/;
+    const SAFE = /^[A-Za-z0-9_-]{1,128}$/;
     const ref = u.searchParams.get('ref');
     const order = u.searchParams.get('order');
     const queryParams: Record<string, string> = {};
@@ -81,6 +81,6 @@ export class DeepLinkService {
 
     try { void Browser.close().catch(() => {}); } catch { /* Android: غير مدعوم، مش مشكلة */ }
     clearFromApp();
-    this.zone.run(() => this.router.navigate(['/payment-result'], { queryParams }));
+    this.zone.run(() => this.router.navigate(['/marketplace-payment-result'], { queryParams }));
   }
 }

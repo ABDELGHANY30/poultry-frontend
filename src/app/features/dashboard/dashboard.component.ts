@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, computed, signal, effect, untracked, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
 import { FlockService } from '../../core/services/flock.service';
@@ -12,7 +12,6 @@ import { HealthScoreWidgetComponent } from '../../features/Healthscorewidget/Hea
 import { DecisionSimulatorComponent } from '../../features/desicion/desicion.component';
 import { ReferralCardComponent } from '../../features/referral_card.component.ts/referral-card.component'; // ⚠️ عدّل المسار حسب مكانه الفعلي
 import { StreakService } from '../../core/services/streak.service'; // ⚠️ عدّل المسار حسب مكانه الفعلي
-import { FlockReportCardComponent } from '../reports/flock-report-card.component'; // ⚠️ عدّل المسار حسب مكان ملفات التقارير
 
 const CATEGORIES = [
   { value: 'broiler',   label: 'بورصة الفراخ',     icon: '🐔', color: '#e8f5e9', headerColor: '#2d9e5f', unit: 'كجم' },
@@ -28,7 +27,7 @@ const CATEGORIES = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, TranslateModule, HealthScoreWidgetComponent, DecisionSimulatorComponent, ReferralCardComponent,FlockReportCardComponent],
+  imports: [CommonModule, RouterLink, TranslateModule, HealthScoreWidgetComponent, DecisionSimulatorComponent, ReferralCardComponent],
   template: `
   <div class="page-wrapper" dir="rtl">
 
@@ -261,76 +260,33 @@ const CATEGORIES = [
         [birds]="flockStats().birds"
         [dead]="flockStats().dead"
         [temp]="flockStats().temp"
-        (flockSelected)="selectedFlockId.set($event)">
+        (flockSelected)="onHealthFlockSelected($event)">
       </app-health-score-widget>
-
-      <!-- 📊 تقرير القطيع المختار (آخر 7 أيام): بيتغيّر لما تختار قطيع تاني من كارت الصحة اللي فوق -->
-      <app-flock-report-card *ngIf="currentFlock() as f" [flock]="f" [showClose]="false"
-                             (openFull)="openFullReport($event)"></app-flock-report-card>
 
       <!-- 📈 صاحب القطيع: الأسعار المختصرة تحت صحة القطيع مباشرة -->
       <ng-container *ngTemplateOutlet="pricesBlock"></ng-container>
 
-      <!-- ادعُ صديق -->
-      <app-referral-card></app-referral-card>
-
-      <!-- 👑 مساحة Pro — مختفية بالكامل لغير المشتركين، مفيش أي تلميح إنها موجودة أصلاً -->
-      <div *ngIf="reportsIsPro()" class="card relative overflow-hidden border-2 border-amber-200/70">
-
-        <!-- شريط علوي ذهبي رفيع -->
-        <div class="absolute top-0 inset-x-0 h-1"
-             style="background:linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b)"></div>
-
-        <div class="flex items-start justify-between gap-3 mb-4 mt-1">
-          <div class="flex items-center gap-3">
-            <span class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl flex-shrink-0">
-              👑
-            </span>
-            <div>
-              <h2 class="text-sm font-black text-gray-800 mb-0.5 flex items-center gap-2">
-                مساحة Pro بتاعتك
-                <span class="bg-amber-400 text-amber-950 text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full">PRO</span>
-              </h2>
-              <p class="text-xs text-[var(--c-muted)] mb-0">تحليلات وميزات متقدمة متاحة بس لمشتركين Pro</p>
-            </div>
-          </div>
-          <a routerLink="/reports" class="text-xs font-semibold text-amber-700 hover:text-amber-900 no-underline flex-shrink-0 mt-1">
-            التفاصيل الكاملة →
-          </a>
-        </div>
-
-        <!-- ملخص التقارير -->
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div class="stat-card">
-            <div class="stat-icon" style="background:#fef3c7">📊</div>
-            <div>
-              <p class="text-xl font-bold leading-none text-gray-800">{{ avgFcr() ?? '—' }}</p>
-              <p class="text-xs text-[var(--c-muted)] mt-1.5 font-medium">متوسط FCR</p>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon" style="background:#fee2e2">⚠️</div>
-            <div>
-              <p class="text-xl font-bold leading-none text-red-600">{{ recentMortalityTotal() ?? '—' }}</p>
-              <p class="text-xs text-[var(--c-muted)] mt-1.5 font-medium">نفوق آخر 30 يوم</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- محاكاة القرار -->
-        <div class="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
-          <app-decision-simulator></app-decision-simulator>
-        </div>
-      </div>
-
-
-      <!-- 📋 تقرير الدورة (مكان التنبيهات النشطة) — بيتبع القطيع المختار -->
+      <!-- 📋 تقرير الدورة — بعد أسعار السوق، وجواه زرار لكل قطيع (مستقل عن اختيار كارت الصحة) -->
       <div class="card">
         <div class="flex items-center justify-between mb-4">
           <h2 class="section-title mb-0">📋 تقرير الدورة</h2>
-          <a routerLink="/reports" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
+          <a routerLink="/reports" [queryParams]="{ flock: cycleFlockId() }" class="text-xs font-semibold text-primary-600 hover:text-primary-800 no-underline">
             التفاصيل الكاملة →
           </a>
+        </div>
+
+        <!-- 🐔 زرار لكل قطيع (نفس شكل تابات أسعار السوق) -->
+        <div *ngIf="flocks().length > 1" class="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+          <button type="button" *ngFor="let fl of flocks()" (click)="selectReportFlock(fl.id)"
+                  class="flex-shrink-0 px-4 py-2 rounded-lg text-[13px] border transition"
+                  [class.bg-green-600]="cycleFlockId() === fl.id"
+                  [class.text-white]="cycleFlockId() === fl.id"
+                  [class.border-green-600]="cycleFlockId() === fl.id"
+                  [class.bg-white]="cycleFlockId() !== fl.id"
+                  [class.border-gray-200]="cycleFlockId() !== fl.id"
+                  [class.text-gray-600]="cycleFlockId() !== fl.id">
+            {{ fl.name }}
+          </button>
         </div>
 
         <!-- 🔒 دورة منتهية والمستخدم مش Pro -->
@@ -385,6 +341,58 @@ const CATEGORIES = [
         </div>
       </div>
 
+      <!-- ادعُ صديق -->
+      <app-referral-card></app-referral-card>
+
+      <!-- 👑 مساحة Pro — مختفية بالكامل لغير المشتركين، مفيش أي تلميح إنها موجودة أصلاً -->
+      <div *ngIf="reportsIsPro()" class="card relative overflow-hidden border-2 border-amber-200/70">
+
+        <!-- شريط علوي ذهبي رفيع -->
+        <div class="absolute top-0 inset-x-0 h-1"
+             style="background:linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b)"></div>
+
+        <div class="flex items-start justify-between gap-3 mb-4 mt-1">
+          <div class="flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl flex-shrink-0">
+              👑
+            </span>
+            <div>
+              <h2 class="text-sm font-black text-gray-800 mb-0.5 flex items-center gap-2">
+                مساحة Pro بتاعتك
+                <span class="bg-amber-400 text-amber-950 text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full">PRO</span>
+              </h2>
+              <p class="text-xs text-[var(--c-muted)] mb-0">تحليلات وميزات متقدمة متاحة بس لمشتركين Pro</p>
+            </div>
+          </div>
+          <a routerLink="/reports" class="text-xs font-semibold text-amber-700 hover:text-amber-900 no-underline flex-shrink-0 mt-1">
+            التفاصيل الكاملة →
+          </a>
+        </div>
+
+        <!-- ملخص التقارير -->
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#fef3c7">📊</div>
+            <div>
+              <p class="text-xl font-bold leading-none text-gray-800">{{ avgFcr() ?? '—' }}</p>
+              <p class="text-xs text-[var(--c-muted)] mt-1.5 font-medium">متوسط FCR</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#fee2e2">⚠️</div>
+            <div>
+              <p class="text-xl font-bold leading-none text-red-600">{{ recentMortalityTotal() ?? '—' }}</p>
+              <p class="text-xs text-[var(--c-muted)] mt-1.5 font-medium">نفوق آخر 30 يوم</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- محاكاة القرار -->
+        <div class="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+          <app-decision-simulator></app-decision-simulator>
+        </div>
+      </div>
+
     </ng-container>
 
 
@@ -398,7 +406,6 @@ export class DashboardComponent implements OnInit {
   private auth = inject(AuthService);
   private http = inject(HttpClient);
   private streakSvc = inject(StreakService);
-  private router = inject(Router);
 
   bannerStreakText = computed(() => {
     const s: any = this.streakSvc.streak() ?? this.cachedStreak();
@@ -450,6 +457,21 @@ export class DashboardComponent implements OnInit {
     if (id === null) return null;
     return this.flocks().find((f: any) => f.id === id) ?? null;
   });
+
+  // 📋 تقرير الدورة: زرار لكل قطيع جوه الكارت. الاختيار هنا مستقل عن كارت الصحة،
+  // ولما تختار قطيع من كارت الصحة التقرير بيتبعه تاني (آخر اختيار هو اللي بيكسب).
+  reportPick = signal<string | null>(null);
+  cycleFlockId = computed(() => {
+    const list = this.flocks();
+    if (list.length === 0) return null;
+    const id = this.reportPick();
+    return id !== null && list.some((f: any) => f.id === id) ? id : this.currentFlockId();
+  });
+  selectReportFlock(id: string) { this.reportPick.set(id); }
+  onHealthFlockSelected(id: string | null) {
+    this.selectedFlockId.set(id);
+    this.reportPick.set(null);
+  }
   // الشرط اللي بيتحكم في ظهور كل حاجة غير البانر والأسعار:
   // لازم يكون المستخدم مسجّل دخول ولازم يكون فيه قطيع واحد على الأقل مسجّل
   fullAccess = computed(() => this.isLoggedIn() && this.hasFlock());
@@ -601,7 +623,7 @@ export class DashboardComponent implements OnInit {
 
   // بيعيد تحميل التقرير كل ما القطيع المختار (أو المستخدم) يتغير
   private cycleReportEffect = effect(() => {
-    const id = this.currentFlockId();
+    const id = this.cycleFlockId();
     const uid = this.cacheUserId();
     untracked(() => {
       if (id && this.isLoggedIn()) this.loadCycleReport(id);
@@ -629,9 +651,9 @@ export class DashboardComponent implements OnInit {
     }
     if (!shown) this.cycleReport.set(null);
 
-    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}`).subscribe({
+    this.http.get(`${environment.apiUrl}/reports/end-of-cycle?flock_id=${flockId}&ai=false`).subscribe({
       next: (res: any) => {
-        if (this.currentFlockId() !== flockId) return; // المستخدم غيّر القطيع في النص
+        if (this.cycleFlockId() !== flockId) return; // المستخدم غيّر القطيع في النص
         this.cycleReport.set(res);
         this.cycleLoading.set(false);
         if (uid) {
@@ -651,13 +673,8 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  /** "التقرير الكامل" من كارت التقرير: يفتح صفحة التقارير على نفس القطيع */
-  openFullReport(flockId: string) {
-    void this.router.navigate(['/reports'], { queryParams: { flock: flockId } });
-  }
-
   downloadCyclePdf() {
-    const id = this.currentFlockId();
+    const id = this.cycleFlockId();
     if (!id) return;
     this.http.get(`${environment.apiUrl}/reports/end-of-cycle/pdf?flock_id=${id}`,
       { responseType: 'blob' }
@@ -850,7 +867,7 @@ getCategoryNameAr(categoryKey: string): string {
     this.loadTodayTemps();
     this.loadReportsProStatus();
     this.loadWeather(this.weatherGov());
-    const id = this.currentFlockId();
+    const id = this.cycleFlockId();
     if (id && this.isLoggedIn()) this.loadCycleReport(id);
     if (this.isLoggedIn()) this.streakSvc.refresh();
     this.loadAllLastRecords();
