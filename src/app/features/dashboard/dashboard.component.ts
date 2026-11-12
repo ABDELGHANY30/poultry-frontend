@@ -351,7 +351,7 @@ const CATEGORIES = [
 
             <!-- ⚠️ أهم حدثين وسببهم (الأخطر الأول) -->
             <div *ngIf="r.events?.length" class="space-y-2 mb-3">
-              <div *ngFor="let e of r.events | slice:0:2" class="rounded-xl border p-2.5 text-xs"
+              <div *ngFor="let e of cycleEventsTop(r)" class="rounded-xl border p-2.5 text-xs"
                    [class.bg-red-50]="e.severity === 'critical'" [class.border-red-100]="e.severity === 'critical'"
                    [class.bg-amber-50]="e.severity === 'warning'" [class.border-amber-100]="e.severity === 'warning'"
                    [class.bg-gray-50]="e.severity === 'info'" [class.border-gray-100]="e.severity === 'info'">
@@ -359,7 +359,7 @@ const CATEGORIES = [
                 <div class="text-gray-500 leading-relaxed mt-0.5">{{ e.reason_ar }}</div>
               </div>
               <a *ngIf="(r.events_summary?.total ?? 0) > 2" routerLink="/reports" [queryParams]="{ flock: cycleFlockId() }"
-                 class="block text-center text-[11px] font-semibold text-primary-600 no-underline">باقي الأحداث ({{ r.events_summary.total - 2 }}) في التفاصيل الكاملة ←</a>
+                 class="block text-center text-[11px] font-semibold text-primary-600 no-underline">باقي الأحداث ({{ (r.events_summary?.total ?? 0) - 2 }}) في التفاصيل الكاملة ←</a>
             </div>
 
             <!-- 💰 الأداء المالي (بيظهر بس لو متاح للحساب) -->
@@ -781,6 +781,11 @@ export class DashboardComponent implements OnInit {
     if (s.critical > 0) return { cls: 'bg-red-50 border-red-100 text-red-700', text: `⚠️ ${s.critical} تنبيه حرج${s.warning > 0 ? ` و${s.warning} تنبيه` : ''}` };
     if (s.warning > 0) return { cls: 'bg-amber-50 border-amber-100 text-amber-800', text: `🟠 ${s.warning} تنبيه يستاهل المتابعة` };
     return { cls: 'bg-green-50 border-green-100 text-green-700', text: '✅ مفيش تنبيهات في الدورة' };
+  }
+
+  /** 🔔 أول حدثين من أحداث الدورة (typed كـ any[] عشان الـ slice pipe مع any كان بيطلّع unknown) */
+  cycleEventsTop(r: any): any[] {
+    return Array.isArray(r?.events) ? r.events.slice(0, 2) : [];
   }
 
   /** ليه الـ FCR فاضي (بنقوله للمستخدم بدل ما نسيبه "—" من غير تفسير) */
