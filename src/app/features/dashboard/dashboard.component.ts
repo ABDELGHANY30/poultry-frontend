@@ -12,6 +12,7 @@ import { HealthScoreWidgetComponent } from '../../features/Healthscorewidget/Hea
 import { DecisionSimulatorComponent } from '../../features/desicion/desicion.component';
 import { ReferralCardComponent } from '../../features/referral_card.component.ts/referral-card.component'; // ⚠️ عدّل المسار حسب مكانه الفعلي
 import { StreakService } from '../../core/services/streak.service'; // ⚠️ عدّل المسار حسب مكانه الفعلي
+import { buildMarketCompare } from './market-compare'; // ⚠️ الملف جنب ملف اللوحة
 
 const CATEGORIES = [
   { value: 'broiler',   label: 'بورصة الفراخ',     icon: '🐔', color: '#e8f5e9', headerColor: '#2d9e5f', unit: 'كجم' },
@@ -299,45 +300,133 @@ const CATEGORIES = [
 
         <ng-container *ngIf="cycleReport() as r">
           <p class="text-xs text-[var(--c-muted)] mb-3">🐔 {{ r.flock_name }}</p>
-          <div class="grid grid-cols-2 gap-2 text-sm mb-3">
-            <div class="bg-gray-50 rounded-xl p-2.5">
-              <div class="text-[11px] text-gray-400">مدة الدورة</div>
-              <div class="font-black">{{ r.cycle_days ?? '—' }} يوم</div>
-            </div>
-            <div class="bg-gray-50 rounded-xl p-2.5">
-              <div class="text-[11px] text-gray-400">نسبة النفوق</div>
-              <div class="font-black text-red-600">{{ r.mortality_rate }}%</div>
-            </div>
-            <div class="bg-gray-50 rounded-xl p-2.5">
-              <div class="text-[11px] text-gray-400">FCR</div>
-              <div class="font-black">{{ r.fcr ?? '—' }}</div>
-            </div>
-            <div class="bg-gray-50 rounded-xl p-2.5">
-              <div class="text-[11px] text-gray-400">التحصينات</div>
-              <div class="font-black">{{ r.vaccinations_completed }}</div>
-            </div>
+
+          <!-- 📝 القطيع لسه ما اتسجلش له أي يوم: بدل أرقام صفرية مضلّلة -->
+          <div *ngIf="r.days_recorded === 0" class="text-center py-4">
+            <div class="text-3xl mb-2">📝</div>
+            <p class="text-sm font-bold text-gray-800 mb-1">مفيش تسجيلات للقطيع ده لسه</p>
+            <p class="text-xs text-[var(--c-muted)] mb-3">التقرير بيبدأ يظهر أول ما تسجّل أول يوم.</p>
+            <a [routerLink]="['/flocks', r.flock_id]" [queryParams]="{ prompt: 'daily' }" class="btn-primary btn btn-sm inline-flex">سجّل أول يوم</a>
           </div>
 
-          <div *ngIf="r.financial as fin" class="flex items-baseline justify-between border-t pt-3 mb-3">
-            <span class="text-xs text-gray-500">💰 صافي الربح التقديري</span>
-            <span class="font-black"
-                  [class.text-green-600]="fin.net_profit >= 0" [class.text-red-600]="fin.net_profit < 0">
-              {{ fin.net_profit >= 0 ? '+' : '' }}{{ fin.net_profit | number:'1.0-0' }} ج
-            </span>
-          </div>
+          <ng-container *ngIf="r.days_recorded !== 0">
+            <!-- 🚦 حالة القطيع في أول نظرة (من تنبيهات التقرير) -->
+            <div *ngIf="cycleStatus(r) as st" class="rounded-xl border p-2.5 mb-3 text-xs font-bold" [ngClass]="st.cls">{{ st.text }}</div>
+
+            <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">مدة الدورة</div>
+                <div class="font-black">{{ r.cycle_days ?? '—' }} يوم</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">نسبة النفوق</div>
+                <div class="font-black text-red-600">{{ r.mortality_rate }}%</div>
+              </div>
+              <div *ngIf="r.flock_type !== 'layer'" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">FCR</div>
+                <div class="font-black">{{ r.fcr ?? '—' }}</div>
+                <div *ngIf="r.fcr == null && fcrHint(r) as hint" class="text-[10px] text-amber-700 mt-0.5">{{ hint }}</div>
+              </div>
+              <div *ngIf="r.flock_type === 'layer' && r.feed_per_dozen_eggs_kg != null" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">علف لكل دستة بيض</div>
+                <div class="font-black">{{ r.feed_per_dozen_eggs_kg }} كجم</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">التحصينات</div>
+                <div class="font-black">{{ r.vaccinations_completed }}</div>
+              </div>
+              <div *ngIf="r.final_weight_kg != null" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">آخر وزن مسجل</div>
+                <div class="font-black">{{ r.final_weight_kg }} كجم</div>
+              </div>
+              <div *ngIf="r.epef != null" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">مؤشر الكفاءة EPEF</div>
+                <div class="font-black">{{ r.epef }}</div>
+              </div>
+              <div *ngIf="r.total_feed_kg" class="bg-gray-50 rounded-xl p-2.5">
+                <div class="text-[11px] text-gray-400">إجمالي العلف</div>
+                <div class="font-black">{{ r.total_feed_kg | number:'1.0-0' }} كجم</div>
+              </div>
+            </div>
+
+            <!-- ⚠️ أهم حدثين وسببهم (الأخطر الأول) -->
+            <div *ngIf="r.events?.length" class="space-y-2 mb-3">
+              <div *ngFor="let e of r.events | slice:0:2" class="rounded-xl border p-2.5 text-xs"
+                   [class.bg-red-50]="e.severity === 'critical'" [class.border-red-100]="e.severity === 'critical'"
+                   [class.bg-amber-50]="e.severity === 'warning'" [class.border-amber-100]="e.severity === 'warning'"
+                   [class.bg-gray-50]="e.severity === 'info'" [class.border-gray-100]="e.severity === 'info'">
+                <div class="font-bold text-gray-800">{{ e.title_ar }}</div>
+                <div class="text-gray-500 leading-relaxed mt-0.5">{{ e.reason_ar }}</div>
+              </div>
+              <a *ngIf="(r.events_summary?.total ?? 0) > 2" routerLink="/reports" [queryParams]="{ flock: cycleFlockId() }"
+                 class="block text-center text-[11px] font-semibold text-primary-600 no-underline">باقي الأحداث ({{ r.events_summary.total - 2 }}) في التفاصيل الكاملة ←</a>
+            </div>
+
+            <!-- 💰 الأداء المالي (بيظهر بس لو متاح للحساب) -->
+            <div *ngIf="r.financial as fin" class="border-t pt-3 mb-3 space-y-1.5">
+              <div class="flex items-baseline justify-between">
+                <span class="text-xs text-gray-500">💰 صافي الربح <span class="text-[10px] text-gray-400">{{ finBasisLabel(fin) }}</span></span>
+                <span class="font-black"
+                      [class.text-green-600]="fin.net_profit >= 0" [class.text-red-600]="fin.net_profit < 0">
+                  {{ fin.net_profit >= 0 ? '+' : '' }}{{ fin.net_profit | number:'1.0-0' }} ج
+                </span>
+              </div>
+              <div *ngIf="fin.cost_per_kg != null" class="flex justify-between text-xs">
+                <span class="text-gray-500">تكلفة الكيلو</span><span class="font-bold">{{ fin.cost_per_kg | number:'1.0-2' }} ج</span>
+              </div>
+              <div *ngIf="fin.profit_per_bird != null" class="flex justify-between text-xs">
+                <span class="text-gray-500">ربح الطائر</span>
+                <span class="font-bold" [class.text-green-600]="fin.profit_per_bird >= 0" [class.text-red-600]="fin.profit_per_bird < 0">{{ fin.profit_per_bird | number:'1.0-2' }} ج</span>
+              </div>
+            </div>
+
+            <!-- 📈 سعر التعادل مقابل أسعار السوق (التنفيذ) — بيظهر لما يكون فيه تكلفة وأسعار للنوع ده -->
+            <div *ngIf="cycleMarket() as mk" class="border-t pt-3 mb-3">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="text-xs text-gray-500">📈 سعر التعادل حتى النهارده <span class="text-[10px] text-gray-400">{{ mk.basisLabel }}</span></span>
+                <span class="font-black">{{ mk.cost | number:'1.0-1' }} ج/كجم</span>
+              </div>
+              <div class="space-y-1.5">
+                <div *ngFor="let m of mk.rows" class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs">
+                  <div class="min-w-0">
+                    <div class="text-gray-700 truncate">{{ m.name }}</div>
+                    <div class="text-[10px] text-gray-400">السوق {{ m.sell | number:'1.0-1' }} ج/كجم</div>
+                  </div>
+                  <div class="text-left shrink-0">
+                    <div class="font-black" [class.text-green-600]="m.margin >= 0" [class.text-red-600]="m.margin < 0">
+                      {{ m.margin >= 0 ? '+' : '' }}{{ m.margin | number:'1.0-1' }} ج/كجم ({{ m.pct | number:'1.0-0' }}%)
+                    </div>
+                    <div *ngIf="m.perBird !== null" class="text-[10px]" [class.text-green-600]="m.perBird >= 0" [class.text-red-600]="m.perBird < 0">
+                      ≈ {{ m.perBird >= 0 ? '+' : '' }}{{ m.perBird | number:'1.0-0' }} ج للطائر
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="text-[10px] text-gray-400 mt-1.5 leading-relaxed">{{ mk.note }}</p>
+            </div>
+
+            <!-- ⚠️ التسجيل ناقص: الأرقام تقريبية -->
+            <div *ngIf="r.completeness_pct != null && r.completeness_pct < 70 && r.data_quality_notes?.length"
+                 class="text-[11px] text-amber-700 mb-3">⚠️ {{ r.data_quality_notes[0] }}</div>
+          </ng-container>
 
           <div *ngIf="!reportsIsPro()" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2 mb-3">
             ⏳ متاح لك مجاناً طول ما الدورة شغالة، وبعد ما تنتهي محتاج اشتراك Pro.
           </div>
 
-          <button (click)="downloadCyclePdf()"
+          <button *ngIf="r.days_recorded !== 0" (click)="downloadCyclePdf()"
                   class="w-full py-2 rounded-xl bg-gray-800 text-white text-xs font-bold">
             ⬇️ تحميل PDF
           </button>
         </ng-container>
 
         <div *ngIf="!cycleReport() && !cycleLocked()" class="text-center py-6 text-[var(--c-muted)] text-sm">
-          {{ cycleLoading() ? 'جاري تحميل التقرير...' : 'لا توجد بيانات كافية بعد' }}
+          <ng-container *ngIf="cycleLoading()">جاري تحميل التقرير...</ng-container>
+          <ng-container *ngIf="!cycleLoading() && cycleError()">
+            تعذّر تحميل التقرير — اتأكد من النت.
+            <button type="button" (click)="retryCycle()" class="font-bold text-primary-600 underline mr-1">إعادة المحاولة</button>
+          </ng-container>
+          <ng-container *ngIf="!cycleLoading() && !cycleError()">لا توجد بيانات كافية بعد</ng-container>
         </div>
       </div>
 
@@ -620,6 +709,7 @@ export class DashboardComponent implements OnInit {
   cycleReport = signal<any>(null);
   cycleLocked = signal(false);
   cycleLoading = signal(false);
+  cycleError = signal(false);
 
   // بيعيد تحميل التقرير كل ما القطيع المختار (أو المستخدم) يتغير
   private cycleReportEffect = effect(() => {
@@ -640,6 +730,7 @@ export class DashboardComponent implements OnInit {
     const uid = this.cacheUserId();
     this.cycleLoading.set(true);
     this.cycleLocked.set(false);
+    this.cycleError.set(false);
 
     // عرض آخر تقرير محفوظ لنفس القطيع فوراً لحد ما يوصل الجديد
     let shown = false;
@@ -656,11 +747,13 @@ export class DashboardComponent implements OnInit {
         if (this.cycleFlockId() !== flockId) return; // المستخدم غيّر القطيع في النص
         this.cycleReport.set(res);
         this.cycleLoading.set(false);
+        this.cycleError.set(false);
         if (uid) {
           try { localStorage.setItem(this.cycleKey(uid, flockId), JSON.stringify(res)); } catch { /* مش مشكلة */ }
         }
       },
       error: (err: any) => {
+        if (this.cycleFlockId() !== flockId) return; // المستخدم انتقل لقطيع تاني قبل ما الخطأ يوصل
         this.cycleLoading.set(false);
         // 403 + upgrade_required = دورة منتهية والمستخدم مش مشترك
         if (err?.status === 403 && err?.error?.detail?.upgrade_required) {
@@ -668,9 +761,37 @@ export class DashboardComponent implements OnInit {
           this.cycleReport.set(null);
           if (uid) { try { localStorage.removeItem(this.cycleKey(uid, flockId)); } catch { /* */ } }
         }
-        // أي خطأ تاني (أوفلاين مثلاً): بنسيب آخر تقرير محفوظ معروض
+        else this.cycleError.set(true); // أي خطأ تاني (أوفلاين مثلاً): آخر تقرير محفوظ بيفضل معروض، ولو مفيش بنقول إن التحميل فشل
       },
     });
+  }
+
+  /** 📈 سعر التعادل مقابل أسعار السوق (نفس الأرقام اللي ظاهرة في قسم الأسعار فوق) — null لو مش متاح */
+  cycleMarket = computed(() => buildMarketCompare(this.cycleReport(), this.prices()));
+
+  retryCycle() {
+    const id = this.cycleFlockId();
+    if (id) this.loadCycleReport(id);
+  }
+
+  /** 🚦 حالة القطيع من تنبيهات التقرير (null لو الرد قديم/محفوظ من قبل التنبيهات) */
+  cycleStatus(r: any): { cls: string; text: string } | null {
+    const s = r?.events_summary;
+    if (!s) return null;
+    if (s.critical > 0) return { cls: 'bg-red-50 border-red-100 text-red-700', text: `⚠️ ${s.critical} تنبيه حرج${s.warning > 0 ? ` و${s.warning} تنبيه` : ''}` };
+    if (s.warning > 0) return { cls: 'bg-amber-50 border-amber-100 text-amber-800', text: `🟠 ${s.warning} تنبيه يستاهل المتابعة` };
+    return { cls: 'bg-green-50 border-green-100 text-green-700', text: '✅ مفيش تنبيهات في الدورة' };
+  }
+
+  /** ليه الـ FCR فاضي (بنقوله للمستخدم بدل ما نسيبه "—" من غير تفسير) */
+  fcrHint(r: any): string {
+    return (r?.data_quality_notes ?? []).some((n: string) => n.includes('أوزان')) ? 'سجّل وزن عشان يتحسب' : '';
+  }
+
+  /** الأرقام المالية فعلية (من معاملاتك) ولا تقديرية (من أسعار السوق) */
+  finBasisLabel(fin: any): string {
+    const vals = Object.values(fin?.basis ?? {}).filter(Boolean);
+    return vals.length > 0 && vals.every(v => v === 'actual') ? '(فعلي)' : '(تقديري)';
   }
 
   downloadCyclePdf() {
