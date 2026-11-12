@@ -269,14 +269,31 @@
 //     });
 //   }
 // }
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { copyGuideState, setPrepFlag } from './cleanup-guide.data';
 import { TranslateModule } from '@ngx-translate/core';
 import { FlockService } from '../../core/services/flock.service';
+import { AuthService } from '../../core/services/auth.service';
+import { UserOfflineCacheService } from '../../core/services/user-offline-cache.service';
 import { Flock, FlockCreate, FlockType } from '../../core/models';
+
+// 📴 قطيع اتعمل من غير نت — محفوظ على الجهاز لحد ما النت يرجع
+interface PendingFlock {
+  id: string;            // معرّف محلي مؤقت
+  payload: any;          // نفس الـ payload اللي كان هيتبعت لـ createFlock
+  preparing: boolean;    // 🧹 كان في وضع تجهيز العنبر
+  type: string;
+  createdAt: number;
+}
+interface FailedFlock { id: string; name: string; reason: string; }
+
+const PENDING_FLOCKS_KEY = 'pending_flocks';
+const FAILED_FLOCKS_KEY = 'failed_flocks';
+const FLOCKS_LIST_CACHE_KEY = 'flocks_list_cache';
 
 @Component({
   selector: 'app-flocks-list',
@@ -288,7 +305,7 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-black text-primary-900">🐔 {{ 'FLOCK.TITLE' | translate }}</h1>
-        <p class="text-sm text-[var(--c-muted)] mt-0.5">{{ activeFlocks().length }} {{ 'FLOCK.TOTAL' | translate }}</p>
+        <p class="text-sm text-[var(--c-muted)] mt-0.5">{{ activeFlocks().length + pendingFlocks().length }} {{ 'FLOCK.TOTAL' | translate }}</p>
       </div>
       <button class="btn-primary btn" (click)="toggleForm()">
         {{ showForm() ? '✕' : '+' }} {{ showForm() ? ('COMMON.CANCEL' | translate) : ('FLOCK.ADD' | translate) }}
@@ -296,6 +313,44 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
     </div>
 
     <a routerLink="/flocks/annual" class="text-xs font-bold text-green-700 no-underline">📊 التقارير والدورات المنتهية ←</a>
+
+    <!-- 📴 حالة الأوفلاين -->
+    <div *ngIf="isOffline() || showingCached() || pendingFlocks().length || failedFlocks().length || offlineNotice() || syncMessage()" class="space-y-2">
+      <div *ngIf="isOffline() && offlineEnabled" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
+        📴 مفيش نت دلوقتي — بتشوف آخر نسخة محفوظة على جهازك، وتقدر تضيف قطيع جديد وهيتعمل على السيرفر أول ما النت يرجع.
+      </div>
+      <div *ngIf="isOffline() && !offlineEnabled" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
+        📴 مفيش نت دلوقتي — على الويب لازم نت. تطبيق الموبايل بيدعم الشغل من غير نت.
+      </div>
+      <div *ngIf="showingCached() && !isOffline()" class="rounded-xl bg-gray-100 border border-gray-300 p-3 text-xs text-gray-700">
+        📴 السيرفر مش متاح دلوقتي — بنعرض آخر نسخة محفوظة على جهازك.
+      </div>
+      <div *ngIf="offlineNotice() as msg" class="rounded-xl bg-green-50 border border-green-300 p-3 text-sm text-green-800 font-bold">{{ msg }}</div>
+      <div *ngIf="failedFlocks().length" class="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">
+        <p class="font-bold mb-1">⚠️ {{ failedFlocks().length }} قطيع السيرفر رفضه ومتعملش:</p>
+        <p *ngFor="let f of failedFlocks()">• {{ f.name }} — {{ f.reason }}</p>
+        <button type="button" (click)="dismissFailedFlocks()" class="mt-2 font-bold">تجاهل</button>
+      </div>
+      <div *ngIf="syncMessage() as msg" class="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 font-bold">{{ msg }}</div>
+    </div>
+
+    <!-- ⏳ قطعان محفوظة على الجهاز بانتظار النت -->
+    <div class="grid sm:grid-cols-2 xl:grid-cols-2 gap-4" *ngIf="pendingFlocks().length > 0">
+      <div *ngFor="let p of pendingFlocks()" class="rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50 p-4">
+        <p class="text-xs font-bold text-amber-800 mb-1">⏳ بانتظار النت — لسه ما اتعملش على السيرفر</p>
+        <h3 class="font-black text-base text-[var(--c-text)]">{{ p.payload.name }}</h3>
+        <p class="text-xs text-[var(--c-muted)] mt-1">
+          {{ p.payload.initialCount | number }} · {{ p.payload.startDate }}
+          <span *ngIf="p.preparing"> · 🧹 تجهيز العنبر</span>
+        </p>
+        <div class="flex gap-3 mt-3">
+          <button *ngIf="!isOffline()" type="button" (click)="syncPendingFlocks()" [disabled]="syncingFlocks()" class="text-xs font-bold text-green-700">
+            {{ syncingFlocks() ? 'جاري الإرسال...' : 'ابعته دلوقتي' }}
+          </button>
+          <button type="button" (click)="removePendingFlock(p.id)" class="text-xs font-bold text-red-700">مسح</button>
+        </div>
+      </div>
+    </div>
 
     <div *ngIf="showForm()" class="card animate-in border-2 border-primary-200">
       <h2 class="section-title">➕ {{ 'FLOCK.ADD' | translate }}</h2>
@@ -597,7 +652,7 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
       </a>
     </div>
 
-    <div *ngIf="activeFlocks().length === 0" class="text-center py-16">
+    <div *ngIf="activeFlocks().length === 0 && pendingFlocks().length === 0" class="text-center py-16">
       <p class="text-6xl mb-4">🐣</p>
       <h3 class="text-xl font-bold text-[var(--c-text)] mb-2">{{ 'FLOCK.EMPTY_TITLE' | translate }}</h3>
       <p class="text-[var(--c-muted)] text-sm mb-6">{{ 'FLOCK.EMPTY_SUB' | translate }}</p>
@@ -612,10 +667,36 @@ import { Flock, FlockCreate, FlockType } from '../../core/models';
 export class FlocksListComponent implements OnInit {
   private svc = inject(FlockService);
   private route = inject(ActivatedRoute);
+  private auth = inject(AuthService);
+  private store = inject(UserOfflineCacheService);
   flocks = this.svc.flocks;
+
+  // 📴 تخزين الأوفلاين — موبايل بس، ومربوط بمعرّف المستخدم الحالي (نفس UserOfflineCacheService المستخدم في صفحة القطيع)
+  offlineEnabled = this.store.enabled;
+  isOffline = signal(typeof navigator !== 'undefined' && !navigator.onLine);
+  private loadFailed = signal(false);               // آخر تحميل للقايمة فشل (مفيش نت/السيرفر واقع)
+  private cachedFlocks = signal<Flock[]>([]);        // آخر نسخة محفوظة من القايمة
+  pendingFlocks = signal<PendingFlock[]>([]);        // قطعان اتعملت من غير نت
+  failedFlocks = signal<FailedFlock[]>([]);          // قطعان السيرفر رفضها — بتتعرض عشان مانمسحش حاجة بصمت
+  syncingFlocks = signal(false);
+  offlineNotice = signal<string | null>(null);
+  syncMessage = signal<string | null>(null);
+
+  private cacheSet(key: string, value: any): Promise<boolean> {
+    return this.auth.currentUserId().then(uid => this.store.set(uid, key, value));
+  }
+  private cacheGet(key: string): Promise<any | null> {
+    return this.auth.currentUserId().then(uid => this.store.get(uid, key));
+  }
+
   // 🐔 القطعان النشطة بس هي اللي تتعرض في القايمة الرئيسية (مكان الإضافة)
   // القطعان المقفولة (closed) بتختفي من هنا تلقائيًا
-  activeFlocks = () => this.flocks().filter(f => f.status === 'active');
+  // 📴 لو التحميل فشل ومفيش بيانات حيّة، بنعرض آخر نسخة محفوظة
+  showingCached = () => this.loadFailed() && this.flocks().length === 0 && this.cachedFlocks().length > 0;
+  activeFlocks = () => {
+    const src = this.showingCached() ? this.cachedFlocks() : this.flocks();
+    return src.filter(f => f.status === 'active');
+  };
   showForm = signal(false);
   Math = Math;
 
@@ -661,8 +742,135 @@ export class FlocksListComponent implements OnInit {
   }
 
   ngOnInit() { 
-    this.svc.getFlocks().subscribe(); 
+    this.refresh();
     this.applyPrefillFromQuery();
+    // 📴 قطعان متخزّنة من وقت ما النت كان فاصل → نحمّلها ونبعتها لو النت راجع
+    void this.loadPendingState().then(() => this.syncPendingFlocks());
+  }
+
+  @HostListener('window:offline')
+  onWentOffline() { this.isOffline.set(true); }
+
+  @HostListener('window:online')
+  onBackOnline() {
+    this.isOffline.set(false);
+    this.syncPendingFlocks().then(() => this.refresh());
+  }
+
+  /** تحميل القايمة من السيرفر + تخزينها، ولو فشل (مفيش نت) نعرض آخر نسخة محفوظة */
+  refresh() {
+    this.svc.getFlocks().subscribe({
+      next: (res: any) => {
+        const list: Flock[] = Array.isArray(res) ? res : this.flocks();
+        // لو رجعت فاضية ومفيش نت فعلاً، ده مش "مفيش قطعان" — ده فشل تحميل
+        if (list.length === 0 && !navigator.onLine) { void this.useCachedList(); return; }
+        this.loadFailed.set(false);
+        void this.saveListCache(list);
+      },
+      error: () => { void this.useCachedList(); },
+    });
+  }
+
+  private async useCachedList() {
+    this.loadFailed.set(true);
+    const cached = await this.cacheGet(FLOCKS_LIST_CACHE_KEY);
+    if (Array.isArray(cached)) this.cachedFlocks.set(cached.map(f => this.withFreshAge(f)));
+  }
+
+  private async saveListCache(list: Flock[]) {
+    if (!this.store.enabled) return;
+    await this.cacheSet(FLOCKS_LIST_CACHE_KEY, list);
+    // 🔗 نزرع نسخة لكل قطيع لصفحة التفاصيل (لو مش موجودة) عشان تفتح من غير نت حتى لو عمره ما اتفتح قبل كده
+    for (const f of list) {
+      const key = `flock_cache:${f.id}`;
+      if (!(await this.cacheGet(key))) await this.cacheSet(key, f);
+    }
+  }
+
+  /** عمر القطيع بالأيام من تاريخ البدء (نفس حساب صفحة القطيع) — النسخة المخزّنة عمرها بيبقى قديم */
+  private withFreshAge(f: any): Flock {
+    const parts = String(f?.startDate ?? '').split('T')[0].split('-');
+    if (parts.length !== 3) return f;
+    const start = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const today = new Date();
+    start.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return { ...f, ageInDays: Math.max(0, Math.round((today.getTime() - start.getTime()) / 86400000)) };
+  }
+
+  // ───────────────────────── 📴 طابور القطعان الجديدة ─────────────────────────
+  private async loadPendingState() {
+    const pending = await this.cacheGet(PENDING_FLOCKS_KEY);
+    const failed = await this.cacheGet(FAILED_FLOCKS_KEY);
+    this.pendingFlocks.set(Array.isArray(pending) ? pending : []);
+    this.failedFlocks.set(Array.isArray(failed) ? failed : []);
+  }
+
+  async removePendingFlock(id: string) {
+    if (!confirm('تمسح القطيع ده من على جهازك؟ مش هيتبعت للسيرفر.')) return;
+    const next = this.pendingFlocks().filter(p => p.id !== id);
+    this.pendingFlocks.set(next);
+    await this.cacheSet(PENDING_FLOCKS_KEY, next);
+  }
+
+  async dismissFailedFlocks() {
+    this.failedFlocks.set([]);
+    await this.cacheSet(FAILED_FLOCKS_KEY, []);
+  }
+
+  /** بيبعت القطعان المحفوظة بالترتيب. لو النت قطع في النص بيقف ويحاول بعدين. */
+  async syncPendingFlocks() {
+    if (this.syncingFlocks() || !navigator.onLine) return;
+    const queue = this.pendingFlocks();
+    if (!queue.length) return;
+    this.syncingFlocks.set(true);
+    try {
+      // 🛡️ حماية من التكرار: لو الطلب وصل السيرفر قبل ما النت يقطع، القطيع يكون موجود فعلاً
+      let existing: any[] = [];
+      try {
+        const res: any = await firstValueFrom(this.svc.getFlocks());
+        existing = Array.isArray(res) ? res : this.flocks();
+      } catch { return; }
+
+      let remaining = [...queue];
+      const failed = [...this.failedFlocks()];
+      let sent = 0;
+
+      for (const item of queue) {
+        const p = item.payload;
+        const dup = existing.find((f: any) =>
+          f.name === p.name && f.type === p.type &&
+          String(f.startDate ?? '').split('T')[0] === p.startDate &&
+          (f.initialCount == null || Number(f.initialCount) === Number(p.initialCount)));
+        if (dup) { remaining = remaining.filter(x => x.id !== item.id); sent++; continue; }
+        try {
+          const created: any = await firstValueFrom(this.svc.createFlock(p));
+          if (item.preparing && created?.id) {
+            setPrepFlag(created.id, true);
+            copyGuideState('draft:' + item.type, created.id, 'before');
+          }
+          remaining = remaining.filter(x => x.id !== item.id);
+          sent++;
+        } catch (err: any) {
+          if (err?.status === 0) break; // النت لسه مش ثابت — نحاول بعدين
+          remaining = remaining.filter(x => x.id !== item.id);
+          const detail = err?.error?.detail;
+          failed.push({ id: item.id, name: p.name, reason: typeof detail === 'string' ? detail : 'السيرفر رفض الطلب' });
+        }
+      }
+
+      this.pendingFlocks.set(remaining);
+      this.failedFlocks.set(failed);
+      await this.cacheSet(PENDING_FLOCKS_KEY, remaining);
+      await this.cacheSet(FAILED_FLOCKS_KEY, failed);
+      if (sent) {
+        this.syncMessage.set(`✅ اتعمل ${sent} قطيع على السيرفر`);
+        setTimeout(() => this.syncMessage.set(null), 7000);
+        this.refresh();
+      }
+    } finally {
+      this.syncingFlocks.set(false);
+    }
   }
 
   // 🔁 دورة جديدة / وصلت الكتاكيت: لينكات من صفحة القطيع أو من صفحة التجهيز بتفتح الفورم ومعبّية
@@ -749,6 +957,34 @@ export class FlocksListComponent implements OnInit {
 
     const wasPreparing = this.preparing && !this.isExistingFlock;
     const type = this.form.type;
+
+    // 📴 مفيش نت: نخزّن القطيع على الجهاز (موبايل بس) وهيتعمل على السيرفر أول ما النت يرجع
+    const queueOffline = async () => {
+      if (!this.store.enabled) {
+        // ويب: مفيش تخزين محلي (سياسة الأمان) — البيانات فاضلة في الفورم
+        alert('مفيش اتصال بالنت. على الويب لازم نت عشان تضيف قطيع — جرّب تاني لما النت يرجع، أو استخدم تطبيق الموبايل.');
+        return;
+      }
+      const item: PendingFlock = {
+        id: 'pf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        payload, preparing: wasPreparing, type, createdAt: Date.now(),
+      };
+      const next = [...this.pendingFlocks(), item];
+      const saved = await this.cacheSet(PENDING_FLOCKS_KEY, next);
+      if (!saved) {
+        // ✅ مانقولش "اتحفظ" لو التخزين فشل — وبنسيب البيانات في الفورم عشان متضيعش
+        alert('مقدرناش نحفظ القطيع على جهازك (المساحة ممتلية، أو لسه ماسجلتش دخول بالنت على الجهاز ده). بياناتك لسه في الفورم — جرّب تاني لما النت يرجع.');
+        return;
+      }
+      this.pendingFlocks.set(next);
+      this.resetForm();
+      this.showForm.set(false);
+      this.offlineNotice.set('✅ اتحفظ القطيع على جهازك — هيتعمل على السيرفر أول ما النت يرجع');
+      setTimeout(() => this.offlineNotice.set(null), 8000);
+    };
+
+    if (!navigator.onLine) { void queueOffline(); return; }
+
     this.svc.createFlock(payload).subscribe({
       next: (created: any) => {
         // 🧹 فعّل دليل التجهيز لقطيعه، وانقل أي تقدّم كان معلّمه في صفحة التجهيز المستقلة
@@ -760,7 +996,10 @@ export class FlocksListComponent implements OnInit {
         this.showForm.set(false);
         this.svc.getFlocks().subscribe(); 
       },
-      error: (err) => console.error('خطأ أثناء الحفظ:', err)
+      error: (err) => {
+        console.error('خطأ أثناء الحفظ:', err);
+        if (err?.status === 0) void queueOffline(); // 📴 النت قطع في نص الطلب
+      }
     });
   }
 }

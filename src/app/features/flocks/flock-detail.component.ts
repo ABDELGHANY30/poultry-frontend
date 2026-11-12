@@ -1122,6 +1122,7 @@ export class FlockDetailComponent implements OnInit {
   prepCardVisible = () => this.prepFlag() && this.flock()?.status === 'active';
   startingNow = signal(false);
   startNow() {
+    if (this.needsOnline()) return;
     const id = this.flock()?.id;
     if (!id) return;
     if (!confirm('تبدأ الدورة النهارده؟ تاريخ البدء هيبقى النهارده والأيام هتتحسب من دلوقتي.')) return;
@@ -1242,6 +1243,51 @@ export class FlockDetailComponent implements OnInit {
     return this.auth.currentUserId().then(uid => this.store.get(uid, key));
   }
 
+  // 📴 قراءة من السيرفر مع نسخة محلية: نجاح → نعرض ونخزّن، وانقطاع النت → آخر نسخة مخزّنة.
+  // أي خطأ تاني (زي 403 لو مش Pro) مانعرضش بيانات قديمة — بنرجّع القيمة الفاضية زي الأول.
+  private fetchCached<T>(url: string, cacheKey: string, apply: (v: T) => void, empty: T, transform?: (res: any) => T): void {
+    this.http.get<any>(url).subscribe({
+      next: (res) => {
+        const v = transform ? transform(res) : (res as T);
+        apply(v);
+        void this.cacheSet(cacheKey, v);
+      },
+      error: async (err: any) => {
+        if (err?.status === 0 || !navigator.onLine) {
+          const cached = await this.cacheGet(cacheKey);
+          apply((cached ?? empty) as T);
+        } else {
+          apply(empty);
+        }
+      },
+    });
+  }
+
+  /** 📴 العمليات اللي محتاجة السيرفر: لو مفيش نت نقول كده بوضوح بدل رسالة "حصل خطأ" (تسجيل السجلات اليومية بس هو اللي بيتخزّن ويتبعت بعدين) */
+  private needsOnline(): boolean {
+    if (navigator.onLine) return false;
+    alert('📴 مفيش نت — العملية دي محتاجة اتصال بالسيرفر، جرّب تاني لما النت يرجع. (تسجيل السجلات اليومية بس بيشتغل من غير نت.)');
+    return true;
+  }
+
+  // 🔄 بعد رجوع النت: نجدّد كل القراءات من غير ما نلمس الفورم المفتوح
+  private refreshReadOnly(id: string) {
+    this.loadAnalytics(id);
+    this.loadHealthScore(id);
+    this.loadTreatments(id);
+    this.loadTreatmentPlan(id);
+    this.loadTodayTasks(id);
+    this.loadCycleProgram(id);
+    this.loadAdherenceReport(id);
+    this.loadFarmMembers();
+    this.loadMyAccess(id);
+    this.loadVaccinations(id);
+    this.svc.getRecords(id).subscribe({
+      next: (recs) => { this.records.set(recs || []); void this.cacheSet(`records_cache:${id}`, recs || []); },
+      error: () => {},
+    });
+  }
+
   // 📴 سجلات اتسجلت من غير نت — الطابور والإرسال في PendingRecordsService (مشترك مع شاشة التقارير)
   private pending = inject(PendingRecordsService);
   private activeFlockId: string | null = null;
@@ -1267,7 +1313,7 @@ export class FlockDetailComponent implements OnInit {
   @HostListener('window:online')
   onBackOnline() {
     this.isOffline.set(false);
-    if (this.activeFlockId) this.loadCycleProgram(this.activeFlockId); // نجدّد النسخة المخزّنة
+    if (this.activeFlockId) this.refreshReadOnly(this.activeFlockId); // نجدّد النسخ المخزّنة
     this.syncPending();
   }
 
@@ -1435,22 +1481,26 @@ export class FlockDetailComponent implements OnInit {
       .subscribe({
         next: (res) => {
           this.myAccess.set(res);
+          void this.cacheSet(`access_cache:${flockId}`, res);
           // لو كان فاتح تاب "الفريق" وطلع مش صاحب الحساب، نرجعه لـ "اليوم" بدل ما يفضل على تاب مخفي
           if (!res.is_owner && this.activeSection() === 'team') this.activeSection.set('today');
         },
-        error: () => this.myAccess.set(null),
+        error: async (err: any) => {
+          const cached = (err?.status === 0 || !navigator.onLine) ? await this.cacheGet(`access_cache:${flockId}`) : null;
+          this.myAccess.set(cached);
+        },
       });
   }
 
   // 💊 سجل العلاج
   loadTreatments(flockId: string) {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/treatments`)
-      .subscribe({ next: (res) => this.treatments.set(res || []), error: () => this.treatments.set([]) });
+    this.fetchCached<any[]>(`${environment.apiUrl}/flocks/${flockId}/treatments`, `treatments_cache:${flockId}`,
+      v => this.treatments.set(v), [], res => res || []);
   }
 
   loadTreatmentPlan(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/treatment-plan`)
-      .subscribe({ next: (res) => this.treatmentPlan.set(res), error: () => this.treatmentPlan.set(null) });
+    this.fetchCached<any>(`${environment.apiUrl}/flocks/${flockId}/treatment-plan`, `treatment_plan_cache:${flockId}`,
+      v => this.treatmentPlan.set(v), null);
   }
 
   /** بيملّي فورم العلاج من بند في العلاجات المتوقعة — المستخدم يراجع ويحفظ */
@@ -1464,6 +1514,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   saveTreatment() {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !this.treatmentForm.drug_name) return;
     this.http.post(`${environment.apiUrl}/flocks/${flockId}/treatments`, this.treatmentForm)
@@ -1478,6 +1529,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   deleteTreatment(t: any) {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !confirm(`تمسح سجل علاج ${t.drug_name}؟`)) return;
     this.http.delete(`${environment.apiUrl}/flocks/${flockId}/treatments/${t.id}`)
@@ -1486,8 +1538,8 @@ export class FlockDetailComponent implements OnInit {
 
   // ✅ مهام اليوم
   loadTodayTasks(flockId: string) {
-    this.http.get<any[]>(`${environment.apiUrl}/flocks/${flockId}/tasks/today`)
-      .subscribe({ next: (res) => this.todayTasks.set(res || []), error: () => this.todayTasks.set([]) });
+    this.fetchCached<any[]>(`${environment.apiUrl}/flocks/${flockId}/tasks/today`, `tasks_today_cache:${flockId}`,
+      v => this.todayTasks.set(v), [], res => res || []);
   }
 
   // 📆 برنامج الدورة يوم بيوم
@@ -1542,11 +1594,12 @@ export class FlockDetailComponent implements OnInit {
 
   // 📊 تقرير الالتزام بالبرنامج على مدار الدورة كاملة
   loadAdherenceReport(flockId: string) {
-    this.http.get<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program/adherence-report`)
-      .subscribe({ next: (res) => this.adherenceReport.set(res), error: () => this.adherenceReport.set(null) });
+    this.fetchCached<any>(`${environment.apiUrl}/flocks/${flockId}/cycle-program/adherence-report`, `adherence_cache:${flockId}`,
+      v => this.adherenceReport.set(v), null);
   }
 
   saveTask() {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !this.taskForm.title) return;
     this.http.post(`${environment.apiUrl}/flocks/${flockId}/tasks`, this.taskForm)
@@ -1564,6 +1617,7 @@ export class FlockDetailComponent implements OnInit {
   canToggleTasks = () => this.myAccess()?.is_owner !== false || !!this.myAccess()?.can_add_records;
 
   toggleTaskToday(t: any) {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !this.canToggleTasks()) return;
     const wasCompleted = t.completed_today;
@@ -1583,6 +1637,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   deleteTask(t: any) {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !confirm(`تمسح مهمة "${t.title}" نهائيًا؟`)) return;
     this.http.delete(`${environment.apiUrl}/flocks/${flockId}/tasks/${t.id}`)
@@ -1591,11 +1646,12 @@ export class FlockDetailComponent implements OnInit {
 
   // 👷 دعوة الأعضاء — نفس endpoints صفحة /team، هنا بس عشان تكون قريبة من مكان الاستخدام
   loadFarmMembers() {
-    this.http.get<any[]>(`${environment.apiUrl}/farm-members`)
-      .subscribe({ next: (res) => this.farmMembers.set(res || []), error: () => this.farmMembers.set([]) });
+    this.fetchCached<any[]>(`${environment.apiUrl}/farm-members`, 'farm_members_cache',
+      v => this.farmMembers.set(v), [], res => res || []);
   }
 
   sendInvite() {
+    if (this.needsOnline()) return;
     if (!this.inviteForm.invited_email) return;
 
     this.inviting.set(true);
@@ -1696,8 +1752,11 @@ export class FlockDetailComponent implements OnInit {
     const items = this.vaccSchedule().map((v: any) => ({ day: v.day, name_ar: v.nameAr, method: v.method }));
     this.http.post<any[]>(`${environment.apiUrl}/flocks/${id}/vaccinations/sync`, { items })
       .subscribe({
-        next: (rows) => this.dbVaccinations.set(rows || []),
-        error: () => this.dbVaccinations.set([]),
+        next: (rows) => { this.dbVaccinations.set(rows || []); void this.cacheSet(`vacc_cache:${id}`, rows || []); },
+        error: async (err: any) => {
+          const cached = (err?.status === 0 || !navigator.onLine) ? await this.cacheGet(`vacc_cache:${id}`) : null;
+          this.dbVaccinations.set(cached ?? []);
+        },
       });
   }
 
@@ -1706,6 +1765,7 @@ export class FlockDetailComponent implements OnInit {
     this.vaccRows().filter((v: any) => !v.completed && v.dbId && this.calculatedAge() > v.day).length;
 
   completeAllPastVacc() {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId) return;
     const n = this.pastDueVaccCount();
@@ -1719,6 +1779,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   toggleVaccination(row: any) {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !row.dbId) return;
     const completed = !row.completed;
@@ -1783,6 +1844,7 @@ export class FlockDetailComponent implements OnInit {
   }
 
   deletePastRecord(r: any) {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId || !r.id) return;
     if (!confirm(`متأكد إنك عايز تمسح سجل يوم ${this.recordDateOf(r)}؟`)) return;
@@ -2124,7 +2186,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
   const cached = await this.cacheGet(`flock_cache:${id}`);
   if (cached) this.flock.set(cached);
 } });
-    this.svc.getAnalytics(id).subscribe(a => this.analytics.set(a));
+    this.loadAnalytics(id);
     this.loadHealthScore(id);
     this.loadTodayEvents(id);
     this.loadTreatments(id);
@@ -2145,20 +2207,31 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
       error: async () => this.records.set((await this.cacheGet(`records_cache:${id}`)) ?? [])
     });
     // 👤 مين سجّل كل سجل — منفصلة عن getRecords لأن DailyRecordOut schema لسه مفيهاش recorded_by_user_id
-    this.http.get<Record<string, string>>(`${environment.apiUrl}/flocks/${id}/records/recorded-by`)
-      .subscribe({ next: (res) => this.recordedByMap.set(res || {}), error: () => this.recordedByMap.set({}) });
+    this.fetchCached<Record<string, string>>(`${environment.apiUrl}/flocks/${id}/records/recorded-by`, `recorded_by_cache:${id}`,
+      v => this.recordedByMap.set(v), {}, res => res || {});
   }
 
 
-  loadHealthScore(id: string) {
-    this.http.get<any>(`${environment.apiUrl}/ai/health-score?flock_id=${id}`).subscribe({
-      next: (res) => this.healthScore.set(res),
-      error: () => this.healthScore.set(null),
+  loadAnalytics(id: string) {
+    this.svc.getAnalytics(id).subscribe({
+      next: (a) => { this.analytics.set(a); void this.cacheSet(`analytics_cache:${id}`, a); },
+      error: async (err: any) => {
+        if (err?.status === 0 || !navigator.onLine) {
+          const cached = await this.cacheGet(`analytics_cache:${id}`);
+          if (cached) this.analytics.set(cached);
+        }
+      },
     });
+  }
+
+  loadHealthScore(id: string) {
+    this.fetchCached<any>(`${environment.apiUrl}/ai/health-score?flock_id=${id}`, `health_cache:${id}`,
+      v => this.healthScore.set(v), null);
   }
 
   // 🏁 إنهاء الدورة: بتتسجّل كمنتهية بتقريرها، بيظهر استبيان التقييم، وبعدها فترة التنظيف والدورة الجاية (لو عايز)
   closeFlock() {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId) return;
     if (!confirm('تنهي الدورة دي؟ التسجيل اليومي هيقف عليها، وهتسجّل تقييمها وتبدأ فترة التنظيف، وتبدأ دورة جديدة لو حبيت. تقريرها بيفضل محفوظ لوحده.')) return;
@@ -2201,6 +2274,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
   }
 
   downloadCertificate() {
+    if (this.needsOnline()) return;
     const flockId = this.flock()?.id;
     if (!flockId) return;
     this.http.get(`${environment.apiUrl}/reports/certificate/pdf?flock_id=${flockId}`, {
