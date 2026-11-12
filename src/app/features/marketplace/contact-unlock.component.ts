@@ -11,13 +11,15 @@ import { markFromApp } from '../../core/services/deep-link.service';
 /**
  * بديل أزرار "اتصال / واتساب" في كارت الإعلان:
  *   <app-contact-unlock [listing]="l" (browserClosed)="reloadListings()" />
+ * المشتري مش محتاج توثيق بطاقة (التوثيق للتاجر بس).
  * الـ listing لازم يجيلك من GET /listings (فيه id, phone, phone_masked, contact_unlocked, is_mine).
  * - لو الرقم مفتوح (صاحب الإعلان أو دافع 50 جنيه): زراري اتصال + واتساب.
  * - لو مقفول: الرقم مخفي + زرار دفع Paymob.
  *
- * 🆕 سياسة الدفع:
- * - التطبيق (Capacitor): مفيش أي دفع جوّاه. الزرار بيفتح الموقع بـ ?unlock=<id>&from=app،
- *   والموقع بيبدأ الدفع تلقائياً، وبعد النجاح صفحة payment-result بترجّع المستخدم للتطبيق.
+ * 🆕 الدفع من التطبيق من غير تسجيل دخول تاني:
+ * - التطبيق (Capacitor): المستخدم مسجّل دخول أصلاً، فبنطلب لينك الدفع من السيرفر بحسابه (?from_app=true)
+ *   ونفتح صفحة دفع XPay مباشرة في المتصفح الداخلي — مفيش موقع ولا تسجيل دخول. وبعد النجاح
+ *   صفحة النتيجة بترجّع المستخدم للتطبيق وهو اللي بيتأكد من الدفع.
  * - browserClosed: بيتبعت لما المستخدم يقفل متصفح الموقع (حتى لو قفله من غير دفع) —
  *   اربطه بإعادة تحميل الإعلانات عشان الرقم يظهر لو الدفع تم.
  */
@@ -48,12 +50,13 @@ import { markFromApp } from '../../core/services/deep-link.service';
       <div *ngIf="errorMsg()" class="text-xs text-red-600 mb-2">{{ errorMsg() }}</div>
       <button (click)="unlock()" [disabled]="loading()"
               class="w-full py-2 rounded-xl bg-gray-800 text-white text-sm font-bold">
-        {{ loading() ? '...' : (isNative
-          ? (lang === 'ar' ? '🔓 اعرض الرقم — أكمل من الموقع' : '🔓 Show number — continue on website')
-          : (lang === 'ar' ? '🔓 اعرض الرقم — 50 جنيه' : '🔓 Show number — 50 EGP')) }}
+        {{ loading() ? '...' : (lang === 'ar' ? '🔓 اعرض الرقم — 50 جنيه' : '🔓 Show number — 50 EGP') }}
       </button>
       <p class="text-[10px] text-gray-400 text-center mt-1.5">
         {{ lang === 'ar' ? 'دفع مرة واحدة لهذا الإعلان — اتصال أو واتساب' : 'One-time payment for this listing — call or WhatsApp' }}
+      </p>
+      <p class="text-[10px] text-gray-400 text-center leading-relaxed mt-1">
+        ⚠️ {{ lang === 'ar' ? 'التطبيق والموقع منصة لعرض الإعلانات والتواصل فقط، وغير مسؤولين عن أي عمليات بيع أو شراء بين المستخدمين. تأكد من البائع والمنتج قبل أي تحويل أو استلام.' : 'This app and website only list ads and connect users, and are not responsible for any sale or purchase between users. Check the seller and the product before any transfer or handover.' }}
       </p>
     </div>
   </ng-template>
@@ -95,42 +98,44 @@ export class ContactUnlockComponent implements OnInit {
     return `https://wa.me/${d}`;
   }
 
-  async unlock() {
+  unlock() {
     if (!this.auth.isAuthenticated()) { this.router.navigate(['/auth/login'], { queryParams: { returnTo: '/market-hub' } }); return; }
 
-    // التطبيق مبيبدأش دفع — بيفتح الموقع والمستخدم يكمّل من هناك (نفس سياسة الاشتراك)
+    this.loading.set(true);
+    this.errorMsg.set('');
+
+    // from_app=true: السيرفر بيخلّي رابط الرجوع يحوّل المستخدم للتطبيق بعد الدفع
+    const url = `${environment.apiUrl}/marketplace-payments/contact/${this.listing.id}/checkout${this.isNative ? '?from_app=true' : ''}`;
+    this.http.post<any>(url, {}).subscribe({
+      next: (res) => this.openPayment(res.payment_url),
+      error: (err) => {
+        this.loading.set(false);
+        const d = err?.error?.detail;
+        if (d?.code === 'already_unlocked') { window.location.reload(); return; } // الرقم مفتوح بالفعل
+        this.errorMsg.set(typeof d === 'string' ? d : (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again'));
+      },
+    });
+  }
+
+  private async openPayment(paymentUrl?: string) {
+    if (!paymentUrl) {
+      this.loading.set(false);
+      this.errorMsg.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again');
+      return;
+    }
+
     if (this.isNative) {
+      this.loading.set(false);
       try {
         const handle = await Browser.addListener('browserFinished', () => {
           handle.remove();
           this.browserClosed.emit();
         });
       } catch { /* مش مشكلة لو الـ listener مش متاح */ }
-      await Browser.open({
-        url: `${environment.websiteUrl}/market-hub?unlock=${encodeURIComponent(this.listing.id)}&from=app`,
-      });
+      await Browser.open({ url: paymentUrl });
       return;
     }
 
-    this.loading.set(true);
-    this.errorMsg.set('');
-
-    this.http.post<any>(`${environment.apiUrl}/marketplace-payments/contact/${this.listing.id}/checkout`, {})
-      .subscribe({
-        next: (res) => {
-          if (res.payment_url) window.location.href = res.payment_url;
-          else { this.loading.set(false); this.errorMsg.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again'); }
-        },
-        error: (err) => {
-          this.loading.set(false);
-          const d = err?.error?.detail;
-          if (err?.status === 403) { // بطاقته مش موثّقة -> صفحة توثيق البطاقة
-            this.router.navigate(['/verify-identity'], { queryParams: { returnTo: '/market-hub' } });
-            return;
-          }
-          if (d?.code === 'already_unlocked') { window.location.reload(); return; } // الرقم مفتوح بالفعل
-          this.errorMsg.set(typeof d === 'string' ? d : (this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, try again'));
-        },
-      });
+    window.location.href = paymentUrl;
   }
 }

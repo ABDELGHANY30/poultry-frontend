@@ -112,7 +112,7 @@ export class AuthService {
     if (this.isNative) return;
     try {
       const u = user as any;
-      localStorage.setItem(WEB_USER_KEY, JSON.stringify({ id: u.id, name: u.name, language: u.language, role: u.role }));
+      localStorage.setItem(WEB_USER_KEY, JSON.stringify({ id: u.id, name: u.name, email: u.email, language: u.language, role: u.role }));
     } catch { /* storage مقفول — مش مشكلة */ }
   }
 
@@ -163,7 +163,7 @@ export class AuthService {
 
   private persistMinimalUserNative(user: User) {
     if (!this.isNative) return;
-    const minimal = { id: (user as any).id, name: user.name, language: (user as any).language };
+    const minimal = { id: (user as any).id, name: user.name, email: (user as any).email, language: (user as any).language };
     this.nativeSet(USER_KEY, JSON.stringify(minimal)).catch(() => {});
   }
 

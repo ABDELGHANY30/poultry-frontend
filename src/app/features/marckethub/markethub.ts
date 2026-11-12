@@ -39,7 +39,7 @@ const PRICE_CATEGORIES = [
           {{ lang === 'ar' ? 'بيع واشتري دواجن ومعدات' : 'Buy & sell poultry and equipment' }}
         </p>
         <p class="text-white/70 text-xs mt-1" *ngIf="activeTab() === 'prices'">
-          ⏱️ {{ lang === 'ar' ? 'آخر تحديث' : 'Last update' }}: {{ lastUpdate() | date:'d MMMM yyyy':'':(lang === 'ar' ? 'ar' : 'en') }}
+          ⏱️ {{ lang === 'ar' ? 'آخر تحديث' : 'Last update' }}: {{ lastUpdate() | date:'d MMMM yyyy - h:mm a':'':(lang === 'ar' ? 'ar' : 'en') }}
         </p>
       </div>
 
@@ -426,18 +426,26 @@ const PRICE_CATEGORIES = [
   <span class="text-lg">{{ getPriceCategoryIcon(group.category) }}</span>
 </div>
 
-    <!-- Price Row -->
+    <!-- Price Row: سعر واحد | سعر التنفيذ + السعر المعلن (فراخ) | أقل + أعلى (بيض وكتاكيت) — حسب price_kind من الـ API -->
     <div class="grid grid-cols-2 gap-3">
-      <div class="bg-white rounded-xl p-3 text-center shadow-sm">
-        <p class="text-xs text-gray-400 mb-1">سعر التنفيذ</p>
-        <p class="font-black text-green-600 text-xl">{{ price.price_min | number }}</p>
+      <div *ngIf="!price.price_kind || price.price_kind === 'single'" class="col-span-2 bg-white rounded-xl p-3 text-center shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">السعر</p>
+        <p class="font-black text-green-600 text-xl">{{ price.price | number }}</p>
         <p class="text-[10px] text-gray-400">جنيه</p>
       </div>
-      <div class="bg-white rounded-xl p-3 text-center shadow-sm border border-blue-100">
-        <p class="text-xs text-blue-400 mb-1">السعر المعلن</p>
-        <p class="font-black text-blue-600 text-xl">{{ price.price_max | number }}</p>
-        <p class="text-[10px] text-gray-400">جنيه</p>
-      </div>
+
+      <ng-container *ngIf="price.price_kind === 'exec_announced' || price.price_kind === 'range'">
+        <div class="bg-white rounded-xl p-3 text-center shadow-sm">
+          <p class="text-xs text-gray-400 mb-1">{{ price.price_kind === 'range' ? 'أقل سعر' : 'سعر التنفيذ' }}</p>
+          <p class="font-black text-green-600 text-xl">{{ price.price_min != null ? (price.price_min | number) : '—' }}</p>
+          <p class="text-[10px] text-gray-400">جنيه</p>
+        </div>
+        <div class="bg-white rounded-xl p-3 text-center shadow-sm border border-blue-100">
+          <p class="text-xs text-blue-400 mb-1">{{ price.price_kind === 'range' ? 'أعلى سعر' : 'السعر المعلن' }}</p>
+          <p class="font-black text-blue-600 text-xl">{{ price.price_max != null ? (price.price_max | number) : '—' }}</p>
+          <p class="text-[10px] text-gray-400">جنيه</p>
+        </div>
+      </ng-container>
     </div>
 
     <!-- Notes & Date -->
