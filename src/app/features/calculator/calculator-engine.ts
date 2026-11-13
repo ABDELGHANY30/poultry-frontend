@@ -267,6 +267,7 @@ class PoultryFarmCalculator {
         housing_system: f.housing_system,
         season: f.season,
         target_age_days_used: f.target_age_days,
+        ready_to_lay: !!f.ready_to_lay,
         avg_weight_kg_used: f.avg_weight_kg,
       },
       area: { required_m2: area.required_m2, animals_per_m2: area.birds_per_m2 },
@@ -1136,7 +1137,8 @@ export function calculateProfitability(d: ProfitabilityInput): any {
   const otherPct = d.other_costs_percent ?? DEFAULT_OTHER_COSTS_PERCENT_OF_FEED;
   const avgWeight = d.avg_weight_kg ?? DEFAULT_WEIGHT_KG[type] ?? 2.0;
   const brokenPct = d.broken_eggs_percent ?? 3.0;
-  const isEgg = d.is_egg_production ?? (type === 'layer');
+  // السمان لو الدورة أطول من فترة التربية (45 يوم) يبقى إنتاج بيض: علفه بيشمل مرحلة البيض، فالإيراد لازم يبقى بيض مش وزن حي
+  const isEgg = d.is_egg_production ?? (type === 'layer' || (type === 'quail' && cycleDays > QUAIL_REARING_DAYS));
   let eggsPerBird = d.eggs_per_bird_cycle ?? null;
   const eggPrice = d.egg_price ?? null;
   const sellPrice = d.selling_price_per_kg ?? null;

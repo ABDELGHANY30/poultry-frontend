@@ -576,7 +576,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           </div>
 
           <!-- 🍗 سعر بيع الكيلو - لكل الأنواع اللي بتتباع لحم -->
-          <div *ngIf="form.poultry_type !== 'layer'">
+          <div *ngIf="!isEggMode()">
             <label class="form-label">💵 سعر بيع الكيلو (جنيه)</label>
             <input [(ngModel)]="profitForm.selling_price_per_kg" type="number" step="0.5" class="form-input" placeholder="65"/>
             <p *ngIf="marketSellHint() as h" class="text-[10px] mt-1" [class.text-blue-500]="!h.stale" [class.text-amber-600]="h.stale">
@@ -585,7 +585,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
           </div>
 
           <!-- 🥚 حقول خاصة بالبياض -->
-          <ng-container *ngIf="form.poultry_type === 'layer'">
+          <ng-container *ngIf="isEggMode()">
             <div>
               <label class="form-label">🥚 سعر البيضة (جنيه)</label>
               <input [(ngModel)]="profitForm.egg_price" type="number" step="0.1" class="form-input" placeholder="2.5"/>
@@ -1008,9 +1008,23 @@ export class CalculatorComponent implements OnInit {
     utilities_cost_per_bird: null as number | null,
   };
 
-  calculateProfitability(): void {
+  /** بياض، أو سمان دورته أطول من فترة التربية (45 يوم) = إنتاج بيض مش بيع وزن حي */
+  isEggMode(): boolean {
+    const t = this.form.poultry_type;
+    if (t === 'layer') return true;
+    if (t !== 'quail') return false;
+    const days = this.result()?.input?.target_age_days_used ?? this.form.target_age_days ?? 42;
+    return days > 45;
+  }
+
+  calculateProfitability(afterRecalc = false): void {
     const r = this.result();
     if (!r) return;
+    // لو غيّرت "دجاج جاهز للإنتاج" بعد حساب المتطلبات، علف النتيجة القديمة مش متسق مع الجدوى: نعيد الحساب الأول
+    if (this.form.poultry_type === 'layer' && !afterRecalc && !!r.input?.ready_to_lay !== !!this.form.ready_to_lay) {
+      void this.calculate(false).then(() => this.calculateProfitability(true));
+      return;
+    }
     if (!this.profitForm.feed_price_per_kg || !this.profitForm.chick_price) {
       this.profitError.set('❌ دخّل سعر العلف وسعر ' + (this.form.poultry_type === 'layer' && this.form.ready_to_lay ? 'الدجاجة' : 'الكتكوت') + ' الأول');
       return;
@@ -1039,7 +1053,7 @@ export class CalculatorComponent implements OnInit {
     if (this.profitForm.labor_cost_per_bird !== null) body.labor_cost_per_bird = this.profitForm.labor_cost_per_bird;
     if (this.profitForm.utilities_cost_per_bird !== null) body.utilities_cost_per_bird = this.profitForm.utilities_cost_per_bird;
 
-    if (this.form.poultry_type === 'layer') {
+    if (this.isEggMode()) {
       body.egg_price = this.profitForm.egg_price;
       if (this.profitForm.eggs_per_bird_cycle !== null) body.eggs_per_bird_cycle = this.profitForm.eggs_per_bird_cycle;
       if (this.profitForm.cull_hen_price_per_kg !== null) body.cull_hen_price_per_kg = this.profitForm.cull_hen_price_per_kg;
@@ -1133,6 +1147,10 @@ export class CalculatorComponent implements OnInit {
         this.profitForm.egg_price = egg;
         this.autoEgg = egg;
       }
+    } else if (this.autoEgg !== null && this.profitForm.egg_price === this.autoEgg) {
+      // سعر بيض الفراخ التلقائي ميفضلش مستخدم مع نوع تاني (سمان مثلاً)
+      this.profitForm.egg_price = null;
+      this.autoEgg = null;
     }
   }
 

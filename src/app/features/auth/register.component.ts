@@ -288,6 +288,16 @@ export class RegisterComponent {
         const detail = err?.error?.detail;
         if (err?.status === 0) {
           this.errorMsg.set('مفيش اتصال بالسيرفر، تأكد من الإنترنت وحاول تاني');
+        } else if (detail === 'Device already registered') {
+          this.errorMsg.set('الموبايل ده عليه حساب قبل كده، سجّل دخول بحسابك. لو حذفت حسابك أو الموبايل اتباع كلّم الدعم');
+        } else if (detail === 'Register from the app') {
+          this.errorMsg.set('إنشاء الحساب بيتم من التطبيق بس. حمّل التطبيق وسجّل منه، وبعدها ادخل هنا بنفس الإيميل للدفع');
+        } else if (detail === 'Email already used') {
+          this.errorMsg.set('الإيميل ده (أو شكل قريب منه) مستخدم قبل كده، سجّل دخول. لو حذفت حسابك كلّم الدعم');
+        } else if (detail === 'Registration in progress') {
+          this.errorMsg.set('فيه عملية تسجيل شغالة، استنى دقيقة وحاول تاني');
+        } else if (detail === 'Device id required') {
+          this.errorMsg.set('حدّث التطبيق لآخر نسخة وحاول تاني');
         } else if (detail === 'Phone number already registered') {
           this.errorMsg.set('رقم الموبايل مسجل من قبل، جرّب تسجّل دخول');
         } else if (detail === 'Email already registered') {

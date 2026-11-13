@@ -85,7 +85,17 @@ export class LoginComponent {
     this.loading.set(true); this.error.set('');
     this.auth.login(this.email, this.password).subscribe({
       next: () => this.router.navigate(['/']),
-      error: () => { this.loading.set(false); this.error.set('Invalid email or password'); },
+      error: (err) => {
+        this.loading.set(false);
+        const detail = err?.error?.detail;
+        if (detail === 'Device bound to another account') {
+          this.error.set('الموبايل ده مربوط بحساب تاني، ادخل بالحساب الأول. لو الموبايل اتباع كلّم الدعم');
+        } else if (detail === 'Device id required') {
+          this.error.set('حدّث التطبيق لآخر نسخة وحاول تاني');
+        } else {
+          this.error.set('Invalid email or password');
+        }
+      },
     });
   }
 

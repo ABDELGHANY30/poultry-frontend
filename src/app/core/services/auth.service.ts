@@ -226,9 +226,28 @@ export class AuthService {
     } catch { /* storage مقفول — مش مشكلة */ }
   }
 
-  /** بيناديها الـ interceptor لما أي طلب يرجع 401 (كوكي/توكن انتهى) — بتصفّي الحالة المحلية بس من غير redirect. */
+  /**
+   * بيناديها الـ interceptor لما أي طلب (غير login/register/me) يرجع 401.
+   * مش بنخرّج المستخدم على أي 401 عشوائي (ممكن يكون endpoint معيّن رفض لسبب تاني):
+   * بنسأل السيرفر /auth/me، ولو هو كمان رفض الجلسة (401/403) ساعتها بس نمسحها.
+   * أي خطأ تاني (شبكة/سيرفر نايم) مايخرّجش المستخدم.
+   */
+  private _verifyingSession = false;
   handleUnauthorized(): void {
-    if (this.isAuthenticated()) void this.clearAuth();
+    if (!this.isAuthenticated() || this._verifyingSession) return;
+    this._verifyingSession = true;
+    this.http.get<User>(`${environment.apiUrl}/auth/auth/me`).subscribe({
+      next: u => {
+        this._verifyingSession = false;
+        this._user.set(u);
+        this.persistWebUser(u);
+        this.persistMinimalUserNative(u);
+      },
+      error: (err: HttpErrorResponse) => {
+        this._verifyingSession = false;
+        if (err.status === 401 || err.status === 403) void this.clearAuth();
+      },
+    });
   }
 
   // ── Auth calls ─────────────────────────────────────────────
