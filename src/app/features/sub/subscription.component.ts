@@ -71,7 +71,7 @@ import { environment } from '../../../environments/environment';
            [class.bg-stone-50]="!status()?.is_pro">
         <div>
           <p class="font-semibold text-stone-700">{{ lang === 'ar' ? 'مجانية' : 'Free' }}</p>
-          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '30 نقطة تجربة مجانية (مرة واحدة)' : '30 free trial points (one-time)' }}</p>
+          <p class="text-sm text-stone-400">{{ lang === 'ar' ? '10 نقاط تجربة مجانية (مرة واحدة)' : '10 free trial points (one-time)' }}</p>
         </div>
         <span *ngIf="!status()?.is_pro" class="text-xs font-semibold text-stone-500 bg-stone-200 px-2.5 py-1 rounded-full">
           {{ lang === 'ar' ? 'الحالية' : 'Current' }}

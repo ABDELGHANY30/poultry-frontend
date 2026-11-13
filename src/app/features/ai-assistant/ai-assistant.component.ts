@@ -9,6 +9,7 @@ import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
+import { Router } from '@angular/router';
 // ⚠️ عدّل المسار ده لو اسم/مكان الملف مختلف عندك
 import { FlockService } from '../../core/services/flock.service';
 import { AdsService } from '../../core/services/ads.service';
@@ -18,8 +19,6 @@ import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
 const uid = () => Math.random().toString(36).slice(2);
-const GUEST_QUESTION_LIMIT = 3;
-const GUEST_COUNT_KEY = 'spa_guest_questions';
 
 
 interface Plan {
@@ -402,19 +401,33 @@ const SUGGESTIONS_AR = [
         <button (click)="removeImage()" class="text-red-400 text-lg font-bold">✕</button>
       </div>
 
+      <!-- الموقع: الشات للتطبيق بس -->
+      <div *ngIf="!isApp" class="px-3 py-3 border-t border-gray-100 bg-amber-50">
+        <p class="text-xs font-bold text-amber-800 text-center">📱 الشات متاح من تطبيق سبا بس — حمّل التطبيق من Google Play</p>
+      </div>
+
+      <!-- Guest: الشات مقفول -->
+      <div *ngIf="isApp && !isAuthed()" class="px-3 py-3 border-t border-gray-100 bg-amber-50 flex items-center justify-between gap-2">
+        <p class="text-xs font-bold text-amber-800">🔒 الشات متاح للمستخدمين المسجلين بس</p>
+        <button type="button" (click)="goToLogin()"
+                class="px-4 py-1.5 rounded-full text-xs font-bold text-white" style="background:#2A2A28">
+          تسجيل الدخول
+        </button>
+      </div>
+
       <!-- Input -->
       <div class="border-t border-gray-100 p-3 bg-transparent">
         <div class="ai-input-wrap flex items-end gap-1 border rounded-[1.75rem] px-2 py-1.5 transition-colors"
              style="transform: translateZ(0);">
 
-          <!-- Image button (Pro only) -->
+          <!-- Image button (أي مستخدم مسجل) -->
           <div class="relative flex-shrink-0">
             <button class="w-9 h-9 rounded-full flex items-center justify-center text-base text-gray-500 hover:bg-gray-200/70 transition"
                     [class.bg-amber-100]="selectedImagePreview()"
-                    [class.opacity-40]="!isPro()"
-                    [title]="isPro() ? 'رفع صورة للتحليل' : 'متاح لـ Pro فقط'">
+                    [class.opacity-40]="!isAuthed()"
+                    [title]="isAuthed() ? 'رفع صورة للتحليل' : 'سجّل الدخول عشان ترفع صورة'">
               📷
-              <input *ngIf="isPro()" type="file" accept="image/*"
+              <input *ngIf="isAuthed()" type="file" accept="image/*"
                      class="absolute inset-0 opacity-0 cursor-pointer"
                      (change)="onImageSelected($event)"/>
             </button>
@@ -436,9 +449,9 @@ const SUGGESTIONS_AR = [
 
           <textarea #inputEl
             [(ngModel)]="input"
-            [placeholder]="isRecording() ? '🎙️ بيسمعك دلوقتي... اتكلم' : (selectedImagePreview() ? 'اكتب سؤالك عن الصورة...' : 'اسأل عن الدواجن، الأمراض، التغذية...')"
+            [placeholder]="!isApp ? 'الشات متاح من التطبيق بس' : !isAuthed() ? 'سجّل الدخول عشان تبدأ الشات' : isRecording() ? '🎙️ بيسمعك دلوقتي... اتكلم' : (selectedImagePreview() ? 'اكتب سؤالك عن الصورة...' : 'اسأل عن الدواجن، الأمراض، التغذية...')"
             (keydown.enter)="onEnter($event)"
-            [disabled]="loading()"
+            [disabled]="loading() || !isAuthed() || !isApp"
             rows="1"
             dir="rtl"
             class="ai-input-text flex-1 border-0 px-2 py-2 text-sm resize-none max-h-28 focus:outline-none focus:ring-0"
@@ -447,8 +460,8 @@ const SUGGESTIONS_AR = [
 
           <button class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white transition"
                   style="background:#2A2A28"
-                  [class.opacity-40]="(!input.trim() && !selectedImagePreview()) || loading()"
-                  [disabled]="(!input.trim() && !selectedImagePreview()) || loading()"
+                  [class.opacity-40]="(!input.trim() && !selectedImagePreview()) || loading() || !isAuthed() || !isApp"
+                  [disabled]="(!input.trim() && !selectedImagePreview()) || loading() || !isAuthed() || !isApp"
                   (click)="send()">
             <span *ngIf="!loading()">↑</span>
             <span *ngIf="loading()" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -543,6 +556,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   private sanitizer = inject(DomSanitizer);
   private flockService = inject(FlockService);
   private ads = inject(AdsService);
+  private router = inject(Router);
 
   @ViewChild('msgContainer') private cont!: ElementRef<HTMLDivElement>;
 
@@ -550,6 +564,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   loading = signal(false);
   messages = signal<Message[]>([]);
   showUpgradeModal = signal(false);
+  /** الشات شغال من التطبيق (Android/iOS) بس، مش من الموقع */
+  isApp = Capacitor.isNativePlatform();
   isPro = signal(false);
   selectedImage = signal<string | null>(null);
   selectedImagePreview = signal<string | null>(null);
@@ -603,15 +619,22 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     // شيل البانر من شاشة المساعد الذكي (بيغطي خانة الكتابة)
     this.ads.hideBannerForPage();
 
+    // من الموقع: الشات مقفول، التطبيق بس
+    if (!this.isApp) {
+      this.messages.set([{
+        id: uid(), role: 'assistant', timestamp: new Date(),
+        content: `مرحباً! 🐔\n\n📱 الشات متاح من **تطبيق سبا** بس. حمّل التطبيق من Google Play عشان تبدأ تسأل.`,
+      }]);
+      return;
+    }
+
     const isGuest = !this.auth.isAuthenticated();
     if (isGuest) {
       // الزائر من غير حساب: من غير أي طلبات محتاجة تسجيل دخول (كانت هتفشل بـ 401)
       this.loadArabicVoice();
-      const used = Number(localStorage.getItem(GUEST_COUNT_KEY) || '0');
-      const remaining = Math.max(0, GUEST_QUESTION_LIMIT - used);
       this.messages.set([{
         id: uid(), role: 'assistant', timestamp: new Date(),
-        content: `مرحباً! .  🐔\n\nأنت بتستخدم النظام كزائر — عندك **${remaining} سؤال مجاني** متبقي. سجّل حساب مجاني في أي وقت عشان تسأل من غير حدود وتستخدم كل الميزات.`,
+        content: `مرحباً! 🐔\n\n🔒 الشات متاح للمستخدمين المسجلين بس. **اذهب لتسجيل الدخول** (أو أنشئ حساب مجاني) عشان تبدأ تسأل.`,
       }]);
       return;
     }
@@ -704,6 +727,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   isAuthed() { return this.auth.isAuthenticated(); }
+
+  goToLogin() { this.router.navigate(['/auth/login']); }
 
   /** محافظة المربي لجلب الطقس — لازم تتطابق مع المكان اللي صفحة الطقس بتخزنها فيه */
   private getGovernorate(): string | null {
@@ -1137,21 +1162,17 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     if (!q && !hasImage) return;
     if (this.loading()) return;
 
-    // زائر من غير حساب — اسمحله بـ 3 أسئلة مجانية بس، وبعدين اطلب منه يسجل
-    const isGuest = !this.auth.isAuthenticated();
-    if (isGuest) {
-      const used = Number(localStorage.getItem(GUEST_COUNT_KEY) || '0');
-      if (used >= GUEST_QUESTION_LIMIT) {
-        this.messages.update(m => [...m, {
-          id: uid(), role: 'user', timestamp: new Date(), content: q || 'حلل هذه الصورة',
-        }, {
-          id: uid(), role: 'assistant', timestamp: new Date(),
-          content: '🔒 استخدمت الأسئلة المجانية الثلاثة كلها. **سجّل حسابك مجاناً** عشان تكمل تسأل من غير حدود، وتقدر كمان تسجل بيانات قطيعك وتستخدم كل الميزات.',
-        }]);
-        this.needsScroll = true;
-        return;
-      }
-      localStorage.setItem(GUEST_COUNT_KEY, String(used + 1));
+    // من الموقع: الشات مقفول
+    if (!this.isApp) {
+      this.showToast('الشات متاح من تطبيق سبا بس');
+      return;
+    }
+
+    // زائر من غير حساب — الشات مقفول، وجّهه لتسجيل الدخول
+    if (!this.auth.isAuthenticated()) {
+      this.showToast('اذهب لتسجيل الدخول عشان تستخدم الشات');
+      this.goToLogin();
+      return;
     }
 
     this.input = '';
@@ -1182,7 +1203,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     try {
       // استخدم الـ streaming endpoint
       const token = this.auth.getToken();
-      const streamHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      const streamHeaders: Record<string, string> = { 'Content-Type': 'application/json', 'X-App-Client': 'spa-mobile' };
       if (token) streamHeaders['Authorization'] = `Bearer ${token}`; // من غير توكن خالص للزائر، مش "Bearer null"
 
       const response = await fetch(`${environment.apiUrl}/ai/stream`, {
@@ -1200,16 +1221,32 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        if (response.status === 429) {
-          this.showUpgradeModal.set(true);
+        const err = await response.json().catch(() => ({}));
+        if (response.status === 403 && err?.detail?.code === 'app_only') {
           this.messages.update(m => m.map(x => x.id === assistantId
-            ? { ...x, content: '🔒 استنفدت حد الأسئلة اليومي. قم بالترقية للحصول على أسئلة غير محدودة.', loading: false, streaming: false }
+            ? { ...x, content: '📱 ' + (err.detail.message || 'الشات متاح من تطبيق سبا بس.'), loading: false, streaming: false }
             : x));
           this.loading.set(false);
           return;
         }
-        throw new Error(err.detail || 'Server error');
+        if (response.status === 401) {
+          this.messages.update(m => m.map(x => x.id === assistantId
+            ? { ...x, content: '🔒 سجّل الدخول عشان تستخدم الشات.', loading: false, streaming: false }
+            : x));
+          this.loading.set(false);
+          this.goToLogin();
+          return;
+        }
+        if (response.status === 429) {
+          this.showUpgradeModal.set(true);
+          const serverMsg = err?.detail?.message;
+          this.messages.update(m => m.map(x => x.id === assistantId
+            ? { ...x, content: '🔒 ' + (serverMsg || 'خلص رصيدك من الأسئلة. اشترك في باقة عشان تكمّل.'), loading: false, streaming: false }
+            : x));
+          this.loading.set(false);
+          return;
+        }
+        throw new Error(typeof err.detail === 'string' ? err.detail : (err?.detail?.message || 'Server error'));
       }
 
       const reader = response.body!.getReader();

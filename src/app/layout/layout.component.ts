@@ -5,6 +5,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../core/services/auth.service';
 import { AlertService } from '../core/services/alert.service';
 import { filter } from 'rxjs';
+import { Capacitor } from '@capacitor/core';
 
 interface NavItem {
   path: string; icon: string; key: string; badge?: number; adminOnly?: boolean;
@@ -211,7 +212,7 @@ interface NavItem {
                 </ul>
 
                 <ul class="space-y-2">
-                  <li><a routerLink="/ai-assistant" class="hover:text-emerald-300">المساعد الذكي</a></li>
+                  <li *ngIf="isApp"><a routerLink="/ai-assistant" class="hover:text-emerald-300">المساعد الذكي</a></li>
                   <li><a routerLink="/alerts" class="hover:text-emerald-300">التنبيهات</a></li>
                   <li><a routerLink="/team" class="hover:text-emerald-300">الفريق</a></li>
                 </ul>
@@ -276,6 +277,8 @@ export class LayoutComponent implements OnInit {
     phoneIntl: '+201271140161',
   };
   year = new Date().getFullYear();
+  /** الشات متاح من التطبيق بس — بنخفي رابطه من الموقع */
+  isApp = Capacitor.isNativePlatform();
 
 
   sideOpen = signal(window.innerWidth >= 1024);
@@ -314,6 +317,7 @@ export class LayoutComponent implements OnInit {
     
     return this.allNav
       .filter(n => !n.adminOnly || this.auth.isAdmin())
+      .filter(n => n.path !== '/ai-assistant' || this.isApp)
       .map(item => {
         // إذا كان العنصر هو صفحة التنبيهات، نحدث الـ badge بالعدد الحقيقي فوراً
         if (item.path === '/alerts') {
