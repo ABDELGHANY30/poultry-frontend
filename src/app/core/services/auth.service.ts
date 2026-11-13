@@ -263,6 +263,44 @@ export class AuthService {
     );
   }
 
+  // ── دخول تلقائي من التطبيق للموقع (handoff) ────────────────
+  /** موبايل: بيطلب من السيرفر توكن مؤقت (دقيقتين، لمرة واحدة) لحساب التطبيق الحالي، عشان الموقع يفتح مسجّل بنفس الإيميل. */
+  async createHandoffToken(): Promise<string | null> {
+    if (!this.isNative || !this.isAuthenticated()) return null;
+    try {
+      const r = await firstValueFrom(
+        this.http.post<{ token: string }>(`${environment.apiUrl}/auth/handoff/create`, {}).pipe(timeout(8000))
+      );
+      return r?.token ?? null;
+    } catch {
+      return null;   // فشل (أوفلاين مثلاً) → التطبيق يفتح الموقع عادي والمستخدم يسجّل دخول بإيده
+    }
+  }
+
+  /** ويب: بيبدّل التوكن المؤقت (من ?h=) بجلسة دخول عادية (كوكي) ويحمّل بيانات المستخدم. */
+  async exchangeHandoffToken(token: string): Promise<boolean> {
+    if (this.isNative || !token) return false;
+    try {
+      // نستنى التهيئة الأول، وإلا طلب /auth/me بتاعها (اللي اتبعت قبل الكوكي) ممكن يرجع 401 بعدنا ويفصلنا.
+      await this.initAuth().catch(() => {});
+      await firstValueFrom(
+        this.http.post(
+          `${environment.apiUrl}/auth/handoff/exchange`,
+          { token },
+          { headers: { 'X-Requested-With': 'XMLHttpRequest' }, withCredentials: true }
+        ).pipe(timeout(8000))
+      );
+      const u = await firstValueFrom(
+        this.http.get<User>(`${environment.apiUrl}/auth/auth/me`, { withCredentials: true }).pipe(timeout(8000))
+      );
+      this._user.set(u);
+      this.persistWebUser(u);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private isTokenExpired(token: string): boolean {
     try {
       const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');

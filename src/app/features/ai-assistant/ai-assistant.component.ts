@@ -30,20 +30,16 @@ interface Plan {
   features: string[];
 }
 
-// ⚠️ عدّل الأسعار والباقات دي حسب باقاتك الفعلية
+// ⚠️ لازم تطابق الباقات في subscription.component.ts (tiers) وcredites.py (DAILY_CREDITS)
+// — لو غيّرت سعر أو نقاط هناك، غيّرها هنا كمان.
+const PLAN_COSTS_AR = 'أسئلة نصية 1 نقطة، اتخاذ قرار 2، تحليل صورة 4';
 const PLANS: Plan[] = [
-  {
-    id: 'monthly', name: 'شهري', price: 150, period: 'جنيه / شهر',
-    features: ['أسئلة غير محدودة', 'تحليل صور الطيور', 'التسجيل والرد الصوتي', 'تقارير متقدمة'],
-  },
-  {
-    id: 'quarterly', name: '3 شهور', price: 400, period: 'جنيه / 3 شهور', badge: 'الأكثر طلباً',
-    features: ['كل مميزات الباقة الشهرية', 'وفّر 50 جنيه'],
-  },
-  {
-    id: 'yearly', name: 'سنوي', price: 1400, period: 'جنيه / سنة', badge: 'أفضل قيمة',
-    features: ['كل مميزات الباقة الشهرية', 'وفّر 400 جنيه'],
-  },
+  { id: 'p150', name: 'باقة 150', price: 150, period: 'ج.م / 30 يوم',
+    features: ['15 نقطة يومياً', PLAN_COSTS_AR] },
+  { id: 'p250', name: 'باقة 250', price: 250, period: 'ج.م / 30 يوم',
+    features: ['30 نقطة يومياً', PLAN_COSTS_AR] },
+  { id: 'p350', name: 'باقة 350', price: 350, period: 'ج.م / 30 يوم',
+    features: ['50 نقطة يومياً', PLAN_COSTS_AR] },
 ];
 
 interface Message {
@@ -369,8 +365,7 @@ const SUGGESTIONS_AR = [
                       [class.hover:bg-gray-100]="speakingMessageId() !== msg.id"
                       [class.bg-purple-50]="speakingMessageId() === msg.id"
                       [class.text-purple-600]="speakingMessageId() === msg.id"
-                      [class.opacity-40]="!isPro()"
-                      [title]="isPro() ? 'استماع للرد' : 'الرد الصوتي متاح لـ Pro فقط'">
+                      title="استماع للرد">
                 {{ speakingMessageId() === msg.id ? '⏹️ إيقاف' : '🔊 استماع' }}
               </button>
             </div>
@@ -601,12 +596,18 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   plans = PLANS;
 
   /** يفتح صفحة الاشتراك على الموقع مع الباقة المختارة */
-  choosePlan(plan: Plan) {
+  async choosePlan(plan: Plan) {
     this.showUpgradeModal.set(false);
-    const url = `${environment.websiteUrl}/subscription?plan=${encodeURIComponent(plan.id)}`;
+    let url = `${environment.websiteUrl}/subscription?plan=${encodeURIComponent(plan.id)}`;
     // الدفع بيتم على الموقع بس — التطبيق بيفتح الموقع والمستخدم يكمّل من هناك
-    if (Capacitor.isNativePlatform()) Browser.open({ url });
-    else window.open(url, '_blank', 'noopener');
+    if (Capacitor.isNativePlatform()) {
+      // توكن مؤقت عشان الموقع يفتح مسجّل دخول بنفس حساب التطبيق (لو فشل بنفتح من غيره)
+      const h = await this.auth.createHandoffToken();
+      if (h) url += `&h=${encodeURIComponent(h)}`;
+      Browser.open({ url });
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
   }
 
 
@@ -976,13 +977,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     this.selectedImagePreview.set(null);
   }
 
-  /** الرد الصوتي — ميزة Pro فقط، بتستخدم Web Speech Synthesis API */
+  /** الرد الصوتي — متاح لكل المستخدمين، بتستخدم Web Speech Synthesis API */
   speakText(msg: Message) {
-    if (!this.isPro()) {
-      this.showUpgradeModal.set(true);
-      return;
-    }
-
     // لو بيسمّع نفس الرسالة دلوقتي، وقف
     if (this.speakingMessageId() === msg.id) {
       this.stopSpeaking();
@@ -1254,12 +1250,16 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
       let fullAnswer = '';
       let sources: any[] = [];
 
+      let sseBuffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        // السطر ممكن يوصل مقسوم على chunk-ين (والحرف العربي كمان)، فبنجمّع في buffer
+        // ونعالج الأسطر الكاملة بس. قبل كده event "done" كان بيضيع أحياناً.
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop() ?? '';
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
@@ -1340,6 +1340,12 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           } catch (e) { /* ignore parse errors */ }
         }
       }
+
+      // لو الاتصال قفل من غير event "done" (انقطاع أو event ضاع)، نقفل الرسالة بنفسنا،
+      // وإلا أزرار النسخ والمشاركة والاستماع بتفضل مخفية (شرطها !streaming)
+      this.messages.update(m => m.map(x => x.id === assistantId && (x.streaming || x.loading)
+        ? { ...x, content: fullAnswer || x.content, loading: false, streaming: false }
+        : x));
 
     } catch (error: any) {
       this.messages.update(m => m.map(x => x.id === assistantId

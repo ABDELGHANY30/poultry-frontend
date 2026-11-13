@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-subscription',
@@ -140,6 +141,7 @@ export class SubscriptionComponent implements OnInit {
   private http = inject(HttpClient);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private auth = inject(AuthService);
   lang = localStorage.getItem('lang') ?? 'ar';
   loadingPlan = signal<string | null>(null);
   status = signal<any>(null);
@@ -157,13 +159,30 @@ export class SubscriptionComponent implements OnInit {
   // بس بيفتح الموقع من برا — التطبيق مش بيبدأ ولا بيدير أي عملية دفع؛
   // المستخدم نفسه هو اللي بيكمل الاشتراك من الموقع بمحض إرادته، زي ما
   // اتفقنا (الفرق ده هو اللي بيخلي الأمر مقبول في سياسة Google Play)
-  openWebsite() {
-    Browser.open({ url: environment.websiteUrl + '/subscription' });
+  async openWebsite() {
+    // توكن مؤقت عشان الموقع يفتح مسجّل بنفس حساب التطبيق (لو فشل نفتح الموقع عادي)
+    const h = await this.auth.createHandoffToken();
+    const url = environment.websiteUrl + '/subscription' + (h ? `?h=${encodeURIComponent(h)}` : '');
+    Browser.open({ url });
   }
 
-  ngOnInit() {
-    this.loadStatus();
+  async ngOnInit() {
     this.errorMessage.set(null); // مسح أي رسالة خطأ قديمة قبل ما نتشيك من جديد
+
+    // جاي من التطبيق: ?h=توكن دخول مؤقت لمرة واحدة. بنمسحه من الرابط فوراً وبنبدّله
+    // بجلسة دخول عادية قبل ما نحمّل حالة الاشتراك.
+    const handoff = this.route.snapshot.queryParamMap.get('h');
+    if (handoff && !this.isNative) {
+      this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+      const ok = await this.auth.exchangeHandoffToken(handoff);
+      if (!ok) {
+        this.errorMessage.set(this.lang === 'ar'
+          ? 'تعذّر الدخول التلقائي. سجّل الدخول بنفس حساب التطبيق وبعدها اشترك.'
+          : 'Automatic sign-in failed. Please sign in with the same account as the app, then subscribe.');
+      }
+    }
+
+    this.loadStatus();
 
     // لما XPay يرجّع المستخدم من صفحة الدفع بيضيف ?session=cs_... على الرابط.
     // الرجوع ده مش دليل على نجاح الدفع (ممكن يقفل الصفحة أو يفتح الرابط بالغلط)،
@@ -292,6 +311,13 @@ export class SubscriptionComponent implements OnInit {
         if (d?.code === 'downgrade_blocked') {
           this.errorMessage.set(d.message);
           this.loadStatus(); // نحدّث الحالة عشان الباقات الأقل تتقفل
+          return;
+        }
+        if (err?.status === 401) {
+          // مش مسجل دخول على الموقع — جلسة التطبيق مش بتتشارك مع المتصفح
+          this.errorMessage.set(this.lang === 'ar'
+            ? 'سجّل الدخول الأول بنفس حساب التطبيق، وبعدها ارجع اشترك.'
+            : 'Please sign in with the same account you use in the app, then subscribe.');
           return;
         }
         this.errorMessage.set(this.lang === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Error, please try again');
