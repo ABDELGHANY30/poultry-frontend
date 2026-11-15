@@ -12,7 +12,6 @@ import { AdsService } from '../../core/services/ads.service';
 import { Flock, FlockAnalytics } from '../../core/models';
 import { environment } from '../../../environments/environment';
 // ⚠️ الملفات دي حطها في src/app/shared/widgets/ (أو عدّل المسار حسب مكان ما تحطها فعلاً)
-import { HealthScoreWidgetComponent } from '../../features/Healthscorewidget/Health score widget.component';
 import { ProfitIndicatorWidgetComponent } from '../../features/profit indicator widget/profit indicator widget.component';
 import { ForecastWidgetComponent } from '../../features/Forecast/Forecast.component';
 import { DecisionSimulatorComponent } from '../../features/desicion/desicion.component';
@@ -98,7 +97,7 @@ const TURKEY_VACC = [
   standalone: true,
   imports: [
     CommonModule, FormsModule, RouterLink, TranslateModule, DecimalPipe,
-    HealthScoreWidgetComponent, ProfitIndicatorWidgetComponent, ForecastWidgetComponent,
+    ProfitIndicatorWidgetComponent, ForecastWidgetComponent,
     DecisionSimulatorComponent, SupplierSurveyComponent, ReferralCardComponent, CleanupGuideComponent, DisinfectantsGuideComponent,
   ],
   template: `
@@ -463,14 +462,7 @@ const TURKEY_VACC = [
     </ng-container>
 
     <ng-template #todaySummaryBlock>
-      <div class="grid lg:grid-cols-2 gap-4 mb-4">
-        <app-health-score-widget
-          [flockId]="flock()!.id"
-          [birds]="healthStats().birds"
-          [dead]="healthStats().dead"
-          [temp]="healthStats().temp"
-          (factorClick)="onHealthFactorClick($event)"></app-health-score-widget>
-
+      <div class="grid gap-4 mb-4">
         <div class="card">
           <div class="flex items-center justify-between mb-2">
             <h2 class="section-title">⚖️ سجل الأوزان</h2>

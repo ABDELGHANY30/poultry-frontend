@@ -21,8 +21,15 @@ const AD_UNITS = {
 };
 
 // true = إعلانات تجريبية (للتطوير والاختبار المغلق)
-// false = إعلانات حقيقية (غيّرها قبل النشر في الإنتاج)
-const FORCE_TEST_ADS = true;
+// false = إعلانات حقيقية (الإنتاج)
+const FORCE_TEST_ADS = false;
+
+// Device ID بتاع موبايلك (أو موبايلاتك) عشان تشوف الإعلانات الحقيقية
+// كإعلانات اختبار على جهازك بس، وتأمن من حظر الحساب بسبب الضغط بالغلط.
+// الـ ID بيظهر في Logcat وقت تشغيل التطبيق (دوّر على: "Use RequestConfiguration.Builder().setTestDeviceIds")
+const TESTING_DEVICES: string[] = [
+  '92E27DA561817D30BBD5CFFE3EC6CF68',
+];
 
 const isTesting = !environment.production || FORCE_TEST_ADS;
 
@@ -58,6 +65,7 @@ export class AdsService {
     try {
       await AdMob.initialize({
         initializeForTesting: isTesting,
+        testingDevices: TESTING_DEVICES,
       });
     } catch (e) {
       console.error('AdMob init failed', e);
