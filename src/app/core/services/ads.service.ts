@@ -12,11 +12,11 @@ import {
 } from '@capacitor-community/admob';
 import { environment } from '../../../environments/environment';
 
-// الـ IDs الحقيقية من حساب AdMob (تطبيق Mazar3.ko)
+// الـ IDs الحقيقية من حساب AdMob (تطبيق MAZAR3.KO)
 const AD_UNITS = {
-  banner: 'ca-app-pub-7829941409327460/6288043809',
-  rewarded: 'ca-app-pub-7829941409327460/9305545265', // اتأكد إنها تابعة لـ Mazar3.ko
-  interstitial: 'ca-app-pub-7829941409327460/9761431136',
+  banner: 'ca-app-pub-7829941409327460/9262741257',
+  rewarded: 'ca-app-pub-7829941409327460/9124954549',
+  interstitial: 'ca-app-pub-7829941409327460/7259394440',
   // rewardedInterstitial: 'ca-app-pub-7829941409327460/2885478708', // محفوظ لوقت تاني
 };
 
@@ -37,6 +37,9 @@ const RETRY_DELAY_MS = 15000;
 const MAX_RETRIES = 3;
 const INTERSTITIAL_COOLDOWN_MS = 3 * 60 * 1000; // 3 دقايق بين كل إعلانين
 
+// الآلة الحاسبة: يظهر إعلان بعد كل (N) عمليات حساب. 1 = بعد كل عملية (مع احترام الـ cooldown).
+const CALCULATOR_ADS_EVERY = 1;
+
 @Injectable({ providedIn: 'root' })
 export class AdsService {
   private initialized = false;
@@ -46,17 +49,22 @@ export class AdsService {
   private bannerHiddenNative = false; // البانر مخفي دلوقتي على مستوى الـ native
   private keyboardOpen = false;       // الكيبورد مفتوح
   private pageHidden = false;         // الصفحة الحالية (زي المساعد الذكي) مش عايزة بانر
+  private pendingBanner: 'top' | 'bottom' | null = null; // showBanner اتنده عليه قبل ما init() يخلص
 
   // Rewarded
   private rewardedLoaded = false;
   private loadingRewarded = false;
   private retryCount = 0;
+  private rewardUserId: string | null = null; // للتحقق من المكافأة من جهة السيرفر (SSV)
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Interstitial
   private interstitialLoaded = false;
   private loadingInterstitial = false;
   private lastInterstitialAt = 0;
+
+  // Calculator
+  private calculatorUses = 0;
 
   /** ينادَى مرة واحدة بس (من app.component.ts بعد ما الـ Splash يخلص) */
   async init() {
@@ -85,6 +93,15 @@ export class AdsService {
       }
     );
 
+    // تشخيص: سبب فشل البانر بيظهر في Logcat (دوّر على [AdMob]).
+    // code 3 = No fill (مفيش إعلان متاح) | 1 = Invalid request (ID غلط/نوع غلط) | 2 = Network | 0 = Internal
+    await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (err: any) => {
+      console.error('[AdMob] banner failed to load', err?.code, err?.message);
+    });
+    await AdMob.addListener(BannerAdPluginEvents.Loaded, () => {
+      console.log('[AdMob] banner loaded');
+    });
+
     // لما المستخدم يقفل إعلان المكافأة، جهّز واحد جديد
     await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
       this.rewardedLoaded = false;
@@ -100,13 +117,24 @@ export class AdsService {
 
     this.preloadRewarded();
     this.preloadInterstitial();
+
+    // لو حد نادى showBanner قبل ما init() يخلص، نعرضه دلوقتي
+    if (this.pendingBanner) {
+      const pos = this.pendingBanner;
+      this.pendingBanner = null;
+      await this.showBanner(pos);
+    }
   }
 
   // ---------------- Banner ----------------
 
   /** يظهر بانر ثابت. نادِ عليه مرة واحدة بعد init(). */
   async showBanner(position: 'top' | 'bottom' = 'bottom') {
-    if (!this.initialized) return;
+    if (!this.initialized) {
+      // قبل كده كان بيرجع هنا من غير أي رسالة والبانر مايظهرش أبداً لو اتنده عليه بدري
+      this.pendingBanner = position;
+      return;
+    }
 
     const options: BannerAdOptions = {
       adId: AD_UNITS.banner,
@@ -237,6 +265,19 @@ export class AdsService {
     }
   }
 
+  // ---------------- Calculator ----------------
+
+  /**
+   * نادِ عليها لما المستخدم يضغط زرار "احسب" (بعد ما النتيجة تظهر).
+   * بتعرض إعلان بيني كل CALCULATOR_ADS_EVERY عملية، وبتحترم الـ cooldown (3 دقايق).
+   * ما تناديهاش وقت الكتابة في الخانات.
+   */
+  async onCalculatorUsed(): Promise<boolean> {
+    this.calculatorUses++;
+    if (this.calculatorUses % CALCULATOR_ADS_EVERY !== 0) return false;
+    return this.showInterstitial();
+  }
+
   // ---------------- Rewarded ----------------
 
   private async preloadRewarded() {
@@ -247,6 +288,7 @@ export class AdsService {
       await AdMob.prepareRewardVideoAd({
         adId: AD_UNITS.rewarded,
         isTesting,
+        ...(this.rewardUserId ? { ssv: { userId: this.rewardUserId } } : {}),
       });
       this.rewardedLoaded = true;
       this.retryCount = 0;
@@ -266,6 +308,14 @@ export class AdsService {
       this.retryTimer = null;
       this.preloadRewarded();
     }, RETRY_DELAY_MS);
+  }
+
+  /** بيحدد المستخدم اللي هيتبعت لجوجل مع الإعلان (SSV). لو اتغيّر بنعيد تحميل الإعلان. */
+  setRewardUser(userId: string) {
+    if (!userId || this.rewardUserId === userId) return;
+    this.rewardUserId = userId;
+    this.rewardedLoaded = false;
+    this.preloadRewarded();
   }
 
   /** هل إعلان المكافأة جاهز للعرض؟ (مفيد لإظهار/إخفاء الزرار) */

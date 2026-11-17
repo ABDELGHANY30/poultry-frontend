@@ -10,6 +10,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 // ⚠️ عدّل المسار ده لو اسم/مكان الملف مختلف عندك
 import { FlockService } from '../../core/services/flock.service';
 import { AdsService } from '../../core/services/ads.service';
@@ -204,7 +205,7 @@ const SUGGESTIONS_AR = [
         </ng-container>
       </div>
       <div *ngIf="isPro()" class="text-amber-700 bg-amber-50 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0">Pro</div>
-      <button *ngIf="!isPro()" type="button" (click)="showUpgradeModal.set(true)"
+      <button *ngIf="!isPro()" type="button" (click)="openUpgradeModal()"
               class="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0 bg-green-600 text-white">
         ⭐ الباقات
       </button>
@@ -521,6 +522,12 @@ const SUGGESTIONS_AR = [
         <p class="ai-plan-sub text-sm mt-1">اختر الباقة المناسبة وهننقلك للموقع تكمل الاشتراك</p>
       </div>
 
+      <button *ngIf="isApp && !isPro() && rewardAvailable()" type="button"
+              (click)="watchRewardVideo()" [disabled]="rewardBusy()"
+              class="w-full mb-3 rounded-2xl p-3 text-center border-2 border-dashed border-green-500 font-bold text-green-700 disabled:opacity-50">
+        🎬 شاهد فيديو قصير واحصل على {{ rewardPoints() }} أسئلة النهاردة
+      </button>
+
       <div class="space-y-2.5 mb-4">
         <button *ngFor="let p of plans" type="button" (click)="choosePlan(p)"
                 class="ai-plan w-full text-start border-2 rounded-2xl p-3 transition hover:border-green-500">
@@ -562,6 +569,11 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   /** الشات شغال من التطبيق (Android/iOS) بس، مش من الموقع */
   isApp = Capacitor.isNativePlatform();
   isPro = signal(false);
+
+  // مكافأة الفيديو (3 أسئلة يومياً للمستخدم المجاني)
+  rewardAvailable = signal(false);
+  rewardPoints = signal(3);
+  rewardBusy = signal(false);
   selectedImage = signal<string | null>(null);
   selectedImagePreview = signal<string | null>(null);
   activeFlockId = signal<string | null>(null);
@@ -728,6 +740,63 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   isAuthed() { return this.auth.isAuthenticated(); }
+
+  /** يفتح نافذة الباقات، ولو المستخدم مجاني بيشوف لو لسه ينفع ياخد مكافأة الفيديو النهاردة. */
+  openUpgradeModal() {
+    this.showUpgradeModal.set(true);
+    if (this.isApp && !this.isPro() && this.auth.isAuthenticated()) this.loadRewardStatus();
+  }
+
+  private loadRewardStatus() {
+    this.http.get<{ can_claim: boolean; reward_points: number; user_id?: string }>(`${environment.apiUrl}/ai/reward/status`).subscribe({
+      next: r => {
+        this.rewardAvailable.set(!!r.can_claim);
+        if (r.reward_points) this.rewardPoints.set(r.reward_points);
+        if (r.user_id) this.ads.setRewardUser(r.user_id);
+      },
+      error: () => this.rewardAvailable.set(false),
+    });
+  }
+
+  /** يعرض إعلان المكافأة، ولو المستخدم كمّله بيطلب من السيرفر يدّيه الأسئلة. */
+  async watchRewardVideo() {
+    if (this.rewardBusy()) return;
+    this.rewardBusy.set(true);
+    try {
+      const reward = await this.ads.showRewarded();
+      if (!reward) {
+        this.showToast('الفيديو مش جاهز دلوقتي أو اتقفل قبل ما يخلص، جرّب كمان شوية');
+        return;
+      }
+      await this.claimRewardWithRetry();
+    } finally {
+      this.rewardBusy.set(false);
+    }
+  }
+
+  /** جوجل ممكن تتأخر كام ثانية في تأكيد الإعلان، فبنعيد المحاولة لو السيرفر رد reward_pending. */
+  private async claimRewardWithRetry() {
+    for (let i = 0; i < 6; i++) {
+      try {
+        const r: any = await firstValueFrom(
+          this.http.post<{ granted: number }>(`${environment.apiUrl}/ai/reward/claim`, {})
+        );
+        this.rewardAvailable.set(false);
+        this.showUpgradeModal.set(false);
+        this.showToast(`🎉 خدت ${r.granted} أسئلة، اسأل براحتك`);
+        return;
+      } catch (err: any) {
+        const code = err?.error?.detail?.code;
+        if (code === 'reward_pending' && i < 5) {
+          await new Promise(res => setTimeout(res, 2000));
+          continue;
+        }
+        this.rewardAvailable.set(false);
+        this.showToast(err?.error?.detail?.message || 'تعذّر إضافة الأسئلة، جرّب تاني');
+        return;
+      }
+    }
+  }
 
   goToLogin() { this.router.navigate(['/auth/login']); }
 
@@ -1058,7 +1127,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   /** التسجيل الصوتي — ميزة Pro فقط */
   async toggleVoiceInput() {
     if (!this.isPro()) {
-      this.showUpgradeModal.set(true);
+      this.openUpgradeModal();
       return;
     }
 
@@ -1234,7 +1303,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           return;
         }
         if (response.status === 429) {
-          this.showUpgradeModal.set(true);
+          this.openUpgradeModal();
           const serverMsg = err?.detail?.message;
           this.messages.update(m => m.map(x => x.id === assistantId
             ? { ...x, content: '🔒 ' + (serverMsg || 'خلص رصيدك من الأسئلة. اشترك في باقة عشان تكمّل.'), loading: false, streaming: false }

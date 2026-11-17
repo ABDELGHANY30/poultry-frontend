@@ -10,6 +10,7 @@ import {
 } from './calculator-engine';
 import { exportFarmReportPdf } from './calculator-report';
 import { NrcFormulatorComponent } from './nrc-formulator.component';
+import { AdsService } from '../../core/services/ads.service'; // عدّل المسار حسب مكان ads.service.ts في مشروعك
 
 @Component({
   selector: 'app-calculator',
@@ -741,6 +742,7 @@ import { NrcFormulatorComponent } from './nrc-formulator.component';
 export class CalculatorComponent implements OnInit {
   private pricesSvc = inject(CalculatorPricesService);
   private live = inject(CalculatorLiveDataService);
+  private ads = inject(AdsService);
   mode = signal<'finance' | 'nrc'>('finance');
   loading = signal(false);
   calcError = signal('');
@@ -1066,6 +1068,8 @@ export class CalculatorComponent implements OnInit {
       setTimeout(() => {
         document.getElementById('profit-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
+      // إعلان بيني بعد ما نتيجة الجدوى تظهر (بيحترم الـ cooldown جوه AdsService)
+      setTimeout(() => { void this.ads.onCalculatorUsed(); }, 800);
     } catch (e) {
       console.error('فشل حساب الجدوى:', e);
       this.profitResult.set(null);
@@ -1245,6 +1249,8 @@ export class CalculatorComponent implements OnInit {
         setTimeout(() => {
           document.getElementById('calc-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
+        // إعلان بيني بعد ما النتيجة تظهر (بيحترم الـ cooldown جوه AdsService)
+        setTimeout(() => { void this.ads.onCalculatorUsed(); }, 800);
       }
     } catch (e) {
       console.error('فشل الحساب:', e);

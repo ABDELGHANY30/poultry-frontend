@@ -496,7 +496,7 @@ const TURKEY_VACC = [
               [class.bg-green-600]="activeSection() === t.key" [class.text-white]="activeSection() === t.key"
               [class.border-green-600]="activeSection() === t.key"
               [class.text-gray-500]="activeSection() !== t.key" [class.border-gray-200]="activeSection() !== t.key">
-        {{ t.label }}
+        {{ t.label }}<span *ngIf="t.key === 'decision' && !isPro()"> 🔒</span>
       </button>
     </div>
 
@@ -583,6 +583,8 @@ const TURKEY_VACC = [
 
     <!-- 🎯 محاكي القرار + التوقعات -->
     <ng-container *ngIf="activeSection() === 'decision'">
+      <!-- 🔒 القرار والأهداف: لمشتركي Pro بس -->
+      <ng-container *ngIf="isPro(); else proLockTpl">
       <ng-container *ngIf="myAccess()?.is_owner !== false || myAccess()?.can_view_financials">
         <div class="mb-4">
           <app-profit-indicator-widget [flockId]="flock()!.id"></app-profit-indicator-widget>
@@ -597,6 +599,20 @@ const TURKEY_VACC = [
       <div class="mb-4">
         <app-forecast-widget [flockId]="flock()!.id"></app-forecast-widget>
       </div>
+      </ng-container>
+      <ng-template #proLockTpl>
+        <div class="card mb-4 text-center py-8 px-4">
+          <div class="text-5xl mb-3">🔒</div>
+          <h2 class="section-title mb-2">القرار والأهداف — ميزة Pro</h2>
+          <p class="text-sm text-[var(--c-muted)] mb-4">
+            محاكي القرار ومؤشر الربح والتوقعات والأهداف متاحين لمشتركي Pro بس.
+          </p>
+          <a routerLink="/subscription"
+             class="inline-block px-5 py-2.5 rounded-xl bg-green-600 text-white text-sm font-bold no-underline">
+            ⭐ الترقية إلى Pro
+          </a>
+        </div>
+      </ng-template>
     </ng-container>
 
     <!-- 🥚 قسم سجلات البياض اليومية - يظهر بس لقطعان البياض -->
@@ -1158,6 +1174,15 @@ export class FlockDetailComponent implements OnInit {
       ? base
       : [...base, { key: 'cleanup' as const, label: '🧹 التطهير والدورة الجاية' }];
   };
+
+  // ⭐ هل المستخدم الحالي مشترك Pro؟ — عدّل الشرط ده حسب شكل بيانات المستخدم عندك في AuthService
+  // (ده تحكم في الواجهة بس — الحماية الحقيقية لازم تكون في الباك إند: 403 لغير Pro)
+  isPro(): boolean {
+    const u: any = this.auth.currentUser();
+    if (!u) return false;
+    const plan = String(u.plan ?? u.tier ?? u.subscription_tier ?? u.subscriptionTier ?? u.subscription ?? '').toLowerCase();
+    return u.is_pro === true || u.isPro === true || plan === 'pro';
+  }
 
   showFormManually = signal(false);      // المستخدم فتح الفورم يدويًا حتى لو اليوم متسجل بالفعل
   skippedToday      = signal(false);      // ضغط "تخطي الآن" النهاردة لنفس القطيع ده
