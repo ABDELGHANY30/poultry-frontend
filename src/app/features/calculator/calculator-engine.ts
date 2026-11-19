@@ -124,6 +124,8 @@ export const DEFAULT_WEIGHT_KG: Record<PoultryType, number> = {
 
 // علف البياض (Hy-Line): التربية لحد 17 أسبوع = 5.2-6.3 كجم (~6.0)، والإنتاج 101-112 جم/يوم (بني/وردي)
 // و92-100 جم (أبيض). بداية الإنتاج الفعلية عند 18 أسبوع.
+// فروج التسمين: معامل التحويل الفعلي في الحقل ~1.6 (تجارب Ross 308 لمدة 35 يوم: ~1.5-1.55 في ظروف مثالية)
+const BROILER_FCR = 1.6;
 const LAYER_POINT_OF_LAY_DAYS = 126;
 const LAYER_REARING_FEED_KG_PER_DAY = 0.048; // 126 يوم × 0.048 = 6.05 كجم
 const LAYER_LAYING_FEED_KG_PER_DAY = 0.11;
@@ -656,7 +658,7 @@ class PoultryFarmCalculator {
 
     switch (f.poultry_type) {
       case 'broiler':
-        totalPerBird = weight * 1.8;
+        totalPerBird = weight * BROILER_FCR;
         dailyAvg = totalPerBird / days;
         birdsPerTube = 60;
         feederType = 'صواني للكتاكيت اسبوعين ثم انابيب الية';

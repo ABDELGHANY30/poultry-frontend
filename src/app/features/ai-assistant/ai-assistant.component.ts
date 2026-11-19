@@ -510,6 +510,30 @@ const SUGGESTIONS_AR = [
     </div>
   </div>
 
+  <!-- Out-of-questions modal: شاهد فيديو واحصل على أسئلة -->
+  <div *ngIf="showRewardModal()"
+       class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+       (click)="showRewardModal.set(false)">
+    <div class="ai-modal-card rounded-3xl p-5 max-w-sm w-full shadow-2xl text-center"
+         (click)="$event.stopPropagation()">
+      <div class="text-4xl mb-1">🎬</div>
+      <h2 class="text-lg font-bold mb-1">خلصت أسئلتك النهاردة</h2>
+      <p class="ai-plan-sub text-sm mb-4">
+        شاهد فيديو قصير واحصل على {{ rewardPoints() }} أسئلة إضافية
+        <span *ngIf="rewardVideosLeft() !== null"> (باقي {{ rewardVideosLeft() }} من {{ rewardMaxPerDay() }} فيديوهات النهاردة)</span>
+      </p>
+      <button type="button" (click)="watchRewardVideo()" [disabled]="rewardBusy()"
+              class="w-full mb-2 rounded-2xl p-3 font-bold bg-green-600 text-white disabled:opacity-50">
+        {{ rewardBusy() ? 'جارٍ التحميل...' : '▶️ شاهد فيديو واحصل على ' + rewardPoints() + ' أسئلة' }}
+      </button>
+      <button type="button" (click)="showRewardModal.set(false); openUpgradeModal()"
+              class="w-full mb-1 text-sm py-2 font-semibold text-green-700">
+        ⭐ أو اشترك في باقة بدون حدود
+      </button>
+      <button type="button" class="ai-plan-sub w-full text-sm py-1" (click)="showRewardModal.set(false)">لاحقًا</button>
+    </div>
+  </div>
+
   <!-- Subscription Plans Modal -->
   <div *ngIf="showUpgradeModal()"
        class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
@@ -522,7 +546,7 @@ const SUGGESTIONS_AR = [
         <p class="ai-plan-sub text-sm mt-1">اختر الباقة المناسبة وهننقلك للموقع تكمل الاشتراك</p>
       </div>
 
-      <button *ngIf="isApp && !isPro() && rewardAvailable()" type="button"
+      <button *ngIf="isApp && rewardAvailable()" type="button"
               (click)="watchRewardVideo()" [disabled]="rewardBusy()"
               class="w-full mb-3 rounded-2xl p-3 text-center border-2 border-dashed border-green-500 font-bold text-green-700 disabled:opacity-50">
         🎬 شاهد فيديو قصير واحصل على {{ rewardPoints() }} أسئلة النهاردة
@@ -574,6 +598,10 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   rewardAvailable = signal(false);
   rewardPoints = signal(3);
   rewardBusy = signal(false);
+  showRewardModal = signal(false);
+  /** باقي كام فيديو النهاردة (null = السيرفر مبعتش الرقم) */
+  rewardVideosLeft = signal<number | null>(null);
+  rewardMaxPerDay = signal(3);
   selectedImage = signal<string | null>(null);
   selectedImagePreview = signal<string | null>(null);
   activeFlockId = signal<string | null>(null);
@@ -652,6 +680,8 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
       return;
     }
     this.checkPro();
+    // حمّل حالة المكافأة بدري عشان إعلان الفيديو يبقى جاهز وقت ما الأسئلة تخلص
+    if (this.isApp) this.loadRewardStatus();
     this.loadActiveFlock();
     this.loadConversations(true);
     this.loadAlerts();
@@ -744,18 +774,31 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   /** يفتح نافذة الباقات، ولو المستخدم مجاني بيشوف لو لسه ينفع ياخد مكافأة الفيديو النهاردة. */
   openUpgradeModal() {
     this.showUpgradeModal.set(true);
-    if (this.isApp && !this.isPro() && this.auth.isAuthenticated()) this.loadRewardStatus();
+    if (this.isApp && this.auth.isAuthenticated()) this.loadRewardStatus();
   }
 
-  private loadRewardStatus() {
-    this.http.get<{ can_claim: boolean; reward_points: number; user_id?: string }>(`${environment.apiUrl}/ai/reward/status`).subscribe({
-      next: r => {
+  private loadRewardStatus(): Promise<void> {
+    type Status = { can_claim: boolean; reward_points: number; user_id?: string; videos_left?: number; max_per_day?: number };
+    return firstValueFrom(this.http.get<Status>(`${environment.apiUrl}/ai/reward/status`))
+      .then(r => {
         this.rewardAvailable.set(!!r.can_claim);
         if (r.reward_points) this.rewardPoints.set(r.reward_points);
+        if (typeof r.videos_left === 'number') this.rewardVideosLeft.set(r.videos_left);
+        if (typeof r.max_per_day === 'number') this.rewardMaxPerDay.set(r.max_per_day);
         if (r.user_id) this.ads.setRewardUser(r.user_id);
-      },
-      error: () => this.rewardAvailable.set(false),
-    });
+      })
+      .catch(() => this.rewardAvailable.set(false));
+  }
+
+  /** الأسئلة خلصت (429): لو لسه ينفع يشوف فيديو نعرضله نافذة المكافأة، وإلا نافذة الباقات. */
+  private async handleQuotaExhausted() {
+    if (!this.isApp) {
+      this.openUpgradeModal();
+      return;
+    }
+    await this.loadRewardStatus();
+    if (this.rewardAvailable()) this.showRewardModal.set(true);
+    else this.openUpgradeModal();
   }
 
   /** يعرض إعلان المكافأة، ولو المستخدم كمّله بيطلب من السيرفر يدّيه الأسئلة. */
@@ -781,9 +824,10 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
         const r: any = await firstValueFrom(
           this.http.post<{ granted: number }>(`${environment.apiUrl}/ai/reward/claim`, {})
         );
-        this.rewardAvailable.set(false);
         this.showUpgradeModal.set(false);
+        this.showRewardModal.set(false);
         this.showToast(`🎉 خدت ${r.granted} أسئلة، اسأل براحتك`);
+        this.loadRewardStatus(); // يحدّث عدد الفيديوهات المتبقية
         return;
       } catch (err: any) {
         const code = err?.error?.detail?.code;
@@ -792,6 +836,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           continue;
         }
         this.rewardAvailable.set(false);
+        this.showRewardModal.set(false);
         this.showToast(err?.error?.detail?.message || 'تعذّر إضافة الأسئلة، جرّب تاني');
         return;
       }
@@ -1303,7 +1348,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
           return;
         }
         if (response.status === 429) {
-          this.openUpgradeModal();
+          this.handleQuotaExhausted();
           const serverMsg = err?.detail?.message;
           this.messages.update(m => m.map(x => x.id === assistantId
             ? { ...x, content: '🔒 ' + (serverMsg || 'خلص رصيدك من الأسئلة. اشترك في باقة عشان تكمّل.'), loading: false, streaming: false }
