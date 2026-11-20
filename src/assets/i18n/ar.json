@@ -218,7 +218,9 @@
       "REPORT_EVENT":"تقريري",
       "VACCINATION":"تحصينات",
       "MORTALITY":"النفوق",
-      "FARM_INVITE":"دعوة انضمام"
+      "FARM_INVITE":"دعوة انضمام",
+      "MEMBER_JOINED":"اضافه عضو"
+
     }
   },
 

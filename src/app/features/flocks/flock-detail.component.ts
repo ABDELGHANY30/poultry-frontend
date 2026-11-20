@@ -360,9 +360,7 @@ const TURKEY_VACC = [
           <h2 class="section-title">
             {{ editingRecordId() ? '✏️ تعديل سجل يوم ' + editingRecordDate() : '📋 ' + ('FLOCK.ADD_RECORD' | translate) }}
           </h2>
-          <button *ngIf="!hasTodayRecord() && !editingRecordId()" type="button" (click)="skipToday()"
-                  class="text-xs text-gray-400 font-bold hover:text-gray-600">تخطي الآن ⏭️</button>
-          <button *ngIf="hasTodayRecord() || editingRecordId()" type="button" (click)="cancelForm()"
+          <button *ngIf="editingRecordId() || (showFormManually() && missingDates().length === 0)" type="button" (click)="cancelForm()"
                   class="text-xs text-gray-400 font-bold hover:text-gray-600">إغلاق ✕</button>
         </div>
 
@@ -370,8 +368,18 @@ const TURKEY_VACC = [
         <div *ngIf="!editingRecordId()" class="mb-3">
           <label class="form-label">تاريخ السجل</label>
           <input class="form-input text-black bg-gray-100 border p-2 rounded w-full sm:w-56" type="date"
-                 [ngModel]="newRecordDate() || todayStr()" (ngModelChange)="newRecordDate.set($event)"
+                 [ngModel]="effectiveRecordDate()" (ngModelChange)="newRecordDate.set($event)"
                  [min]="minRecordDate()" [max]="todayStr()" />
+          <div *ngIf="missingDates().length > 1" class="mt-2 flex flex-wrap items-center gap-1.5">
+            <span class="text-xs text-amber-700 font-bold">⚠️ أيام لسه متسجلتش:</span>
+            <button *ngFor="let d of missingDates()" type="button" (click)="newRecordDate.set(d)"
+                    class="text-xs px-2 py-1 rounded-lg border font-bold"
+                    [class.bg-amber-500]="d === effectiveRecordDate()" [class.text-white]="d === effectiveRecordDate()"
+                    [class.border-amber-500]="d === effectiveRecordDate()"
+                    [class.text-amber-700]="d !== effectiveRecordDate()" [class.border-amber-300]="d !== effectiveRecordDate()">
+              {{ d }}
+            </button>
+          </div>
           <p *ngIf="isBackdated()" class="text-xs mt-1 mb-0 text-amber-700">
             📅 بتسجّل ليوم فات. التنبيهات التلقائية مش بتشتغل على الأيام القديمة.
           </p>
@@ -1185,7 +1193,6 @@ export class FlockDetailComponent implements OnInit {
   }
 
   showFormManually = signal(false);      // المستخدم فتح الفورم يدويًا حتى لو اليوم متسجل بالفعل
-  skippedToday      = signal(false);      // ضغط "تخطي الآن" النهاردة لنفس القطيع ده
   promptDaily        = signal(false);      // جاي من الـ guard عبر ?prompt=daily (يبرز الفورم بس)
 
   // 💉 التحصينات الحقيقية من قاعدة البيانات (بعد المزامنة مع الجدول الاسترشادي)
@@ -1428,10 +1435,10 @@ export class FlockDetailComponent implements OnInit {
   // 📅 مساعدين تاريخ السجل (public عشان التمبلت)
   todayStr = () => this.localDateStr();
   minRecordDate = (): string => String((this.flock() as any)?.startDate ?? '').split('T')[0];
-  isBackdated = () => !this.editingRecordId() && !!this.newRecordDate() && this.newRecordDate() < this.localDateStr();
+  isBackdated = () => !this.editingRecordId() && this.effectiveRecordDate() < this.localDateStr();
   backdatedBeforeRegistration = () => {
     const created = String((this.flock() as any)?.createdAt ?? '').split('T')[0];
-    const d = this.newRecordDate();
+    const d = this.effectiveRecordDate();
     return !this.editingRecordId() && !!d && !!created && d < created;
   };
 
@@ -1459,8 +1466,45 @@ export class FlockDetailComponent implements OnInit {
       || this.pendingRecords().some(p => p.kind === 'create' && p.date === todayStr);
   };
 
-  // 📋 نعرض فورم التسجيل لو: لسه محسجلش النهاردة ومحطتش تخطي، أو المستخدم فتحه يدويًا
-  showDailyForm = () => (!this.hasTodayRecord() && !this.skippedToday()) || this.showFormManually();
+  // 📆 آخر كام يوم بنعتبرهم "ناقصين" لو متسجلوش (النهارده + الأيام اللي فاتت)
+  private readonly MISSED_DAYS_WINDOW = 7;
+
+  private addDaysStr(dateStr: string, n: number): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  }
+
+  // 📋 الأيام اللي لسه متسجلتش (الأقدم الأول): من أول القطيع/تسجيله لحد النهارده، وبحد أقصى آخر MISSED_DAYS_WINDOW أيام
+  missingDates = (): string[] => {
+    const today = this.localDateStr();
+    const start = this.minRecordDate();
+    const created = String((this.flock() as any)?.createdAt ?? '').split('T')[0];
+    const from = start
+      ? [this.addDaysStr(today, -(this.MISSED_DAYS_WINDOW - 1)), start, created].filter(Boolean).reduce((a, b) => (a > b ? a : b))
+      : today;
+    if (from > today) return [];
+    const recorded = new Set<string>([
+      ...this.records().map(r => this.recordDateStr(r)),
+      ...this.pendingRecords().filter(p => p.kind === 'create').map(p => p.date),
+    ]);
+    const out: string[] = [];
+    for (let d = from; d <= today; d = this.addDaysStr(d, 1)) {
+      if (!recorded.has(d)) out.push(d);
+    }
+    return out;
+  };
+
+  // 📅 التاريخ اللي الفورم هيسجّل عليه: اللي اختاره المستخدم، وإلا النهارده لو ناقص، وإلا أقدم يوم ناقص
+  effectiveRecordDate = (): string => {
+    const chosen = this.newRecordDate();
+    if (chosen) return chosen;
+    const today = this.localDateStr();
+    const missing = this.missingDates();
+    return missing.length === 0 || missing.includes(today) ? today : missing[0];
+  };
+
+  // 📋 الفورم مفتوح تلقائيًا طول ما فيه يوم ناقص (من غير ما المستخدم يدوس حاجة)، أو لو فتحه يدويًا
+  showDailyForm = () => this.missingDates().length > 0 || this.showFormManually();
 
   // ⚖️ آخر 7 قراءات وزن (الأحدث الأول) — لملخص "سجل الأوزان" في حالة اتسجل اليوم
   recentWeights = () => {
@@ -1471,14 +1515,6 @@ export class FlockDetailComponent implements OnInit {
       .slice(0, 7)
       .map(r => ({ date: this.recordDateStr(r), weight: this.recordWeight(r) }));
   };
-
-  skipToday() {
-    const id = this.flock()?.id;
-    if (!id) return;
-    const todayStr = this.localDateStr();
-    localStorage.setItem(`daily_reminder_skip:${id}:${todayStr}`, '1');
-    this.skippedToday.set(true);
-  }
 
   cancelForm() {
     this.newRecordDate.set('');
@@ -2127,8 +2163,6 @@ vaccSchedule = () => {
     this.selectedPhotoFile.set(null);
     this.selectedPhotoPreview.set(null);
     this.photoUploadStatus.set('idle');
-    const todayStr = this.localDateStr();
-    this.skippedToday.set(localStorage.getItem(`daily_reminder_skip:${id}:${todayStr}`) === '1');
 
 this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
   if (dataFromBackend) {
@@ -2326,7 +2360,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
 
     // 📅 تحقق من تاريخ السجل الجديد (التعديل بيستخدم تاريخ السجل نفسه)
     if (!this.editingRecordId()) {
-      const d = this.newRecordDate() || this.localDateStr();
+      const d = this.effectiveRecordDate();
       const start = this.minRecordDate();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { alert('اختار تاريخ صحيح للسجل.'); return; }
       if (d > this.localDateStr()) { alert('مينفعش تسجّل ليوم لسه ماجاش.'); return; }
@@ -2356,7 +2390,7 @@ this.svc.getFlock(id).subscribe({ next: (dataFromBackend) => {
     const isEditing = !!this.editingRecordId();
     const targetDateStr = isEditing
       ? (this.editingRecordDate() as string)
-      : (this.newRecordDate() || this.localDateStr());
+      : this.effectiveRecordDate();
 
     const commonFields = {
       mortality: this.userInputs.mortality ? Number(this.userInputs.mortality) : 0,
