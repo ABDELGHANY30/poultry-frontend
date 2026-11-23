@@ -13,6 +13,8 @@ export interface Alert {
   resolved: boolean;
   createdAt: string;
   flock_name?: string; // اسم القطيع المرتبط به التنبيه
+  flock_id?: string;   // 🔗 القطيع اللي جه منه التنبيه (للتنقل لصفحته)
+  link?: string;       // 🔗 اختياري: مسار جاهز من الباك إند لو المصدر مش قطيع
 }
 
 @Injectable({ providedIn: 'root' })

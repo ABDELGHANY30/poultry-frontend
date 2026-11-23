@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AlertService, Alert } from '../../core/services/alert.service';
 
@@ -50,6 +51,8 @@ type Tab = 'all' | 'active' | 'resolved';
 
     <div class="space-y-3">
       <div *ngFor="let a of filtered()"
+           (click)="goToSource(a)"
+           [class.cursor-pointer]="targetOf(a)"
            class="bg-white rounded-2xl border overflow-hidden flex animate-in transition-opacity"
            [class.opacity-60]="a.resolved"
            [class.border-red-200]="a.type==='danger' && !a.resolved"
@@ -81,7 +84,10 @@ type Tab = 'all' | 'active' | 'resolved';
               </span>
             </div>
             <div class="flex items-center gap-3 mt-1 flex-wrap">
-              <span *ngIf="a.flock_name" class="text-xs text-[var(--c-muted)]">🐔 {{ a.flock_name }}</span>
+              <span *ngIf="a.flock_name" class="text-xs text-[var(--c-muted)]"
+                    [class.underline]="targetOf(a)">
+                🐔 {{ a.flock_name }} <span *ngIf="targetOf(a)">←</span>
+              </span>
               <span class="text-[10px] text-[var(--c-faint)]">{{ a.createdAt | date:'short' }}</span>
             </div>
             <p *ngIf="a.description"
@@ -93,7 +99,7 @@ type Tab = 'all' | 'active' | 'resolved';
           <div class="flex-shrink-0 self-center">
             <button *ngIf="!a.resolved"
                     class="btn btn-sm btn-outline"
-                    (click)="resolve(a.id)">
+                    (click)="$event.stopPropagation(); resolve(a.id)">
               ✓ {{ 'ALERTS.RESOLVE' | translate }}
             </button>
             <span *ngIf="a.resolved" class="text-xs font-bold text-green-600">✅ {{ 'ALERTS.RESOLVED' | translate }}</span>
@@ -114,6 +120,7 @@ type Tab = 'all' | 'active' | 'resolved';
 })
 export class AlertsComponent implements OnInit {
   private svc = inject(AlertService);
+  private router = inject(Router);
   all     = this.svc.alerts;
   tab     = signal<Tab>('active');
 
@@ -145,6 +152,30 @@ export class AlertsComponent implements OnInit {
 
   typeIcon(t: 'danger' | 'warning' | 'info' | 'success') {
     return { danger:'🚨', warning:'⏳', info:'💊', success:'✅' }[t] ?? '🔔';
+  }
+
+  // 🔗 المكان اللي جه منه التنبيه (null لو مفيش مصدر معروف)
+  targetOf(a: Alert): string | null {
+    if (a.link) return a.link;
+    if (a.flock_id) return `/flocks/${a.flock_id}`;
+    return null;
+  }
+
+  // تحديد التاب المناسب جوه صفحة القطيع حسب نوع التنبيه
+  private sectionOf(a: Alert): 'health' | 'records' | 'today' {
+    const t = a.title ?? '';
+    if (/تحصين|لقاح|تطعيم|علاج|دواء|Vaccin/i.test(t)) return 'health';  // 💉 الصحة
+    if (/نفوق|وفيات/.test(t)) return 'records';                          // 📜 السجلات
+    return 'today';                                                      // 📅 اليوم
+  }
+
+  goToSource(a: Alert) {
+    if (a.link) { this.router.navigateByUrl(a.link); return; }
+    if (a.flock_id) {
+      this.router.navigate(['/flocks', a.flock_id], {
+        queryParams: { section: this.sectionOf(a) },
+      });
+    }
   }
 
   resolve(id: string) { 

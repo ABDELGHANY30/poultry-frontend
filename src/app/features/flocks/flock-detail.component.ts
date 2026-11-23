@@ -983,7 +983,7 @@ const TURKEY_VACC = [
       </div>
 
       <p class="text-xs text-[var(--c-muted)] mb-2">
-        ملحوظة: العضو اللي تدعوه هيشوف القطيع ده بس. تقدر تضيف قطعان تانية لاحقًا.
+        ملحوظة: العضو اللي تدعوه هيقدر يسجل بيانات في <b>كل قطعانك</b>، مش القطيع ده بس.
       </p>
 
       <div *ngIf="showInviteForm()" class="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
@@ -1708,10 +1708,18 @@ export class FlockDetailComponent implements OnInit {
     if (!this.inviteForm.invited_email) return;
 
     this.inviting.set(true);
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, { ...this.inviteForm, flock_ids: [this.flock()!.id] })
+    const flockId = this.flock()?.id;
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`,
+        { ...this.inviteForm, flock_ids: flockId ? [flockId] : [] })
       .subscribe({
         next: (res) => {
           this.inviting.set(false);
+          // 🔁 العضو كان مضاف قبل كده: السيرفر ضاف القطيع ده لنطاقه (مفيش كود جديد)
+          if (res?.already_has_all_flocks) {
+            alert('العضو ده عنده صلاحية على كل قطعان المزرعة بالفعل.');
+          } else if (res?.flocks_added !== undefined) {
+            alert(res.flocks_added > 0 ? 'تم إضافة القطيع ده للعضو ✅' : 'العضو عنده القطيع ده بالفعل.');
+          }
           // ⚠️ إرسال إيميل حقيقي مش موجود لسه — الكود لازم يتبعت يدويًا للعضو
           // 🔑 بنبعت الكود بس (من غير لينك: window.location.origin كان بيطلع localhost وقت التطوير)
           this.inviteCodeCopied.set(false);
@@ -2148,6 +2156,12 @@ vaccSchedule = () => {
     // 🔔 جاي من dailyRecordGuard؟ (فتح تلقائي على فورم تسجيل بيانات اليوم)
     this.route.queryParamMap.subscribe(qp => {
       this.promptDaily.set(qp.get('prompt') === 'daily');
+
+      // 🔔 جاي من صفحة التنبيهات؟ افتح التاب المناسب
+      const sec = qp.get('section');
+      if (sec === 'today' || sec === 'health' || sec === 'records') {
+        this.activeSection.set(sec);
+      }
     });
 
     this.syncPending(); // 📴 لو فيه سجلات متخزّنة من وقت ما النت كان فاصل
