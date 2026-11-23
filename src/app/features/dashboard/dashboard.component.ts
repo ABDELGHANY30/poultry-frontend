@@ -59,6 +59,19 @@ const CATEGORIES = [
             <p class="mb-1 text-sm font-medium" style="color:rgba(255,255,255,.62)">{{ 'DASHBOARD.WELCOME' | translate }},</p>
             <h1 class="text-2xl font-bold leading-tight mb-0 truncate">{{ userName() }}</h1>
 
+            <!-- 🐣 مفيش قطيع: زرار إنشاء أول قطيع + زرار اسأل العامل المساعد تحت الاسم -->
+            <div *ngIf="!hasFlock()" class="flex flex-wrap items-center gap-2 mt-3">
+              <a [routerLink]="addFlockRoute"
+                 class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-green-800 font-bold text-xs no-underline shadow-md active:scale-95 transition-all">
+                ➕ أنشئ أول قطيعك
+              </a>
+              <a [routerLink]="assistantRoute"
+                 class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs no-underline active:scale-95 transition-all"
+                 style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45)">
+                🤖 اسأل العامل المساعد
+              </a>
+            </div>
+
             <span *ngIf="isPro()"
                   class="inline-block mt-4 px-4 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-900">
               PRO
@@ -527,6 +540,10 @@ export class DashboardComponent implements OnInit {
   // بدل ما نخترع حقل مش موجود في الـ User model
   isLoggedIn = computed(() => this.auth.isAuthenticated());
   hasFlock = computed(() => this.flocks().length > 0);
+
+  // ⚠️ addFlockRoute: لو صفحة إنشاء القطيع ليها مسار منفصل في flocks.routes (مثلاً '/flocks/new') غيّره هنا
+  addFlockRoute = '/flocks';             // صفحة القطعان (نفس مسار زرار FLOCK.ADD الأصلي)
+  assistantRoute = '/ai-assistant';      // العامل المساعد (من app.routes)
 
   // القطيع اللي المستخدم اختاره من الأزرار فوق الـ Stats Grid
   selectedFlockId = signal<string | null>(null);
