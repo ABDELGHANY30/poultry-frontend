@@ -983,7 +983,7 @@ const TURKEY_VACC = [
       </div>
 
       <p class="text-xs text-[var(--c-muted)] mb-2">
-        ملحوظة: العضو اللي تدعوه هيقدر يسجل بيانات في <b>كل قطعانك</b>، مش القطيع ده بس.
+        ملحوظة: العضو اللي تدعوه هيشوف القطيع ده بس. تقدر تضيف قطعان تانية لاحقًا.
       </p>
 
       <div *ngIf="showInviteForm()" class="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
@@ -1708,7 +1708,7 @@ export class FlockDetailComponent implements OnInit {
     if (!this.inviteForm.invited_email) return;
 
     this.inviting.set(true);
-    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, this.inviteForm)
+    this.http.post<any>(`${environment.apiUrl}/farm-members/invite`, { ...this.inviteForm, flock_ids: [this.flock()!.id] })
       .subscribe({
         next: (res) => {
           this.inviting.set(false);

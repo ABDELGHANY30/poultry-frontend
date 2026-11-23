@@ -35,7 +35,7 @@ interface HealthScoreData {
                 [class]="(viewMode() === 'single' && selectedFlockId() === f.id)
                   ? 'bg-emerald-500 text-white'
                   : 'bg-gray-100 text-gray-500'">
-          {{ f.name }}
+          {{ f.shared ? '👥 ' : '' }}{{ f.name }}
         </button>
       </div>
       <button (click)="showAllFlocks()"
@@ -188,7 +188,7 @@ export class HealthScoreWidgetComponent implements OnInit {
   error = signal(false);
   offline = signal(false);
 
-  flocksList = signal<{ id: string; name: string }[]>([]);
+  flocksList = signal<{ id: string; name: string; shared?: boolean }[]>([]);
   selectedFlockId = signal<string | undefined>(undefined);
 
   viewMode = signal<'single' | 'all'>('single');
@@ -275,28 +275,35 @@ export class HealthScoreWidgetComponent implements OnInit {
 
   /** بتجيب قايمة كل القطعان بتاعت المستخدم، وتفلتر القطعان المغلقة (status !== 'active') قبل ما تعرضها */
   loadFlocksList() {
-    this.http.get<{ id: string; name: string; status?: string }[]>(`${environment.apiUrl}/flocks/`).subscribe({
-      next: (flocks) => {
-        // ⚠️ لو عندك اسم حالة مختلف عن "active" (زي "open" أو "ongoing")، عدّل الشرط ده
-        const activeOnly = (flocks || []).filter(f => !f.status || f.status === 'active');
-        this.flocksList.set(activeOnly);
-        this.writeCache({ flocks: activeOnly.map(f => ({ id: f.id, name: f.name })) });
-        // القطيع المبدئي: اللي جاي من @Input لو موجود (وكان نشط)، وإلا أول قطيع نشط في القايمة
-        const current = this.selectedFlockId();
-        const initial = (this.flockId && activeOnly.some(f => f.id === this.flockId))
-          ? this.flockId
-          : (current && activeOnly.some(f => f.id === current) ? current : activeOnly[0]?.id);
-        this.selectedFlockId.set(initial);
-        this.writeCache({ selected: initial });
-        this.load();
-        this.prefetchScores(activeOnly.map(f => f.id), initial);
-      },
-      error: () => {
-        // فشل جلب القايمة مش لازم يوقف عرض الكارت — نكمل بالـ flockId الأصلي لو موجود
+    // قطعاني + القطعان اللي اتدعيت ليها (👥). فشل واحد فيهم مايوقفش التاني.
+    forkJoin({
+      own: this.http.get<{ id: string; name: string; status?: string }[]>(`${environment.apiUrl}/flocks/`).pipe(catchError(() => of(null))),
+      shared: this.http.get<{ id: string; name: string; status?: string }[]>(`${environment.apiUrl}/flocks/shared`).pipe(catchError(() => of(null))),
+    }).subscribe(({ own, shared }) => {
+      if (own === null && shared === null) {
         // أوفلاين: بنكمل بالمحفوظ (لو فيه) أو بالـ flockId الأصلي
         this.selectedFlockId.set(this.selectedFlockId() ?? this.flockId);
         this.load();
+        return;
       }
+      // ⚠️ لو عندك اسم حالة مختلف عن "active" (زي "open" أو "ongoing")، عدّل الشرط ده
+      const isActive = (f: { status?: string }) => !f.status || f.status === 'active';
+      const ownList = (own || []).filter(isActive).map(f => ({ id: f.id, name: f.name, shared: false }));
+      const ownIds = new Set(ownList.map(f => f.id));
+      const sharedList = (shared || []).filter(isActive).filter(f => !ownIds.has(f.id)).map(f => ({ id: f.id, name: f.name, shared: true }));
+      const activeOnly = [...ownList, ...sharedList];
+
+      this.flocksList.set(activeOnly);
+      this.writeCache({ flocks: activeOnly });
+      // القطيع المبدئي: اللي جاي من @Input لو موجود (وكان نشط)، وإلا أول قطيع نشط في القايمة
+      const current = this.selectedFlockId();
+      const initial = (this.flockId && activeOnly.some(f => f.id === this.flockId))
+        ? this.flockId
+        : (current && activeOnly.some(f => f.id === current) ? current : activeOnly[0]?.id);
+      this.selectedFlockId.set(initial);
+      this.writeCache({ selected: initial });
+      this.load();
+      this.prefetchScores(activeOnly.map(f => f.id), initial);
     });
   }
 
