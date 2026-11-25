@@ -186,6 +186,7 @@ export class LoginComponent {
   private handleGoogleError(err: any, wasLinking: boolean): void {
     const detail = err?.error?.detail;
     const msg = String(err?.message ?? err ?? '').toLowerCase();
+    console.error('[google-login]', { status: err?.status, detail, message: err?.message, err });
 
     // المستخدم قفل شاشة اختيار الحساب: مفيش رسالة خطأ
     if (!detail && (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('12501'))) return;
