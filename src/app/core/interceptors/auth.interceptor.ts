@@ -28,7 +28,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(authed).pipe(
     catchError((err: HttpErrorResponse) => {
-      const isAuthCall = /\/auth\/auth\/(login|register|me)/.test(req.url);
+      const isAuthCall = /\/auth\/auth\/(login|register|me|google)/.test(req.url);
       if (err.status === 401 && !isAuthCall) auth.handleUnauthorized();
       return throwError(() => err);
     })

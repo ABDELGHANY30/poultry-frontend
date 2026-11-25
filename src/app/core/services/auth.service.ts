@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { firstValueFrom, tap, timeout } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { environment } from '../../../environments/environment';
 import { User, AuthResponse } from '../models';
 import { UserOfflineCacheService } from './user-offline-cache.service';
@@ -138,7 +139,9 @@ export class AuthService {
 
   private async runInitNative(): Promise<void> {
     const token = await this.nativeGet(TOKEN_KEY);
-    if (!token || this.isTokenExpired(token)) {
+    // السيرفر هو اللي بيحكم على صلاحية التوكن (/auth/me أدناه): التوكنات القديمة (أسبوع) بيمدّدها السيرفر،
+    // فلو فحصنا الـ exp محلياً هنخرّج مستخدمين السيرفر لسه قابلهم.
+    if (!token) {
       await this.clearAuth();
       return;
     }
@@ -263,6 +266,48 @@ export class AuthService {
     );
   }
 
+  // ── Google ─────────────────────────────────────────────────
+  private _googleReady = false;
+  private _lastGoogleToken: string | null = null;
+
+  /** بيفتح شاشة اختيار حساب Google ويرجّع الـ ID token. بيحتاج environment.googleWebClientId (و googleIosClientId لـ iOS). */
+  private async getGoogleIdToken(): Promise<string> {
+    if (!this._googleReady) {
+      await SocialLogin.initialize({
+        google: {
+          webClientId: (environment as any).googleWebClientId,
+          iOSClientId: (environment as any).googleIosClientId,
+        },
+      });
+      this._googleReady = true;
+    }
+    const { result } = await SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } });
+    const idToken = (result as any)?.idToken as string | undefined;
+    if (!idToken) throw new Error('google_no_id_token');
+    return idToken;
+  }
+
+  /**
+   * دخول/تسجيل بـ Google.
+   * لو السيرفر رد 409 بـ detail = 'google_link_requires_password' (فيه حساب بنفس الإيميل):
+   * اطلب من المستخدم الباسورد وناديها تاني بـ loginWithGoogle(password) — بتستخدم نفس توكن Google من غير ما تفتح الشاشة تاني.
+   */
+  async loginWithGoogle(password?: string, register = false): Promise<AuthResponse> {
+    const idToken = password && this._lastGoogleToken ? this._lastGoogleToken : await this.getGoogleIdToken();
+    this._lastGoogleToken = idToken;
+    const r = await firstValueFrom(
+      this.http.post<AuthResponse>(`${environment.apiUrl}/auth/auth/google`, { id_token: idToken, password: password || null, register })
+    );
+    this._lastGoogleToken = null;
+    this.saveAuth(r.access_token, r.user);
+    return r;
+  }
+
+  /** لحذف الحساب لمستخدم Google بدون باسورد: توكن جديد يتبعت في DeleteAccountIn.google_id_token */
+  async freshGoogleIdToken(): Promise<string> {
+    return this.getGoogleIdToken();
+  }
+
   // ── دخول تلقائي من التطبيق للموقع (handoff) ────────────────
   /** موبايل: بيطلب من السيرفر توكن مؤقت (دقيقتين، لمرة واحدة) لحساب التطبيق الحالي، عشان الموقع يفتح مسجّل بنفس الإيميل. */
   async createHandoffToken(): Promise<string | null> {
@@ -298,16 +343,6 @@ export class AuthService {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  private isTokenExpired(token: string): boolean {
-    try {
-      const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(atob(b64));
-      return payload.exp * 1000 < Date.now();
-    } catch {
-      return true;
     }
   }
 
