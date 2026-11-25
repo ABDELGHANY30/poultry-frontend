@@ -96,7 +96,7 @@ import { AuthService } from '../../core/services/auth.service';
           </div>
         </div>
 
-        <button *ngIf="!linkMode()" type="button"
+        <button *ngIf="googleEnabled && !linkMode()" type="button"
                 class="btn w-full py-3 text-base mb-5 border border-gray-300 bg-white text-gray-700 flex items-center justify-center gap-3"
                 (click)="googleLogin()" [disabled]="loading() || googleLoading()">
           <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
@@ -130,6 +130,8 @@ export class LoginComponent {
 
   // Google
   googleLoading    = signal(false);
+  // اقفل/افتح زرار Google من هنا (false لحد ما نكمّل الموضوع)
+  googleEnabled    = false;
   linkMode         = signal(false);
   showLinkPassword = signal(false);
   linkPassword = '';

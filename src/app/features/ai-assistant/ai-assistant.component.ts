@@ -1,6 +1,6 @@
 import {
   Component, OnInit, OnDestroy, AfterViewChecked, inject, signal, computed,
-  ViewChild, ElementRef
+  ViewChild, ElementRef, NgZone
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -627,6 +627,9 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   speakingMessageId = signal<string | null>(null);
   alerts = signal<{ id: string; type: string; priority: string; title: string; message: string; due_date?: string }[]>([]);
   private recognition: any = null;
+  private zone = inject(NgZone);
+  private speakToken = 0;                 // بيلغي أي قراءة قديمة لما المستخدم يوقف أو يبدّل رسالة
+  private nativeTtsLang: string | null = null; // اللغة العربية المدعومة على الجهاز (بتتحسب مرة واحدة)
   private arabicVoice: SpeechSynthesisVoice | null = null;
   private voicesLoaded = false;
   private needsScroll = false;
@@ -654,6 +657,12 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   ngOnDestroy() {
     // رجّع البانر لما المستخدم يسيب شاشة المساعد الذكي
     this.ads.showBannerForPage();
+    // نضّف الصوت والمايك لما الشاشة تتقفل
+    this.stopSpeaking();
+    if (Capacitor.isNativePlatform()) {
+      SpeechRecognition.stop().catch(() => {});
+      SpeechRecognition.removeAllListeners().catch(() => {});
+    }
   }
 
   ngOnInit() {
@@ -1106,21 +1115,7 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
 
     // جوه تطبيق الموبايل (Capacitor) — استخدم محرك النطق الحقيقي بتاع النظام
     if (Capacitor.isNativePlatform()) {
-      this.speakingMessageId.set(msg.id);
-      TextToSpeech.speak({
-        text: plain,
-        lang: 'ar-EG',
-        rate: 1.0,
-        category: 'ambient',
-      }).then(() => {
-        this.speakingMessageId.set(null);
-      }).catch(() => {
-        this.speakingMessageId.set(null);
-        this.messages.update(m => [...m, {
-          id: uid(), role: 'assistant', timestamp: new Date(),
-          content: '⚠️ تعذر تشغيل الرد الصوتي على الجهاز ده.',
-        }]);
-      });
+      this.speakNative(msg, plain);
       return;
     }
 
@@ -1161,12 +1156,110 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   private stopSpeaking() {
+    this.speakToken++; // أي قراءة شغالة تبطل تكمّل باقي الأجزاء
     if (Capacitor.isNativePlatform()) {
       TextToSpeech.stop().catch(() => {});
     } else if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
     this.speakingMessageId.set(null);
+  }
+
+  private botNote(content: string) {
+    this.messages.update(m => [...m, {
+      id: uid(), role: 'assistant', timestamp: new Date(), content,
+    }]);
+  }
+
+  /** القراءة الصوتية جوه التطبيق: بتختار لغة عربية مدعومة فعلاً وبتقسّم النص لأجزاء */
+  private async speakNative(msg: Message, plain: string) {
+    const token = ++this.speakToken;
+    this.speakingMessageId.set(msg.id);
+    try {
+      const lang = await this.pickNativeTtsLang();
+      if (token !== this.speakToken) return;
+      if (!lang) {
+        this.botNote(
+          '⚠️ جهازك مفيش عليه صوت عربي للقراءة الصوتية.\n\n' +
+          'على **Android**: من الإعدادات ← اللغة والإدخال (أو إدارة عامة) ← إخراج تحويل النص إلى كلام ← ' +
+          'اختار **Google** ← ثبّت بيانات الصوت العربي. وتأكد إن تطبيق **Speech Services by Google** متثبت ومتحدّث.'
+        );
+        return;
+      }
+
+      const chunks = this.splitForTts(this.cleanForSpeech(plain));
+      if (!chunks.length) return;
+
+      for (const chunk of chunks) {
+        if (token !== this.speakToken) return; // المستخدم وقف
+        await TextToSpeech.speak({
+          text: chunk,
+          lang,
+          rate: 1.0,
+          pitch: 1.0,
+          volume: 1.0,
+          category: 'playback',
+        });
+      }
+    } catch (e: any) {
+      if (token !== this.speakToken) return; // الوقف اليدوي ممكن يرمي error، مش مشكلة
+      console.error('Native TTS error:', e);
+      this.botNote(
+        '⚠️ تعذر تشغيل الرد الصوتي على الجهاز ده.' +
+        (e?.message ? `\n\nالسبب: ${e.message}` : '') +
+        '\n\nتأكد إن محرك Google للنطق متثبت ومفعّل في إعدادات الجهاز.'
+      );
+    } finally {
+      if (token === this.speakToken) this.speakingMessageId.set(null);
+    }
+  }
+
+  /** يدوّر على أول لغة عربية الجهاز بيدعمها (ar-EG ثم ar-SA ثم ar) */
+  private async pickNativeTtsLang(): Promise<string | null> {
+    if (this.nativeTtsLang) return this.nativeTtsLang;
+    for (const lang of ['ar-EG', 'ar-SA', 'ar']) {
+      try {
+        const { supported } = await TextToSpeech.isLanguageSupported({ lang });
+        if (supported) {
+          this.nativeTtsLang = lang;
+          return lang;
+        }
+      } catch { /* جرّب اللغة اللي بعدها */ }
+    }
+    return null;
+  }
+
+  /** يشيل الإيموجي ورموز الماركداون والجداول عشان القارئ مايقراهاش حرف حرف */
+  private cleanForSpeech(text: string): string {
+    return text
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, ' ')
+      .replace(/^\s*\|?[\s|:-]{3,}\|?\s*$/gm, ' ')
+      .replace(/\|/g, '، ')
+      .replace(/^\s*[-•*]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/[`#*_~>]/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  }
+
+  /** محرك أندرويد بيرفض أي نص أطول من ~4000 حرف، فبنقسّمه لأجزاء عند نهاية الجمل */
+  private splitForTts(text: string, max = 1500): string[] {
+    if (!text) return [];
+    const sentences = text.match(/[^.!؟?\n]+[.!؟?\n]*/g) || [text];
+    const chunks: string[] = [];
+    let cur = '';
+    for (let sent of sentences) {
+      while (sent.length > max) { // جملة طويلة جداً من غير علامات وقف
+        if (cur) { chunks.push(cur); cur = ''; }
+        chunks.push(sent.slice(0, max));
+        sent = sent.slice(max);
+      }
+      if ((cur + sent).length > max) { chunks.push(cur); cur = sent; }
+      else cur += sent;
+    }
+    if (cur.trim()) chunks.push(cur);
+    return chunks.map(c => c.trim()).filter(Boolean);
   }
 
   /** التسجيل الصوتي — ميزة Pro فقط */
@@ -1218,7 +1311,11 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     recognition.start();
   }
 
-  /** التسجيل الصوتي جوه تطبيق الموبايل — بيستخدم SpeechRecognizer الأصلي بتاع أندرويد (مش Web Speech API) */
+  /**
+   * التسجيل الصوتي جوه تطبيق الموبايل — SpeechRecognizer الأصلي بتاع أندرويد.
+   * ⚠️ مع partialResults:true الدالة start() بترجع فوراً والنتايج بتيجي من الـ listener،
+   * فمينفعش نشيل الـ listeners بعد start مباشرة (ده كان سبب إن المايك مابيكتبش حاجة).
+   */
   private async toggleNativeVoiceInput() {
     if (this.isRecording()) {
       try { await SpeechRecognition.stop(); } catch {}
@@ -1229,40 +1326,55 @@ export class AiAssistantComponent implements OnInit, OnDestroy, AfterViewChecked
     try {
       const { available } = await SpeechRecognition.available();
       if (!available) {
-        this.messages.update(m => [...m, {
-          id: uid(), role: 'assistant', timestamp: new Date(),
-          content: '⚠️ التسجيل الصوتي مش متاح على الجهاز ده.',
-        }]);
+        this.botNote(
+          '⚠️ التسجيل الصوتي مش متاح على الجهاز ده.\n\n' +
+          'تأكد إن تطبيق **Google** (أو Speech Services by Google) متثبت ومفعّل.'
+        );
         return;
       }
 
-      const permission = await SpeechRecognition.requestPermissions();
+      let permission = await SpeechRecognition.checkPermissions();
       if (permission.speechRecognition !== 'granted') {
-        this.messages.update(m => [...m, {
-          id: uid(), role: 'assistant', timestamp: new Date(),
-          content: '⚠️ لازم توافق على إذن المايك عشان تقدر تستخدم التسجيل الصوتي. تقدر تفعّله من إعدادات الموبايل ← التطبيقات ← سبا ← الأذونات.',
-        }]);
+        permission = await SpeechRecognition.requestPermissions();
+      }
+      if (permission.speechRecognition !== 'granted') {
+        this.botNote('⚠️ لازم توافق على إذن المايك عشان تقدر تستخدم التسجيل الصوتي. تقدر تفعّله من إعدادات الموبايل ← التطبيقات ← سبا ← الأذونات.');
         return;
       }
 
       await SpeechRecognition.removeAllListeners();
-      SpeechRecognition.addListener('partialResults', (data: { matches: string[] }) => {
-        if (data?.matches?.length) {
-          this.input = data.matches[0];
-        }
+
+      // النتايج (الجزئية والنهائية) — لازم جوه NgZone عشان الشاشة تتحدّث
+      await SpeechRecognition.addListener('partialResults', (data: { matches: string[] }) => {
+        this.zone.run(() => {
+          if (data?.matches?.length) this.input = data.matches[0];
+        });
+      });
+
+      // لما المحرك يقفل لوحده (سكت المستخدم) نرجّع شكل الزرار — من غير ما نشيل الـ listener
+      // عشان النتيجة النهائية بتوصل بعد حدث "stopped" بشوية
+      await SpeechRecognition.addListener('listeningState', (data: { status: 'started' | 'stopped' }) => {
+        this.zone.run(() => {
+          if (data?.status === 'stopped') this.isRecording.set(false);
+        });
       });
 
       this.isRecording.set(true);
       await SpeechRecognition.start({
         language: 'ar-EG',
+        maxResults: 1,
         partialResults: true,
         popup: false,
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error('Native speech recognition error:', e);
-    } finally {
       this.isRecording.set(false);
       try { await SpeechRecognition.removeAllListeners(); } catch {}
+      this.botNote(
+        '⚠️ تعذر تشغيل التسجيل الصوتي.' +
+        (e?.message ? `\n\nالسبب: ${e.message}` : '') +
+        '\n\nجرّب تقفل التطبيق وتفتحه تاني، وتأكد من إذن المايك.'
+      );
     }
   }
 

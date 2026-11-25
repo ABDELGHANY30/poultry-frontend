@@ -145,8 +145,27 @@ const COMMON_PASSWORDS = [
         }
 
         <button class="btn-primary btn w-full py-3 text-base mb-4"
-                (click)="register()" [disabled]="loading()">
+                (click)="register()" [disabled]="loading() || googleLoading()">
           {{ loading() ? '...' : ('AUTH.REG_BTN' | translate) }}
+        </button>
+
+        <!-- ── Google ─────────────────────────────────────── -->
+        <div class="flex items-center gap-3 mb-4">
+          <span class="flex-1 h-px bg-gray-200"></span>
+          <span class="text-xs text-[var(--c-muted)]">أو</span>
+          <span class="flex-1 h-px bg-gray-200"></span>
+        </div>
+
+        <button type="button"
+                class="btn w-full py-3 text-base mb-4 border border-gray-300 bg-white text-gray-700 flex items-center justify-center gap-3"
+                (click)="googleRegister()" [disabled]="loading() || googleLoading()">
+          <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          <span>{{ googleLoading() ? 'جاري التسجيل...' : 'التسجيل بحساب Google' }}</span>
         </button>
 
         <p class="text-center text-sm text-[var(--c-muted)]">
@@ -166,6 +185,7 @@ export class RegisterComponent {
 
   form = { name: '', email: '', password: '', phone: '' };
   loading      = signal(false);
+  googleLoading = signal(false);
   phoneError   = signal('');
   errorMsg     = signal('');
   submitted    = signal(false);
@@ -256,6 +276,51 @@ export class RegisterComponent {
       this.phoneError.set('');
     } else if (onlyNumbers.length >= 3) {
       this.phoneError.set('');
+    }
+  }
+
+  // ── Google: إنشاء حساب جديد (register = true) ───────────────
+  async googleRegister(): Promise<void> {
+    if (this.googleLoading()) return;
+    this.errorMsg.set('');
+    this.googleLoading.set(true);
+    try {
+      await this.auth.loginWithGoogle(undefined, true);
+      this.router.navigate(['/']);
+    } catch (err: any) {
+      this.googleLoading.set(false);
+      this.handleGoogleError(err);
+    }
+  }
+
+  private handleGoogleError(err: any): void {
+    const detail = err?.error?.detail;
+    const msg = String(err?.message ?? err ?? '').toLowerCase();
+    console.error('[google-register]', { status: err?.status, detail, message: err?.message, err });
+
+    // المستخدم قفل شاشة اختيار الحساب
+    if (!detail && (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('12501'))) return;
+
+    if (detail === 'google_link_requires_password') {
+      this.errorMsg.set('فيه حساب بنفس إيميل Google ده. ارجع لشاشة تسجيل الدخول وادخل بـ Google لربط الحسابين');
+    } else if (detail === 'Register from the app') {
+      this.errorMsg.set('إنشاء الحساب بيتم من التطبيق بس. حمّل التطبيق وسجّل منه، وبعدها ادخل هنا بنفس الإيميل للدفع');
+    } else if (detail === 'Device already registered') {
+      this.errorMsg.set('الموبايل ده عليه حساب قبل كده، سجّل دخول بحسابك. لو حذفت حسابك أو الموبايل اتباع كلّم الدعم');
+    } else if (detail === 'Email already used') {
+      this.errorMsg.set('الإيميل ده (أو شكل قريب منه) مستخدم قبل كده، سجّل دخول. لو حذفت حسابك كلّم الدعم');
+    } else if (detail === 'Registration in progress') {
+      this.errorMsg.set('فيه عملية تسجيل شغالة، استنى دقيقة وحاول تاني');
+    } else if (detail === 'Device id required') {
+      this.errorMsg.set('حدّث التطبيق لآخر نسخة وحاول تاني');
+    } else if (detail === 'Invalid Google token') {
+      this.errorMsg.set('تعذّر التحقق من حساب Google. حاول تاني.');
+    } else if (detail === 'Account disabled') {
+      this.errorMsg.set('الحساب ده متوقف. كلّم الدعم.');
+    } else if (err?.status === 429) {
+      this.errorMsg.set('محاولات كتير. استنى شوية وحاول تاني.');
+    } else {
+      this.errorMsg.set('تعذّر التسجيل بحساب Google. تأكد من الاتصال وحاول تاني.');
     }
   }
 

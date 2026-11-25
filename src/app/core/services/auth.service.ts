@@ -281,7 +281,9 @@ export class AuthService {
       });
       this._googleReady = true;
     }
-    const { result } = await SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } });
+    // من غير scopes: على أندرويد الـ plugin بيرفض الطلب لو بعتنا scopes من غير تعديل MainActivity،
+    // والإيميل والاسم بييجوا في الـ ID token بالإعداد الافتراضي.
+    const { result } = await SocialLogin.login({ provider: 'google', options: {} });
     const idToken = (result as any)?.idToken as string | undefined;
     if (!idToken) throw new Error('google_no_id_token');
     return idToken;
